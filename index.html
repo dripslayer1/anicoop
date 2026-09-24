@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=8.6">
+    <link rel="stylesheet" href="app.css?v=8.7">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=8.6" defer></script>
+    <script src="app.js?v=8.7" defer></script>
 </head>
 <body>
 
@@ -114,7 +114,7 @@
                     <span class="w-8 h-8 rounded-[9px] bg-volt flex items-center justify-center font-pixel font-semibold text-lg text-onvolt">A</span>
                     <span class="font-display font-brand font-bold text-ink text-lg tracking-tight">anicoop</span>
                 </button>
-                <nav class="seg hidden md:flex">
+                <nav class="seg home-nav hidden md:flex">
                     <button class="seg-btn is-on">Home</button>
                     <button v-for="s in sectionList" :key="s.id" @click.stop="openSection(s.id)" @mouseenter="warmSection(s.id)" class="seg-btn">
                         {{ s.short }}<span v-if="!s.live" class="ml-1.5 text-[8px] text-volt/80">SOON</span>
@@ -210,7 +210,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v8.6</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v8.7</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -291,6 +291,41 @@
                 <!-- ===== CHARACTER / STAFF PAGE ===== -->
                 <main v-if="entity" :key="'e-' + entity.type + entity.id" class="w-full max-w-[1200px] mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
                     <div v-if="entityLoading && !entityData" class="flex gap-8"><div class="w-48 aspect-[2/3] rounded-2xl skeleton shrink-0"></div><div class="flex-grow space-y-3"><div class="h-10 w-1/2 rounded-xl skeleton"></div><div class="h-32 rounded-2xl skeleton"></div></div></div>
+                    <!-- album page: the release + every song on it -->
+                    <template v-else-if="entityData && entity.type === 'album' && entityData.isAlbum">
+                        <div class="flex flex-col md:flex-row gap-8 md:gap-12">
+                            <div class="w-52 md:w-64 mx-auto md:mx-0 shrink-0 space-y-4">
+                                <img :src="entityData.cover" class="w-full rounded-2xl shadow-2xl ring-1 ring-line2 object-cover aspect-square" alt="">
+                                <div v-if="entityData.url" class="flex flex-wrap gap-2">
+                                    <a :href="entityData.url" target="_blank" rel="noopener" class="watch-link" style="--c: #fa2d48"><i class="fa-brands fa-apple text-sm"></i>Apple Music</a>
+                                </div>
+                                <div class="panel p-5">
+                                    <p class="label mb-3">Info</p>
+                                    <dl class="space-y-3">
+                                        <div><dt class="text-[11px] font-semibold text-mute">Artist</dt><dd class="text-sm mt-0.5"><button @click="openArtist(entityData.artistId, entityData.artist)" :disabled="!entityData.artistId" class="info-link">{{ entityData.artist }}<i class="fa-solid fa-arrow-right"></i></button></dd></div>
+                                        <div v-if="entityData.releaseDate"><dt class="text-[11px] font-semibold text-mute">Released</dt><dd class="text-sm text-ink mt-0.5">{{ new Date(entityData.releaseDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }}</dd></div>
+                                        <div v-if="entityData.genre"><dt class="text-[11px] font-semibold text-mute">Genre</dt><dd class="text-sm text-ink mt-0.5">{{ entityData.genre }}</dd></div>
+                                        <div><dt class="text-[11px] font-semibold text-mute">Songs</dt><dd class="text-sm text-ink mt-0.5">{{ entityData.count }}<span v-if="entityData.lengthMs" class="text-mute"> · {{ Math.round(entityData.lengthMs / 60000) }} min</span></dd></div>
+                                        <div v-if="entityData.label"><dt class="text-[11px] font-semibold text-mute">Label</dt><dd class="text-sm text-ink mt-0.5 break-words">{{ entityData.label }}</dd></div>
+                                    </dl>
+                                </div>
+                            </div>
+                            <div class="flex-grow min-w-0 md:pt-6">
+                                <p class="kicker">// {{ entityData.kind.toLowerCase() }}<span v-if="entityData.year"> · {{ entityData.year }}</span></p>
+                                <h1 class="mt-3 font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ entityData.name.full }}</h1>
+                                <button @click="openArtist(entityData.artistId, entityData.artist)" :disabled="!entityData.artistId" class="mt-3 text-lg font-semibold text-sub hover:text-volt transition-colors">{{ entityData.artist }} <i class="fa-solid fa-arrow-right text-xs"></i></button>
+                                <div class="mt-6 flex flex-wrap gap-2">
+                                    <button v-if="albumSongs.length" @click="playPreview(albumSongs[0])" class="play-cta"><i class="fa-solid" :class="isPlaying(albumSongs[0]) ? 'fa-pause' : 'fa-play'"></i> {{ isPlaying(albumSongs[0]) ? 'Pause' : 'Play' }}</button>
+                                    <button v-if="entityData.artistId" @click="openArtist(entityData.artistId, entityData.artist)" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid fa-microphone-lines"></i> Artist page</button>
+                                </div>
+                                <div class="track-list mt-8">
+                                    <track-row v-for="s in albumSongs" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s)" :n="s.trackNo || ''" :entry="myEntry(s.id)" :album="false" :cover="false"
+                                        @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
+                                </div>
+                                <p v-if="!albumSongs.length" class="panel py-12 text-center text-sm text-mute mt-8">No songs listed for this release.</p>
+                            </div>
+                        </div>
+                    </template>
                     <template v-else-if="entityData">
                         <div class="flex flex-col md:flex-row gap-8 md:gap-12">
                             <div class="w-44 md:w-60 mx-auto md:mx-0 shrink-0 space-y-4">
@@ -358,6 +393,7 @@
                                                             <h4 class="disc-title">{{ discOpenRelease.name }}</h4>
                                                             <div class="mt-2 flex flex-wrap items-center gap-3">
                                                                 <button v-if="discOpenRelease.songs.length" @click="playPreview(discOpenRelease.songs[0])" class="sp-play !w-9 !h-9 !text-xs" title="Play the first song"><i class="fa-solid fa-play"></i></button>
+                                                                <button @click="openAlbumPage(discOpenRelease.id)" class="text-[11px] font-bold text-sub hover:text-volt"><i class="fa-solid fa-compact-disc mr-1"></i>Album page</button>
                                                                 <a v-if="discOpenRelease.url" :href="discOpenRelease.url" target="_blank" rel="noopener" class="text-[11px] text-mute hover:text-ink"><i class="fa-brands fa-apple mr-1"></i>Apple Music</a>
                                                             </div>
                                                         </div>
@@ -453,7 +489,7 @@
                         <div class="absolute inset-0 bg-gradient-to-r from-base/80 to-transparent"></div>
                     </div>
                     <div class="max-w-[1200px] mx-auto px-4 md:px-8 -mt-40 md:-mt-52 relative flex flex-col md:flex-row gap-8 md:gap-12">
-                        <button v-if="playKind" @click="openWatch" class="banner-play" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : isMovie ? 'sources' : 'episodes & sources' }}</small></span></button>
+                        <button v-if="playKind" @click="openWatch" class="banner-play md:!hidden" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : isMovie ? 'sources' : 'episodes & sources' }}</small></span></button>
                         <div class="w-full md:w-72 shrink-0 flex flex-col gap-5">
                             <div class="relative w-44 md:w-full mx-auto">
                                 <img :src="selectedAnime.coverImage?.large" class="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" alt="">
@@ -531,7 +567,10 @@
 
                         <div class="flex-grow min-w-0 md:pt-24">
                             <p class="kicker">// <template v-if="selectedAnime.type === 'GAME'">game<span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span><span v-if="selectedAnime.coop"> · co-op</span></template><template v-else-if="selectedAnime.type === 'TV'">{{ selectedAnime.format === 'MOVIE' ? 'movie' : 'tv series' }}<span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span><span v-if="selectedAnime.status === 'RELEASING'"> · airing</span></template><template v-else-if="selectedAnime.type === 'SONG'">song<span v-if="selectedAnime.artists?.length"> · {{ selectedAnime.artists.join(', ') }}</span><span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span></template><template v-else>{{ (selectedAnime.format || 'anime').replace('_', ' ') }}<span v-if="selectedAnime.seasonYear"> · {{ (selectedAnime.season || '').toLowerCase() }} {{ selectedAnime.seasonYear }}</span></template></p>
-                            <h1 class="mt-3 font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ titleOf(selectedAnime) }}</h1>
+                            <div class="mt-3 flex items-center gap-6">
+                                <h1 class="min-w-0 flex-grow font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ titleOf(selectedAnime) }}</h1>
+                                <button v-if="playKind" @click="openWatch" class="banner-play banner-play-inline !hidden md:!flex" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : isMovie ? 'sources' : 'episodes & sources' }}</small></span></button>
+                            </div>
                             <p v-if="altTitleOf(selectedAnime)" class="mt-2 text-sub">{{ altTitleOf(selectedAnime) }}</p>
 
                             <div class="flex flex-wrap gap-2 mt-6">
@@ -1352,11 +1391,8 @@
                         <i class="fa-solid fa-trophy text-3xl text-mute"></i>
                         <p class="mt-4 text-sub">The Movies &amp; TV leaderboard switches on once its database is connected.</p>
                     </div>
-                    <div v-if="!currentSection.noApi && mediaType !== 'SONG'" class="flex flex-wrap items-center gap-2 mt-6">
+                    <div v-if="!currentSection.noApi && mediaType !== 'SONG' && (TOP_SUBS[mediaType] || []).length" class="flex flex-wrap items-center gap-2 mt-6">
                         <button v-for="s in (TOP_SUBS[mediaType] || [])" :key="s.v" @click="setTopSub(s.v)" class="disc-tab" :class="{ on: top.sub === s.v }">{{ s.l }}</button>
-                        <span class="seg ml-auto" title="How the list is ranked">
-                            <button v-for="m in TOP_MODES" :key="m.v" @click="setTopMode(m.v)" class="seg-btn !px-3" :class="{ 'is-on': top.mode === m.v }">{{ m.l }}</button>
-                        </span>
                     </div>
                     <div v-if="!currentSection.noApi" class="panel overflow-hidden" :class="mediaType !== 'SONG' ? 'mt-4' : 'mt-8'">
                         <div v-if="top.loading && !top.pool.length" class="p-4 space-y-3"><div v-for="n in 8" :key="n" class="h-16 rounded-xl skeleton"></div></div>
@@ -1383,7 +1419,7 @@
                             </span>
                             <span v-if="myEntry(a.id)" class="status-pill shrink-0 hidden sm:inline-flex"><span class="status-dot" :style="{ '--dot': STATUS_COLORS[myEntry(a.id).status] }"></span>{{ STATUS_SHORT[myEntry(a.id).status] }}</span>
                             <span class="shrink-0 text-right">
-                                <span v-if="a.wScore != null" class="rating" :title="(top.mode === 'rating' ? 'Average rating' : 'Weighted by how many rated it') + ' · ' + (a.votes || 0).toLocaleString() + ' ratings'"><i class="fa-solid fa-star star"></i>{{ fmtTopScore(top.mode === 'rating' ? a.rating : a.wScore) }}</span>
+                                <span v-if="a.wScore != null" class="rating" :title="'Weighted by how many rated it (average ' + fmtTopScore(a.rating) + ')' + ' · ' + (a.votes || 0).toLocaleString() + ' ratings'"><i class="fa-solid fa-star star"></i>{{ fmtTopScore(a.wScore) }}</span>
                                 <span v-else-if="a.streams" class="rating !font-bold">{{ a.streams.toFixed(2) }}B</span>
                                 <span class="block font-mono text-[10px] text-mute mt-1">{{ mediaType === 'SONG' ? 'streams' : fmtVotes(a.votes) + ' ratings' }}</span>
                             </span>
@@ -1460,7 +1496,7 @@
                             <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ listTitle }}</h1>
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <button @click="openHistory(mediaType)" class="btn-ghost"><i class="fa-solid fa-clock-rotate-left text-volt"></i> History<span v-if="history.some(h => h.type === mediaType)" class="opacity-60">· {{ history.filter(h => h.type === mediaType).length }}</span></button>
+                            <button @click="openHistory(mediaType)" class="btn-ghost"><i class="fa-solid fa-clock-rotate-left text-volt"></i> History<span v-if="histList.some(h => h.type === mediaType)" class="opacity-60">· {{ histList.filter(h => h.type === mediaType).length }}</span></button>
                         </div>
                     </div>
 
@@ -1627,8 +1663,8 @@
                                     </div>
                                 </section>
                             </div>
-                            <div v-if="!isLoading && !browseError && visibleResults.length && !currentSection.noApi && !(section === 'songs' && songView === 'list')" :class="posterGrid()">
-                                <poster-card v-for="(anime, i) in visibleResults" :key="anime.id" :anime="anime" :entry="myEntry(anime.id)" :solo="soloEntry(anime.id)" :i="i % 24" :menu-open="quickMenuFor === anime.id" :quick="true"
+                            <div v-if="!isLoading && !browseError && visibleResults.length && !currentSection.noApi && !(section === 'songs' && songView === 'list')" :class="posterGrid()" :ref="watchGridCols">
+                                <poster-card v-for="(anime, i) in gridResults" :key="anime.id" :anime="anime" :entry="myEntry(anime.id)" :solo="soloEntry(anime.id)" :i="i % 24" :menu-open="quickMenuFor === anime.id" :quick="true"
                                     :selectable="selectMode" :selected="isSelected(anime.id)" @select="toggleSelect(anime)"
                                     @open="fetchAnimeDetails(anime)" @trailer="playTrailer(anime)" @action="quickSolo(anime, $event)" @edit="openEditor(anime)" @toggle="onPlusClick(anime)"></poster-card>
                             </div>
@@ -3677,7 +3713,7 @@
 
                     <div class="wp-body">
                         <!-- sources -->
-                        <div v-if="readTabs.length" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                        <div v-if="readTabs.length" class="flex flex-wrap items-center gap-1.5 pb-1">
                             <button v-for="t in readTabs" :key="t.id" @click="readSrc = t.id" class="src-tab" :class="{ on: readSrc === t.id }"><i class="fa-solid text-[10px]" :class="t.icon"></i>{{ t.name }}</button>
                             <button @click="openExtensions()" class="src-tab !border-dashed" title="Add a source"><i class="fa-solid fa-plus text-[10px]"></i></button>
                         </div>

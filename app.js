@@ -528,7 +528,7 @@ const SOURCE_TEMPLATES = {
     // ---- video sites (anime, movies & TV). Their "chapters" are episodes and "pages" are the video servers. ----
     animestream: {
         label: 'AnimeStream (WordPress anime sites)', video: true,
-        search: { url: '{base}/?s={q}', item: 'div.listupd article, .listupd .bs', title: ['div.tt', 'div.ttl', '.tt', 'a@title'], link: 'a@href', cover: 'img@data-src|data-lazy-src|srcset|src' },
+        search: { url: '{base}/?s={q}', item: 'div.listupd article, .listupd .bs', title: ['a.tip@title', 'div.tt::own', 'div.ttl::own', '.tt', 'a@title'], link: 'a@href', cover: 'img@data-src|data-lazy-src|srcset|src' },
         chapters: { item: 'div.eplister li, .eplister li', name: ['.epl-title', '.epl-num', 'a'], num: '.epl-num', link: 'a@href', date: '.epl-date' },
         pages: { servers: 'select.mirror option, ul.mirror a' },
     },
@@ -553,6 +553,8 @@ const siteFetch = async (url, { method = 'GET', referer, form, as = 'text' } = {
     if (error) { const e = await proxyErr(error); e.status = error.context?.status; throw e; }
     if (as === 'image') return data;   // Blob
     const d = typeof data === 'string' ? JSON.parse(data) : data;
+    // Cloudflare's "checking your browser" page comes back instead of the real one
+    if (typeof d?.body === 'string' && /<title>\s*just a moment|cf-chl-|challenge-platform|cf_chl_opt/i.test(d.body.slice(0, 20000))) throw new Error(`${new URL(url).hostname} blocked the request (it may be behind Cloudflare protection).`);
     if (d?.status >= 400) throw new Error(d.status === 403 || d.status === 503 ? `${new URL(url).hostname} blocked the request (it may be behind Cloudflare protection).` : `The site answered ${d.status}.`);
     return d;
 };
@@ -561,12 +563,19 @@ const absUrl = (v, base) => { try { return new URL(v.trim().split(/\s+/)[0], bas
 // read one value from an element with a spec (or a list of specs, first hit wins)
 // text with a space between each piece, so "Chapter 201" + "6 days ago" doesn't become "Chapter 2016 days ago"
 const textOf = (el) => { const w = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT); const parts = []; let n; while ((n = w.nextNode())) { const t = n.nodeValue.trim(); if (t) parts.push(t); } return parts.join(' '); };
+// "sel::own" = only the element's own text (not its children's), e.g. a title box that also holds the latest episode
+const URL_ATTR = /^(href|src|srcset|poster|content|data-(src|lazy-src|original|cfsrc|url|link|href|em|embed|video))$/i;
 const pick = (root, spec, base) => {
     for (const sp of [].concat(spec || [])) {
-        const [sel, attrs] = String(sp).split('@');
+        let [sel, attrs] = String(sp).split('@');
+        const own = /::own$/.test(sel || ''); if (own) sel = sel.replace(/::own$/, '');
         const el = sel ? root.querySelector(sel) : root; if (!el) continue;
-        if (!attrs) { const t = textOf(el).replace(/\s+/g, ' ').trim(); if (t) return t; continue; }
-        for (const a of attrs.split('|')) { const v = el.getAttribute(a); if (v && v.trim() && !/^data:/.test(v.trim())) return absUrl(v, base); }
+        if (!attrs) {
+            const t = (own ? [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.nodeValue).join(' ') : textOf(el)).replace(/\s+/g, ' ').trim();
+            if (t) return t; continue;
+        }
+        // links and pictures become full addresses; a title="…" / alt="…" stays text
+        for (const a of attrs.split('|')) { const v = el.getAttribute(a); if (v && v.trim() && !/^data:/.test(v.trim())) return URL_ATTR.test(a) ? absUrl(v, base) : v.replace(/\s+/g, ' ').trim(); }
     }
     return null;
 };
@@ -610,8 +619,9 @@ const guess = {
             // the address ("/chapter-201") is the most reliable number; the link text is the fallback
             const ch = chapNo((/(?:chapter|chap|ch|episode|ep)[-_.]?(\d+(?:[-.]\d+)?)/i.exec(new URL(href).pathname) || [])[1]?.replace('-', '.')) || chapNo(text);
             let name = cleanChapterName(text).slice(0, 120);
-            if (!/\d/.test(name) && ch) name = `Chapter ${ch}`;
-            out.set(href, { id: href, link: href, ch, title: name || 'Chapter', at: null, src: s.id, group: s.name, url: null });
+            const word = isVideoSrc(s) ? 'Episode' : 'Chapter';   // anime / movie sites have episodes
+            if (!/\d/.test(name) && ch) name = `${word} ${ch}`;
+            out.set(href, { id: href, link: href, ch, title: name || word, at: null, src: s.id, group: s.name, url: null });
         });
         return [...out.values()];
     },
@@ -676,8 +686,10 @@ const epMeta = (c) => {
     }
     if (ep == null) for (const t of texts) { const m = /(?:episode|\bep)[-_ .]?(\d{1,4}(?:\.\d)?)/i.exec(t) || /^\s*(\d{1,4}(?:\.\d)?)\s*$/.exec(t); if (m) { ep = parseFloat(m[1]); break; } }
     if (ep == null) { const n = chapNo(c.num || c.title); if (n) ep = parseFloat(n); }
-    const bare = !c.title || /^\s*(?:episode|ep\.?)?\s*[\d.]+\s*$/i.test(c.title);
-    return { ...c, season, ep, ch: ep != null ? String(ep) : c.ch, title: bare && ep != null ? `Episode ${ep}` : c.title };
+    const bare = !c.title || /^\s*(?:episode|ep\.?|chapter|ch\.?)?\s*[\d.]+\s*$/i.test(c.title);
+    // it's a video site: whatever the site calls them, these are episodes
+    const title = bare && ep != null ? `Episode ${ep}` : String(c.title || '').replace(/\bchapters?\b/gi, (w) => /s$/i.test(w) ? 'Episodes' : 'Episode').replace(/\bch\.\s*(?=\d)/gi, 'Ep ');
+    return { ...c, season, ep, ch: ep != null ? String(ep) : c.ch, title };
 };
 // a server button's value can be a link, a bit of HTML, or HTML in base64: find the player address inside
 const embedFrom = (raw, base) => {
@@ -1419,6 +1431,17 @@ const songApi = {
         const d = await itunes('lookup', { id, entity: 'song', limit: 200 });
         return (d?.results || []).filter(x => x.wrapperType === 'track').map(normApple);
     },
+    // an album's own page: the release (cover, artist, date, label) + every song on it
+    async albumPage(id) {
+        const d = await itunes('lookup', { id, entity: 'song', limit: 200 });
+        const res = d?.results || []; const c = res.find(x => x.wrapperType === 'collection'); if (!c) return null;
+        const tracks = res.filter(x => x.wrapperType === 'track').map(normApple);
+        const name = c.collectionName || '';
+        return { isAlbum: true, id: c.collectionId, name: { full: name.replace(/ - (Single|EP)$/, '') }, kind: /- Single$/.test(name) ? 'Single' : / - EP$/.test(name) ? 'EP' : 'Album',
+            artist: c.artistName || '', artistId: c.artistId || null, cover: bigArt(c.artworkUrl100), year: (c.releaseDate || '').slice(0, 4), releaseDate: c.releaseDate || null,
+            genre: c.primaryGenreName || null, count: c.trackCount || tracks.length, label: c.copyright ? c.copyright.replace(/^[℗©]\s*\d{4}\s*/, '') : null, url: c.collectionViewUrl || null,
+            tracks, lengthMs: tracks.reduce((a, t) => a + (t.durationMs || 0), 0) };
+    },
     async search(q) { const d = await itunes('search', { term: q, media: 'music', entity: 'song', limit: 12 }); return dedupeSongs((d.results || []).map(normApple)).slice(0, 8); },
     // the Spotify id for the player: asked once per song, remembered in this browser
     async spotifyIdFor(s) {
@@ -1658,7 +1681,8 @@ const PosterCard = {
         return { STATUS_COLORS, STATUS_SHORT, UNIT, titleOf, rating, badge, pct, onClick, mStatus, total, root, fmtChapter };
     },
     template: `
-    <div ref="root" class="poster poster-in group" :class="{ 'is-selected': selected, 'is-selecting': selectable, 'is-square': anime.type === 'SONG' }" :style="{ '--i': i }" tabindex="0" role="button" @click="onClick" @keydown.enter.self="onClick">
+    <div class="poster-hit group" @click.self="onClick">
+    <div ref="root" class="poster poster-in" :class="{ 'is-selected': selected, 'is-selecting': selectable, 'is-square': anime.type === 'SONG' }" :style="{ '--i': i }" tabindex="0" role="button" @click="onClick" @keydown.enter.self="onClick">
         <img v-if="anime.coverImage?.large" :src="anime.coverImage.large" class="art" loading="lazy" decoding="async" alt="">
         <div class="scrim"></div>
         <div class="poster-top-l z-10 flex flex-col items-start gap-1.5">
@@ -1689,6 +1713,7 @@ const PosterCard = {
             <quick-add v-if="quick" :anime="anime" :entry="solo" :open="menuOpen" :on-list="ownList ? !!entry : !!solo" @action="$emit('action', $event)" @edit="$emit('edit')" @toggle="$emit('toggle')"></quick-add>
             <button v-else-if="editable" @click.stop="$emit('edit')" title="Edit" class="absolute bottom-3 right-3 z-20 w-10 h-10 rounded-full bg-base/80 border border-line2 text-ink flex items-center justify-center [@media(hover:hover)]:opacity-0 group-hover:opacity-100 hover:bg-volt hover:text-onvolt hover:border-volt transition-[opacity,background-color,color] duration-200"><i class="fa-solid fa-pen text-xs"></i></button>
         </template>
+    </div>
     </div>`
 };
 
@@ -3840,6 +3865,21 @@ createApp({
         const myAnimeIds = computed(() => new Set([...soloList.value, ...coopList.value].map(i => i.anime?.id)));
         const isOnMyList = (id) => myAnimeIds.value.has(id);
         const visibleResults = computed(() => results.value.filter(a => notHidden(a) && (!filters.value.hideMyAnime || !isOnMyList(a.id))));
+        // Songs load 100 at a time behind a button: show only full rows until the next 100 arrive (the rest waits for them)
+        const gridCols = ref(0);
+        let gridEl = null, gridRO = null;
+        const watchGridCols = (el) => {
+            if (!el || el === gridEl) return;
+            gridEl = el; gridRO?.disconnect();
+            const measure = () => { if (gridEl?.isConnected) gridCols.value = getComputedStyle(gridEl).gridTemplateColumns.split(' ').filter(Boolean).length; };
+            measure(); gridRO = new ResizeObserver(measure); gridRO.observe(el);
+        };
+        const gridResults = computed(() => {
+            const list = visibleResults.value, c = gridCols.value;
+            if (section.value !== 'songs' || !hasNextPage.value || c < 2) return list;
+            const n = Math.floor(list.length / c) * c;
+            return n ? list.slice(0, n) : list;
+        });
 
         const uniqueItems = computed(() => {
             const map = new Map();
@@ -5148,7 +5188,7 @@ createApp({
         const TOP_CFG = { ANIME: { m: 12000, min: 3000, C: 70 }, MANGA: { m: 3000, min: 1000, C: 70 }, GAME: { m: 300, min: 25, C: 72 }, TV: { m: 3000, min: 1500, C: 68 }, SONG: { chart: true } };
         // sub-lists: manga / manhwa / manhua and movies / series are ranked separately
         const TOP_SUBS = { MANGA: [{ v: 'JP', l: 'Manga' }, { v: 'KR', l: 'Manhwa' }, { v: 'CN', l: 'Manhua' }], TV: [{ v: 'movie', l: 'Movies' }, { v: 'tv', l: 'Series' }] };
-        const top = reactive({ type: null, sub: '', gen: 0, pool: [], shown: 100, page: 0, done: false, loading: false, error: '', mode: (() => { try { return localStorage.getItem('anicoop_top_mode') || 'weighted'; } catch { return 'weighted'; } })() });
+        const top = reactive({ type: null, sub: '', gen: 0, pool: [], shown: 100, page: 0, done: false, loading: false, error: '' });
         // every reset starts a new "generation": answers to an older request are thrown away, so the list can't come back
         // empty or mixed after you hide a genre / switch tab while it was loading
         const resetTop = () => Object.assign(top, { type: null, gen: top.gen + 1, pool: [], shown: 100, page: 0, done: false, loading: false, error: '' });
@@ -5253,15 +5293,15 @@ createApp({
         const setTopSub = (v) => { if (top.sub === v) return; const t = mediaType.value; resetTop(); top.type = t; top.sub = v; restoreTopCache(); topFill(); };
         // two ways to rank: "Rating" = the score alone (a tie goes to the one more people rated), or
         // "Rating + votes" = the weighted formula (a 9 from 100k people beats a 9.5 from 10)
-        const TOP_MODES = [{ v: 'weighted', l: 'Rating + votes' }, { v: 'rating', l: 'Rating only' }];
-        const setTopMode = (v) => { top.mode = v; try { localStorage.setItem('anicoop_top_mode', v); } catch {} };
         // a precise score: 8.93 (or 89.3%) instead of rounding everything to 9.0
         const fmtTopScore = (w) => w == null ? '' : PREFS.scoreFormat === 'POINT_100' ? w.toFixed(1) + '%' : (w / 10).toFixed(2);
         const showMoreTop = () => { top.shown += 100; topFill(); };
+        // One ranking: rating weighted by how many people rated it. Titles are compared on the score you see (8.87),
+        // so when two show the same score, the one more people rated is higher — never the other way round.
+        const shownScore = (w) => Math.round((w || 0) * 10);
         const topItems = computed(() => {
             if (top.type === 'SONG') return top.pool.slice(0, top.shown);
-            const byRating = top.mode === 'rating';
-            return [...top.pool].sort((a, b) => byRating ? (b.rating - a.rating) || (b.votes - a.votes) : (b.wScore - a.wScore) || (b.votes - a.votes)).slice(0, top.shown);
+            return [...top.pool].sort((a, b) => (shownScore(b.wScore) - shownScore(a.wScore)) || (b.votes - a.votes) || (b.wScore - a.wScore)).slice(0, top.shown);
         });
         const fmtVotes = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? Math.round(n / 100) / 10 + 'k' : String(n || 0);
         watch(() => currentAppView.value === 'tracker' && activeTab.value === 'top' && !selectedAnime.value && !viewUserId.value ? mediaType.value : null, (t) => { if (t) loadTop(); });
@@ -5423,17 +5463,13 @@ createApp({
             nextTick(() => document.getElementById('artist-album')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
         };
         // a song's album: its artist's page, opened on that album (the album's songs are listed there)
+        // a song's album: the album's own page (older Spotify songs have no Apple album, so their artist page)
         const openSongAlbum = (s) => {
-            const id = s?.albumId; if (!id || !/^\d+$/.test(String(id))) { openSongArtist(s); return; }   // older Spotify songs: the artist page
-            const name = s.album || '';
-            const al = { id: Number(id), name: name.replace(/ - (Single|EP)$/, ''), cover: s.coverImage?.large || null, year: s.seasonYear ? String(s.seasonYear) : '', kind: /- Single$/.test(name) ? 'Single' : / - EP$/.test(name) ? 'EP' : 'Album' };
-            openSongArtist(s);
-            let done = false, stop = null;
-            const ready = () => entity.value?.type === 'artist' && !entityLoading.value && !!entityData.value?.isArtist;
-            stop = watch(ready, (ok) => { if (!ok || done) return; done = true; if (stop) stop(); nextTick(() => { if (artistView.album?.id !== al.id) openAlbum(al); }); }, { immediate: true });
-            if (done) stop();
-            setTimeout(() => { if (!done) { done = true; stop(); } }, 20000);
+            const id = s?.albumId; if (!id || !/^\d+$/.test(String(id))) { openSongArtist(s); return; }
+            openEntity('album', Number(id));
         };
+        const openAlbumPage = (id) => { if (id) openEntity('album', Number(id)); };
+        const albumSongs = computed(() => entity.value?.type === 'album' && entityData.value?.isAlbum ? [...entityData.value.tracks].sort(sortTracks) : []);
         // a song's artist: the first one has an Apple id, featured artists only a name
         const openTrackArtist = (s, k = 0) => { if (k === 0 && s?.artistId) openArtist(s.artistId, (s.artists || [])[0]); else openArtistByName((s?.artists || [])[k]); };
 
@@ -5586,6 +5622,13 @@ createApp({
                     const merge = (x) => { const cur = entityCache.get(key) || d; const next = { ...cur, ...x, image: x.image || cur.image }; entityCache.set(key, next); if (here()) entityData.value = next; };
                     extras?.then(x => merge({ ...x, extrasPending: false })).catch(() => merge({ extrasPending: false }));
                     more?.then(x => { if (x) merge(x); }).catch(() => {});
+                    return;
+                }
+                if (e.type === 'album') {
+                    const d = await songApi.albumPage(e.id);
+                    if (!d) throw new Error('That album could not be found on Apple Music');
+                    entityCache.set(key, d);
+                    if (entity.value?.id === e.id && entity.value?.type === e.type) entityData.value = d;
                     return;
                 }
                 const data = await anilist(e.type === 'character' ? CHARACTER_QUERY : STAFF_QUERY, { id: e.id });
@@ -5976,6 +6019,14 @@ createApp({
             try {
                 const template = known || await detectTemplate(x.baseUrl, extKind.value);
                 if (!template) { repoState[x.baseUrl] = 'unsupported'; return; }
+                // anime / movie sites: only install one whose episodes really play here (many hide their players behind code of their own)
+                if (extKind.value !== 'manga') {
+                    if (a) {
+                        const key = `${a.id}|${x.baseUrl}`;
+                        if (titleState[key] !== 'ok') { titleState[key] = 'checking'; titleState[key] = await verifyTitle(x, template, a).catch(() => 'notfound'); }
+                        if (titleState[key] !== 'ok') { repoState[x.baseUrl] = 'ok:' + template; showToast(`${x.name} doesn’t play “${titleOf(a)}” here`, 'error'); return; }
+                    } else if (!known && (await verifySource(x, template)) !== 'ok') { repoState[x.baseUrl] = 'unsupported'; showToast(`${x.name}'s episodes don’t play here`, 'error'); return; }
+                }
                 repoState[x.baseUrl] = 'ok:' + template;
                 const s = await addSource({ ...x, template, kind: extKind.value }, { quiet: true });
                 if (s) { remember(s); showToast(`${x.name} installed (${SOURCE_TEMPLATES[template].label.split(' (')[0]})`); if (wp.open && playKind.value === s.kind) readSrc.value = s.id; }
@@ -6264,19 +6315,21 @@ createApp({
 
         // ---------- History: what you read / watched / played, per section (kept on this device) ----------
         const HIST_KEY = 'anicoop_history_v1';
-        const history = ref((() => { const h = readJSON(HIST_KEY); return Array.isArray(h) ? h : []; })());
-        const saveHistory = debounce(() => { try { localStorage.setItem(HIST_KEY, JSON.stringify(history.value.slice(0, 500))); } catch {} }, 400);
+        const histList = ref((() => { const h = readJSON(HIST_KEY); return Array.isArray(h) ? h : []; })());
+        // saved in this browser only (never sent anywhere), written when the page is idle so it never slows a click down
+        const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 200));
+        const saveHistory = debounce(() => idle(() => { try { localStorage.setItem(HIST_KEY, JSON.stringify(histList.value.slice(0, 300))); } catch {} }), 800);
         // what = { key, label, sub }: the same chapter / episode again moves to the top instead of repeating
         const addHistory = (a, what) => {
             if (!a?.id || !what) return;
-            const e = { key: `${a.id}:${what.key}`, id: a.id, type: a.type, title: titleOf(a), cover: a.coverImage?.large || null, label: what.label, sub: what.sub || '', at: Date.now(), media: normMedia(a) };
-            history.value = [e, ...history.value.filter(x => x.key !== e.key)].slice(0, 500); saveHistory();
+            const e = { key: `${a.id}:${what.key}`, id: a.id, type: a.type, title: titleOf(a), cover: a.coverImage?.large || null, label: what.label, sub: what.sub || '', at: Date.now(), media: slimAnime(a) };
+            histList.value = [e, ...histList.value.filter(x => x.key !== e.key)].slice(0, 300); saveHistory();
         };
         watch(trailerOf, (a) => { if (a?.trailer?.id) addHistory(a, { key: 'yt' + a.trailer.id, label: 'Watched a trailer' }); });
         const histOpen = ref(false);
         const histType = ref('ANIME');
         const openHistory = (type = mediaType.value) => { histType.value = type; histOpen.value = true; };
-        const histItems = computed(() => history.value.filter(x => x.type === histType.value));
+        const histItems = computed(() => histList.value.filter(x => x.type === histType.value));
         const histDay = (t) => {
             const d = new Date(t); const today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
             if (d.toDateString() === today.toDateString()) return 'Today';
@@ -6288,11 +6341,11 @@ createApp({
             histItems.value.forEach(x => { const l = histDay(x.at); const g = out[out.length - 1]; if (g && g.label === l) g.items.push(x); else out.push({ label: l, items: [x] }); });
             return out;
         });
-        const removeHistory = (key) => { history.value = history.value.filter(x => x.key !== key); saveHistory(); };
+        const removeHistory = (key) => { histList.value = histList.value.filter(x => x.key !== key); saveHistory(); };
         const clearHistory = async () => {
             const name = (SECTION_LIST.find(s => s.type === histType.value)?.label || 'this section');
             if (!(await askConfirm({ title: `Clear your ${name} history?`, body: 'Only the history list is removed. Your lists and progress stay as they are.', ok: 'Clear history' }))) return;
-            history.value = history.value.filter(x => x.type !== histType.value); saveHistory();
+            histList.value = histList.value.filter(x => x.type !== histType.value); saveHistory();
         };
         const openHistoryItem = (x) => { histOpen.value = false; fetchAnimeDetails(x.media || { id: x.id, type: x.type }); };
         const histTime = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -6393,7 +6446,7 @@ createApp({
                 if (!s) throw new Error('That source was removed.');
                 const list = await sourceApi.videos(s, c.link);
                 if (vp.ep?.id !== c.id) return;
-                if (!list.length) throw new Error(`No player found on ${s.name} for this episode. Try another source.`);
+                if (!list.length) throw new Error(`${s.name} didn’t show a player for this episode. The site probably loads its player with protected code of its own, which only its Aniyomi extension can run. Try another source: "Find sources with this title" in Extensions only marks ones that play here.`);
                 vp.servers = list.sort((x, y) => (x.kind === 'embed') - (y.kind === 'embed'));   // plain video files first: they play with nothing around them
             } catch (err) { if (vp.ep?.id === c.id) vp.error = friendlyErr(err); }
             finally { if (vp.ep?.id === c.id) vp.loading = false; }
@@ -7300,8 +7353,9 @@ createApp({
         const openFavChar = (p) => { if (p.section === 'GAME' || p.section === 'TV') { if (p.gameId) fetchAnimeDetails(p.gameId); } else openCharacter(p.id); };
         // favourite people, by kind: anime voice actors, actors (movies & TV), singers (songs) and staff
         const personKind = (p) => p.id < 0 ? 'SINGER' : (p.id >= PERSON_BASE && p.id < SONG_BASE) ? 'ACTOR' : p.kind === 'va' ? 'VA' : 'STAFF';
-        const FAV_PEOPLE = [{ t: 'VA', l: 'Voice actors' }, { t: 'ACTOR', l: 'Actors' }, { t: 'SINGER', l: 'Singers' }, { t: 'STAFF', l: 'Staff' }];
-        const isPeopleTab = (t) => FAV_PEOPLE.some(x => x.t === t);
+        // Actors aren't a tab in People (still counted as people, so an old "Actors" pick doesn't turn into characters)
+        const FAV_PEOPLE = [{ t: 'VA', l: 'Voice actors' }, { t: 'SINGER', l: 'Singers' }, { t: 'STAFF', l: 'Staff' }];
+        const isPeopleTab = (t) => t === 'ACTOR' || FAV_PEOPLE.some(x => x.t === t);
         const favItems = (chars, staff, t) => isPeopleTab(t) ? (staff || []).filter(p => personKind(p) === t) : favsIn(chars, t);
         const favCount = (chars, staff, t) => favItems(chars, staff, t).length;
         const openFavItem = (p, t) => { if (!isPeopleTab(t)) openFavChar(p); else if (p.id < 0) openArtist(-p.id); else openStaff(p.id); };
@@ -7727,7 +7781,7 @@ createApp({
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
-            history, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
+            gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
             siteSources, srcForm, SOURCE_TEMPLATES, installRepoItem, repoLangs, repoShown, repoState, addSource, testSource, removeSource, loadRepo, repoInstalled, readSrc, srcView, readTabs, currentSite, chapterList, loadSourceFor, chooseMatch, changeMatch, onPageError,
             EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
             moreWatch, reader, readInfo, readLangs, readSources, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, fmtClock, seriesLimit, seriesVisible,
@@ -7785,7 +7839,7 @@ createApp({
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, TOP_MODES, setTopMode, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, closePlayer, openArtist, openArtistByName, openSongArtist, openSongAlbum, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, closePlayer, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
             picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,
