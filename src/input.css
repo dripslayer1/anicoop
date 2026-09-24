@@ -1355,7 +1355,7 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 .pbar-q-n { width: 20px; text-align: center; font-family: "Geist Mono", monospace; font-size: 11px; color: rgb(var(--c-mute)); flex-shrink: 0; }
 .pbar-q.on .pbar-q-n { color: rgb(var(--c-volt)); }
 /* YouTube's player: out of sight (sound only) unless "Video" is on */
-.song-yt { position: fixed; left: 0; bottom: 0; width: 200px; height: 113px; opacity: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.song-yt { position: fixed; left: 0; bottom: 0; width: 200px; height: 113px; opacity: .01; pointer-events: none; z-index: 0; overflow: hidden; }
 .song-yt.show { left: auto; right: 16px; bottom: calc(var(--pbar-edge) + 12px); width: 320px; height: 180px; opacity: 1; pointer-events: auto; z-index: 121; border-radius: 14px; box-shadow: 0 24px 60px -18px rgb(0 0 0 / .9); border: 1px solid rgb(var(--c-line2)); }
 .song-yt iframe { width: 100%; height: 100%; display: block; }
 @media (max-width: 1099px) { .pbar-vol { display: none; } }
@@ -1377,3 +1377,43 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 }
 @media (max-width: 420px) { .pbar-side .pbar-opt:not(.pbar-q-btn) { display: none; } }
 @media (max-width: 360px) { .pbar-ctrls .pbar-opt { display: none; } }
+
+/* v8.9 the hidden song player: a small round button in the bottom-left corner (cover + moving bars while it plays) */
+.pbar-peek { position: fixed; z-index: 120; left: 16px; bottom: 16px; width: 52px; height: 52px; border-radius: 999px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  background: rgb(var(--c-surface)); color: rgb(var(--c-volt)); border: 2px solid rgb(var(--c-volt) / .7); box-shadow: 0 12px 30px -10px rgb(0 0 0 / .8), 0 0 22px -8px rgb(var(--c-volt)); transition: transform .18s var(--ease); }
+.pbar-peek:hover { transform: translateY(-3px) scale(1.05); }
+.pbar-peek:active { transform: scale(.94); }
+.pbar-peek img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pbar-peek-eq { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; gap: 3px; padding-bottom: 13px; background: rgb(0 0 0 / .45); opacity: 0; transition: opacity .2s; }
+.pbar-peek.on .pbar-peek-eq { opacity: 1; }
+.pbar-peek-eq span { width: 4px; height: 8px; border-radius: 2px; background: rgb(var(--c-volt)); }
+.pbar-peek.on .pbar-peek-eq span { animation: peek-eq .9s ease-in-out infinite alternate; }
+.pbar-peek-eq span:nth-child(2) { animation-delay: .3s !important; }
+.pbar-peek-eq span:nth-child(3) { animation-delay: .6s !important; }
+@keyframes peek-eq { from { height: 5px; } to { height: 20px; } }
+@media (prefers-reduced-motion: reduce) { .pbar-peek.on .pbar-peek-eq span { animation: none; height: 12px; } }
+@media (max-width: 767px) { .pbar-peek { left: 12px; width: 46px; height: 46px; } .pbar-peek.above-nav { bottom: calc(var(--mnav-h) + 12px); } }
+
+/* v8.9 a poster's quick menu is drawn on top of the page, so small cards (songs, narrow rows) never cut it off */
+.qa-float { position: fixed; z-index: 95; opacity: 0; transform: translateY(6px) scale(.97); transform-origin: bottom right; pointer-events: none; transition: opacity .15s, transform .18s var(--ease); }
+.qa-float.below { transform: translateY(-6px) scale(.97); transform-origin: top right; }
+.qa-float.ready { opacity: 1; transform: none; pointer-events: auto; }
+/* a bridge over the gap between the + and the menu, so moving onto the menu doesn't close it */
+.qa-float::after { content: ''; position: absolute; left: 0; right: 0; height: 10px; top: 100%; }
+.qa-float.below::after { top: auto; bottom: 100%; }
+
+/* v8.9 Steam prices by region */
+.region-btn { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #66c0f4; border: 1px solid rgb(102 192 244 / .35); background: rgb(102 192 244 / .08); transition: background-color .15s, border-color .15s; }
+.region-btn:hover { background: rgb(102 192 244 / .16); border-color: rgb(102 192 244 / .7); }
+.region-list { overflow-y: auto; margin: 0 -6px; padding: 0 6px; overscroll-behavior: contain; }
+.region-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; }
+.region-row:nth-child(odd) { background: rgb(var(--c-raised) / .5); }
+.region-row.best { background: rgb(34 197 94 / .1); box-shadow: inset 0 0 0 1px rgb(34 197 94 / .35); }
+.region-row.mine:not(.best) { box-shadow: inset 0 0 0 1px rgb(var(--c-volt) / .45); }
+.region-row.na { opacity: .55; }
+.region-flag { font-size: 18px; line-height: 1; width: 22px; text-align: center; flex-shrink: 0; }
+.region-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: rgb(var(--c-volt) / .15); color: rgb(var(--c-volt)); vertical-align: 1px; }
+.region-tag.best { background: rgb(34 197 94 / .18); color: #22c55e; }
+.region-off { padding: 1px 5px; border-radius: 4px; background: #4c6b22; color: #beee11; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.region-local { font-size: 13px; font-weight: 700; color: rgb(var(--c-ink)); white-space: nowrap; flex-shrink: 0; }
+.region-usd { font-family: "Geist Mono", monospace; font-size: 11px; color: rgb(var(--c-sub)); white-space: nowrap; width: 58px; text-align: right; flex-shrink: 0; }

@@ -324,3 +324,19 @@ the function update (slower, through the page reader); the update adds a direct 
 * **Header:** the section switcher sits between the logo and the tabs.
 * **Top 100:** a title can no longer appear twice (pages fetched together could overlap).
 * **Home:** the top buttons really use the theme colour now (a white-text rule was winning).
+
+## v8.9 — player fixes, Steam prices by region
+
+**Update:** re-upload the folder. If you haven't yet, also deploy the v8.8 `igdb` Edge Function: full songs need it
+to search YouTube reliably. No database change.
+
+* **Songs that kept loading:** every step (finding the song, starting YouTube's player) now gives up after a few
+  seconds and plays Apple's 30-second preview instead. If the browser blocks the sound until you tap, the bar says so;
+  if a tap doesn't start it either, the preview plays. The player uses youtube.com (the no-cookie address could lose
+  the player's "ready" signal). Pressing play on a song that's stuck starts it over.
+* **Hide the player:** the bar's last button now hides it (the music keeps playing). A small round button in the
+  bottom-left corner (the cover, with moving bars while it plays) brings it back.
+* **Steam prices by region:** a game's Steam panel has "Prices in other regions": the store price in 22 regions,
+  cheapest first, with a rough US-dollar value (exchange rates from open.er-api.com).
+* **Poster quick menu** (the + on a card) is drawn on top of the page, so small cards (songs) no longer cut it off.
+* **Header:** the small divider lines between the icons are gone.

@@ -465,8 +465,8 @@ const igdb = (endpoint, query, { low = false } = {}) => igdbLane(async () => {
 }, low);
 // Steam store data (price, Metacritic, reviews, players) through the same proxy
 const steamCountry = () => { const m = /-([A-Z]{2})$/.exec(navigator.language || ''); return (m ? m[1] : 'US').toLowerCase(); };
-const steam = async (kind, appids) => {
-    const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'steam', kind, appids, cc: steamCountry() } });
+const steam = async (kind, appids, cc = steamCountry()) => {
+    const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'steam', kind, appids, cc } });
     if (error) throw await proxyErr(error);
     return typeof data === 'string' ? JSON.parse(data) : data;
 };
@@ -1663,31 +1663,57 @@ const TrackRow = {
 const QuickAdd = {
     props: { anime: Object, entry: Object, open: Boolean, onList: Boolean },
     emits: ['action', 'edit', 'toggle'],
-    setup() { return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS }; },
+    // The menu is drawn on top of the page (not inside the poster), so a small card never cuts it off.
+    // It opens above the + (or below it when there's no room above) and stays inside the screen.
+    setup() {
+        const btn = ref(null), menu = ref(null);
+        const pos = reactive({ show: false, ready: false, x: 0, y: 0, below: false });
+        const canHover = typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches;
+        let hideT = null;
+        const place = () => {
+            const b = btn.value?.getBoundingClientRect(), m = menu.value; if (!b || !m) return;
+            const mh = m.offsetHeight, mw = m.offsetWidth, gap = 8;
+            const below = b.top - mh - gap < 8 && b.bottom + mh + gap < innerHeight;
+            pos.x = clamp(b.right - mw, 8, innerWidth - mw - 8);
+            pos.y = below ? b.bottom + gap : Math.max(8, b.top - mh - gap);
+            pos.below = below; pos.ready = true;
+        };
+        const shut = () => { clearTimeout(hideT); pos.show = false; pos.ready = false; window.removeEventListener('scroll', shut, true); };
+        const enter = () => {
+            if (!canHover) return;
+            clearTimeout(hideT);
+            if (!pos.show) { pos.show = true; pos.ready = false; window.addEventListener('scroll', shut, true); nextTick(place); }
+        };
+        const leave = () => { clearTimeout(hideT); hideT = setTimeout(shut, 140); };
+        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, btn, menu, pos, enter, leave, shut };
+    },
+    unmounted() { this.shut(); },
     template: `
-    <div class="absolute bottom-3 right-3 z-20 group/qa flex flex-col items-end pointer-events-none" @click.stop>
-        <div class="pb-2 origin-bottom-right opacity-0 scale-95 pointer-events-none group-hover/qa:opacity-100 group-hover/qa:scale-100 group-hover/qa:pointer-events-auto transition-[opacity,transform] duration-150 ease-expo">
-            <div class="qa-menu">
-                <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">SOLO LIST</p>
-                <button @click="$emit('action', 'EP')" class="qa-row" title="Add one">
-                    <span class="font-mono text-[11px] font-bold text-volt w-2.5">+1</span> {{ UNIT.ep }}
-                    <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
-                </button>
-                <button v-for="s in (anime.type === 'SONG' ? ['WATCHING', 'COMPLETED', 'DROPPED'] : ['PLANNING', 'WATCHING', 'COMPLETED'])" :key="s" @click="$emit('action', s)" class="qa-row" :class="entry?.status === s ? 'bg-overlay' : ''">
-                    <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span> {{ STATUS_LABELS[s] }}
-                    <i v-if="entry?.status === s" class="fa-solid fa-check ml-auto text-[10px]"></i>
-                </button>
-                <button v-if="(anime.type || 'ANIME') === 'ANIME' && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING')" @click="$emit('action', 'REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
-                    <span class="qa-dot" :style="{ '--dot': STATUS_COLORS.REPEATING }"></span> Rewatch
-                    <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
-                </button>
-                <div class="h-px bg-line my-1 mx-1"></div>
-                <button @click="$emit('edit')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-group text-[11px] w-2.5"></i> Squads & more…</button>
-                <button v-if="onList" @click="$emit('action', 'REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
+    <div class="absolute bottom-3 right-3 z-20 group/qa flex flex-col items-end pointer-events-none" @click.stop @mouseenter="enter" @mouseleave="leave">
+        <teleport to="body">
+            <div v-if="pos.show" ref="menu" class="qa-float" :class="{ ready: pos.ready, below: pos.below }" :style="{ left: pos.x + 'px', top: pos.y + 'px' }" @mouseenter="enter" @mouseleave="leave" @click.stop>
+                <div class="qa-menu" @click="shut">
+                    <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">SOLO LIST</p>
+                    <button @click="$emit('action', 'EP')" class="qa-row" title="Add one">
+                        <span class="font-mono text-[11px] font-bold text-volt w-2.5">+1</span> {{ UNIT.ep }}
+                        <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
+                    </button>
+                    <button v-for="s in (anime.type === 'SONG' ? ['WATCHING', 'COMPLETED', 'DROPPED'] : ['PLANNING', 'WATCHING', 'COMPLETED'])" :key="s" @click="$emit('action', s)" class="qa-row" :class="entry?.status === s ? 'bg-overlay' : ''">
+                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span> {{ STATUS_LABELS[s] }}
+                        <i v-if="entry?.status === s" class="fa-solid fa-check ml-auto text-[10px]"></i>
+                    </button>
+                    <button v-if="(anime.type || 'ANIME') === 'ANIME' && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING')" @click="$emit('action', 'REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
+                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS.REPEATING }"></span> Rewatch
+                        <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
+                    </button>
+                    <div class="h-px bg-line my-1 mx-1"></div>
+                    <button @click="$emit('edit')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-group text-[11px] w-2.5"></i> Squads & more…</button>
+                    <button v-if="onList" @click="$emit('action', 'REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
+                </div>
             </div>
-        </div>
-        <button @click="$emit('toggle')" :aria-expanded="open"
-            :class="open ? 'bg-volt text-onvolt border-volt' : 'bg-base/80 text-ink border-line2 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-hover/qa:bg-volt group-hover/qa:text-onvolt group-hover/qa:border-volt'"
+        </teleport>
+        <button ref="btn" @click="$emit('toggle')" :aria-expanded="open"
+            :class="open || pos.show ? 'bg-volt text-onvolt border-volt' : 'bg-base/80 text-ink border-line2 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-hover/qa:bg-volt group-hover/qa:text-onvolt group-hover/qa:border-volt'"
             class="pointer-events-auto w-10 h-10 rounded-full border flex items-center justify-center transition-[opacity,background-color,color,transform] duration-200 ease-expo active:scale-90 shadow-lg" title="Add to list">
             <i class="fa-solid" :class="entry ? 'fa-pen text-xs' : 'fa-plus'"></i>
         </button>
@@ -3847,11 +3873,11 @@ createApp({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
             vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
             queue: [], qi: -1, shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
-            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false,
+            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false,
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
         const saveVol = () => { try { localStorage.setItem(VOL_KEY, String(player.vol)); } catch {} };
-        let playTok = 0, backStack = [];
+        let playTok = 0, backStack = [], loadStart = 0;
         // --- engine 1: Apple previews (a plain <audio>) ---
         const audio = new Audio(); audio.preload = 'none'; audio.volume = player.vol;
         audio.addEventListener('timeupdate', () => { if (player.mode !== 'preview') return; player.t = audio.currentTime; if (audio.duration) player.dur = audio.duration; });
@@ -3873,15 +3899,20 @@ createApp({
             if (!box) { box = document.createElement('div'); box.id = 'song-yt-box'; box.className = 'song-yt'; box.setAttribute('aria-hidden', 'true'); box.innerHTML = '<div id="song-yt"></div>'; document.body.appendChild(box); }
             return box;
         };
-        const ytPlayer = () => ytReady || (ytReady = loadYtApi().then(YT => new Promise((ok) => {
+        // every step gives up after a while, so a song never keeps loading forever (the preview plays instead)
+        const withTimeout = (p, ms) => Promise.race([p, new Promise((_, bad) => setTimeout(() => bad(new Error('timeout')), ms))]);
+        // (youtube.com, not youtube-nocookie.com: with the no-cookie host the player's "ready" message can go missing)
+        const ytPlayer = () => ytReady || (ytReady = withTimeout(loadYtApi().then(YT => new Promise((ok) => {
             ytHolder();
-            ytP = new YT.Player('song-yt', {
-                width: '100%', height: '100%', host: 'https://www.youtube-nocookie.com',
+            if (ytP) { try { ytP.destroy(); } catch {} ytP = null; document.getElementById('song-yt-box')?.remove(); ytHolder(); }
+            const made = new YT.Player('song-yt', {
+                width: '100%', height: '100%',
                 playerVars: { autoplay: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, rel: 0, playsinline: 1, origin: location.origin },
                 events: {
-                    onReady: () => ok(ytP),
+                    onReady: () => { ytP = made; ok(made); },
                     onStateChange: (e) => {
                         if (player.mode !== 'yt') return;
+                        ytState = e.data;
                         if (e.data === 1) { player.playing = true; player.loading = false; clearTimeout(ytStartCheck); }
                         else if (e.data === 2) player.playing = false;
                         else if (e.data === 0) { player.playing = false; songEnded(); }
@@ -3890,7 +3921,8 @@ createApp({
                     onError: () => { if (player.mode === 'yt' && player.song) { const s = player.song; forgetYt(s); startPreview(s, playTok, 'YouTube won’t play this one here. Playing the 30-second preview.'); } },
                 },
             });
-        })).catch(err => { ytReady = null; throw err; }));
+        })), 15000).catch(err => { ytReady = null; throw err; }));
+        let ytState = -1;
         const stopEngines = () => { audio.pause(); try { ytP?.pauseVideo?.(); } catch {} clearTimeout(ytStartCheck); };
         // --- finding the song on YouTube: the artist's own upload ("Artist - Topic" = the official audio) scores highest ---
         const ytSongs = reactive(readJSON(YT_SONGS_KEY) || {});
@@ -3944,7 +3976,7 @@ createApp({
         };
         const sameSong = (a, b) => !!a && !!b && (a.id === b.id || (!!b.pending && a.title?.romaji === b.title?.romaji));
         const startSong = async (s) => {
-            const tok = ++playTok;
+            const tok = ++playTok; loadStart = Date.now();
             stopEngines();
             Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null });
             let song = s;
@@ -3953,20 +3985,32 @@ createApp({
             setMediaSession(song);
             if (player.full) {
                 try {
-                    const [id, yp] = await Promise.all([ytForSong(song), ytPlayer()]);
+                    const [id, yp] = await Promise.all([withTimeout(ytForSong(song), 15000), ytPlayer()]);
                     if (tok !== playTok) return;
                     if (id) {
-                        player.mode = 'yt'; audio.pause();
+                        player.mode = 'yt'; audio.pause(); ytState = -1;
                         yp.setVolume(Math.round(player.vol * 100)); if (player.muted) yp.mute(); else yp.unMute();
                         yp.loadVideoById(id); ytTick();
-                        // some browsers block sound that starts without a tap: then the play button starts it
-                        ytStartCheck = setTimeout(() => { if (tok === playTok && player.mode === 'yt' && !player.playing) { player.loading = false; showToast('Tap play to start the song'); } }, 5000);
+                        ytWatch(tok, song, 7000);
                         return;
                     }
-                } catch {}
+                } catch (err) { console.warn('Full song unavailable:', err?.message || err); }
                 if (tok !== playTok) return;
             }
             startPreview(song, tok, player.full ? 'Couldn’t find the full song. Playing the 30-second preview.' : '');
+        };
+        // YouTube didn't start: blocked autoplay (it's "cued" / "unstarted") → the play button starts it;
+        // nothing at all happened → the preview plays instead
+        const ytWatch = (tok, song, ms) => {
+            clearTimeout(ytStartCheck);
+            ytStartCheck = setTimeout(() => {
+                if (tok !== playTok || player.mode !== 'yt' || player.playing) return;
+                if (ytState === 3) { ytWatch(tok, song, 8000); return; }   // still buffering: give it longer
+                const tapped = ytWatch.tapped; ytWatch.tapped = false;
+                if (!tapped && (ytState === -1 || ytState === 5 || ytState === 2)) { player.loading = false; showToast('Tap play to start the song'); return; }
+                forgetYt(song);   // look for another upload next time
+                startPreview(song, tok, 'YouTube didn’t start this song. Playing the 30-second preview.');
+            }, ms);
         };
         // --- the queue: the list you pressed play in (an album, a chart, a playlist…) ---
         const queueFrom = (list, s) => { const q = (list || []).filter(x => x?.type === 'SONG'); return q.some(x => sameSong(x, s)) ? q : [s]; };
@@ -3982,9 +4026,12 @@ createApp({
         const playQueueAt = (i) => { const s = player.queue[i]; if (!s) return; if (player.qi >= 0) backStack.push(player.qi); player.qi = i; startSong(s); };
         const togglePlay = () => {
             if (!player.song) return;
-            if (player.mode === 'yt' && ytP) { if (player.playing) ytP.pauseVideo(); else { ytP.playVideo(); player.loading = false; } }
+            if (player.mode === 'yt' && ytP) {
+                if (player.playing) ytP.pauseVideo();
+                else { ytP.playVideo(); player.loading = true; ytWatch.tapped = true; ytWatch(playTok, player.song, 6000); }   // your tap didn't start it either → preview
+            }
             else if (player.mode === 'preview') { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); }
-            else if (!player.loading) startSong(player.song);
+            else if (!player.loading || Date.now() - loadStart > 4000) startSong(player.song);   // stopped, or stuck: start over
         };
         const nextIndex = (auto) => {
             const n = player.queue.length; if (!n) return -1;
@@ -4023,7 +4070,7 @@ createApp({
         const setVolume = (v) => { player.muted = false; player.vol = clamp(Number(v) || 0, 0, 1); applyVolume(); saveVol(); };
         const toggleMute = () => { player.muted = !player.muted; applyVolume(); };
         const isPlaying = (s) => !!s && player.playing && sameSong(player.song, s);
-        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
+        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
         // lock screen / keyboard media keys
         const setMediaSession = (s) => {
@@ -4037,7 +4084,10 @@ createApp({
         // a video (episode, trailer) pauses the song
         const pauseSong = () => { if (!player.playing) return; if (player.mode === 'yt') ytP?.pauseVideo?.(); else audio.pause(); };
         // the bar takes room at the bottom: the page and every popup end above it, so it never covers a button
-        watch(() => !!player.song && !!currentUser.value, (on) => document.documentElement.classList.toggle('has-player', on), { immediate: true });
+        watch(() => !!player.song && !player.hidden && !!currentUser.value, (on) => document.documentElement.classList.toggle('has-player', on), { immediate: true });
+        // "hide" tucks the bar away (the song keeps playing); the small button in the bottom-left corner brings it back
+        const hidePlayer = () => { player.hidden = true; player.queueOpen = false; player.video = false; };
+        const showPlayer = () => { player.hidden = false; };
         watch(() => currentAppView.value === 'tracker', (on) => document.documentElement.classList.toggle('pbar-nav', on), { immediate: true });
         // on phones it sits right on top of the bottom tab bar, whatever that bar's real height is
         let mnavSeen = null;
@@ -7602,6 +7652,44 @@ createApp({
             } catch (err) { console.warn('series', err.message || err); }
             finally { if (gameExtra.id === g.id) gameExtra.seriesLoading = false; }
         };
+        // Steam prices around the world: the store's own price in each country, and roughly what it costs in US dollars
+        // (exchange rates from open.er-api.com, refreshed every 6 hours) so they can be compared. Cheapest first.
+        const STEAM_REGIONS = [['us', 'United States', '🇺🇸'], ['ca', 'Canada', '🇨🇦'], ['mx', 'Mexico', '🇲🇽'], ['br', 'Brazil', '🇧🇷'], ['ar', 'Argentina', '🇦🇷'],
+            ['gb', 'United Kingdom', '🇬🇧'], ['de', 'Europe (Euro)', '🇪🇺'], ['pl', 'Poland', '🇵🇱'], ['tr', 'Turkey', '🇹🇷'], ['ua', 'Ukraine', '🇺🇦'], ['kz', 'Kazakhstan', '🇰🇿'],
+            ['sa', 'Saudi Arabia', '🇸🇦'], ['ae', 'UAE', '🇦🇪'], ['za', 'South Africa', '🇿🇦'], ['in', 'India', '🇮🇳'], ['cn', 'China', '🇨🇳'], ['jp', 'Japan', '🇯🇵'],
+            ['kr', 'South Korea', '🇰🇷'], ['id', 'Indonesia', '🇮🇩'], ['ph', 'Philippines', '🇵🇭'], ['au', 'Australia', '🇦🇺'], ['nz', 'New Zealand', '🇳🇿']];
+        const regionPrices = reactive({ open: false, id: null, name: '', loading: false, rows: [], error: '', fx: false });
+        let fxCache = null;
+        const fxRates = async () => {
+            if (fxCache && Date.now() - fxCache.at < 6 * 3600e3) return fxCache.rates;
+            const j = JSON.parse(await textAny('https://open.er-api.com/v6/latest/USD'));
+            if (!j?.rates) throw new Error('no rates');
+            fxCache = { at: Date.now(), rates: j.rates }; return j.rates;
+        };
+        const openRegionPrices = async () => {
+            const id = gameExtra.steam?.appid; if (!id) return;
+            regionPrices.open = true;
+            if (regionPrices.id === id && (regionPrices.rows.length || regionPrices.loading)) return;
+            Object.assign(regionPrices, { id, name: titleOf(selectedAnime.value), loading: true, rows: [], error: '', fx: false });
+            const fx = fxRates().catch(() => null);
+            const rows = [], todo = [...STEAM_REGIONS];
+            const worker = async () => {
+                while (todo.length && regionPrices.id === id) {
+                    const [cc, name, flag] = todo.shift();
+                    let p = null, failed = false; try { p = (await steam('prices', [id], cc))?.[id] || null; } catch { failed = true; }
+                    rows.push(p ? { cc, name, flag, ...p } : { cc, name, flag, na: true, failed });
+                }
+            };
+            await Promise.all([worker(), worker(), worker(), worker()]);
+            if (regionPrices.id !== id) return;
+            const rates = await fx;
+            rows.forEach(r => { r.usd = r.na ? null : !r.final ? 0 : rates && r.currency && rates[r.currency] ? r.final / 100 / rates[r.currency] : null; r.mine = r.cc === steamCountry(); });
+            rows.sort((a, b) => (a.na - b.na) || ((a.usd ?? 1e9) - (b.usd ?? 1e9)));
+            const cheapest = rows.find(r => !r.na && r.usd != null);
+            if (cheapest && rows.some(r => r.usd > 0)) cheapest.best = true;
+            Object.assign(regionPrices, { rows, loading: false, fx: !!rates, error: rows.every(r => r.na) ? 'Steam didn’t return prices for this game.' : '' });
+        };
+        const fmtUsd = (n) => n == null ? '' : n === 0 ? 'Free' : '$' + (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(2) : Math.round(n));
         const loadGameExtras = (g) => {
             // franchise first (everything related), then the tighter series/collection
             const opts = [...(g.series || [])].sort((a, b) => (a.field === 'franchises' ? 0 : 1) - (b.field === 'franchises' ? 0 : 1))
@@ -8112,6 +8200,7 @@ createApp({
 
         return {
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            regionPrices, openRegionPrices, fmtUsd,
             plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
@@ -8173,7 +8262,7 @@ createApp({
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
             picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,
