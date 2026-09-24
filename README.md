@@ -301,3 +301,26 @@ achievements and the admin rules), then re-upload the folder. No Edge Function c
 * **Songs:** Browse shows full rows only before "Show 100 more songs".
 * **Smaller things:** posters no longer flicker when hovered at their edge; Home's top buttons use the theme colour;
   the Actors tab is gone from People in profiles; History is lighter (smaller entries, saved when the page is idle).
+
+## v8.8 — full songs, a real song player, video sources
+
+**Update:** re-upload the folder, then update the `igdb` Edge Function (paste the new
+`supabase/functions/igdb/index.ts` and deploy). No database change. Songs and YouTube episodes already work before
+the function update (slower, through the page reader); the update adds a direct YouTube search and the `{imdb}` blank.
+
+* **Full songs:** each song is found on YouTube (the artist's own "Topic" upload first; covers, live and sped-up
+  versions are skipped) and played in YouTube's own player, kept out of sight so you only hear it ("Video" shows it).
+  Nothing is downloaded or converted to MP3. If YouTube has no match, or the owner blocks playing it outside YouTube,
+  Apple's 30-second preview plays instead. The "Full / 0:30" button switches previews-only on and off.
+* **Song player:** full-width bar with shuffle, previous, play/pause, next, repeat (list / one song), seek bar with
+  times, queue (the album, chart or playlist you pressed play in), volume and lock-screen / media-key controls.
+  It sits above every window, the manga reader and video player included, and the page and every window now end
+  above it, so it never covers a button. A video or trailer pauses the song.
+* **Video sources (anime, movies & TV):**
+  * **YouTube** extension: plays free, official uploads of an episode or film (Muse Asia, Ani-One, TMS…).
+  * **Player links:** add a player address with blanks anicoop fills in for the episode you pick:
+    `{tmdb} {imdb} {anilist} {mal} {season} {episode} {title}` (Movies & TV can have a separate movie address).
+    It plays in the pop-up-blocking frame. Only add players you're allowed to use.
+* **Header:** the section switcher sits between the logo and the tabs.
+* **Top 100:** a title can no longer appear twice (pages fetched together could overlap).
+* **Home:** the top buttons really use the theme colour now (a white-text rule was winning).

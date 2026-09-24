@@ -144,7 +144,7 @@ const mangaDex = async (body: Record<string, unknown>) => {
 
 // ---------- TMDB (Movies & TV). Read Access Token in the TMDB_TOKEN secret. ----------
 const TMDB_TOKEN = clean(Deno.env.get('TMDB_TOKEN'));
-const TMDB_PATH = /^(trending\/(all|movie|tv)\/(day|week)|search\/(multi|movie|tv)|discover\/(movie|tv)|(movie|tv)\/(\d+|popular|top_rated|upcoming|now_playing|on_the_air|airing_today)(\/(season\/\d+|recommendations|similar))?|collection\/\d+|genre\/(movie|tv)\/list|person\/\d+)$/;
+const TMDB_PATH = /^(trending\/(all|movie|tv)\/(day|week)|search\/(multi|movie|tv)|discover\/(movie|tv)|(movie|tv)\/(\d+|popular|top_rated|upcoming|now_playing|on_the_air|airing_today)(\/(season\/\d+|recommendations|similar|external_ids))?|collection\/\d+|genre\/(movie|tv)\/list|person\/\d+)$/;
 const tmdb = async (body: Record<string, any>) => {
     if (!TMDB_TOKEN) return json({ error: 'The TMDB key isn’t set on the server (TMDB_TOKEN secret).' }, 500);
     const path = String(body.path || '').replace(/^\/+/, '');
@@ -298,6 +298,47 @@ const siteFetch = async (body: Record<string, any>) => {
     return json(out);
 };
 
+// ---------- YouTube search (the song player and the YouTube video source) ----------
+// YouTube's own web search (the same one youtube.com uses), trimmed to what the app needs:
+// [{ id, title, channel, secs, thumb, badge }]. Nothing is downloaded or converted: the app plays results in YouTube's player.
+const ytTime = (t: string) => String(t || '').split(':').reduce((a, x) => a * 60 + (parseInt(x, 10) || 0), 0);
+const ytWalk = (o: any, out: any[]) => {
+    if (!o || typeof o !== 'object' || out.length >= 30) return;
+    if (Array.isArray(o)) { for (const x of o) ytWalk(x, out); return; }
+    const v = o.videoRenderer;
+    if (v?.videoId) {
+        const badges = JSON.stringify(v.ownerBadges || []);
+        out.push({
+            id: v.videoId, title: v.title?.runs?.map((r: any) => r.text).join('') || '',
+            channel: v.ownerText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || '',
+            secs: ytTime(v.lengthText?.simpleText || ''), thumb: v.thumbnail?.thumbnails?.slice(-1)[0]?.url || '',
+            badge: /OFFICIAL_ARTIST/.test(badges) ? 'artist' : /VERIFIED/.test(badges) ? 'verified' : '',
+        });
+        return;
+    }
+    for (const k in o) ytWalk(o[k], out);
+};
+const ytSearch = async (body: Record<string, any>) => {
+    const q = String(body.q || '').trim().slice(0, 200);
+    if (!q) return json({ error: 'Nothing to search' }, 400);
+    const key = 'yt\n' + q;
+    const hit = cache.get(key); if (hit && Date.now() - hit.at < CACHE_MS * 36) return json(hit.body);
+    let r: Response;
+    try {
+        r = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': BROWSER_UA, Origin: 'https://www.youtube.com' },
+            // params EgIQAQ== = "videos only"
+            body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: '2.20250101.00.00', hl: 'en', gl: 'US' } }, query: q, params: 'EgIQAQ==' }),
+        });
+    } catch (err) { return json({ error: 'Could not reach YouTube: ' + ((err as Error).message || 'network error') }, 502); }
+    if (!r.ok) return json({ error: `YouTube search failed (${r.status})` }, 502);
+    const out: any[] = []; ytWalk(await r.json(), out);
+    const text = JSON.stringify({ items: out });
+    if (cache.size > 800) cache.clear();
+    cache.set(key, { at: Date.now(), body: text });
+    return json(text);
+};
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
     if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -307,6 +348,7 @@ Deno.serve(async (req) => {
     const { endpoint = '', query = '', kind = '', appids = [], cc = 'us' } = body;
 
     if (endpoint === 'fetch') return siteFetch(body);
+    if (endpoint === 'yt') return ytSearch(body);
     if (endpoint === 'tmdb') return tmdb(body);
     if (endpoint === 'spotify') return spotify(body);
 

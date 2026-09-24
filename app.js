@@ -82,6 +82,7 @@ const defaultPrefs = () => ({
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
     hiddenGenres: { ANIME: [], MANGA: [], GAME: [], TV: [], SONG: [] },   // genres you never want to see (Browse, Top 100, trending, random)
     extensions: [],                                         // manga reading extensions you installed (Mihon-style)
+    players: [],                                            // player links you added (anime, movies & TV): an address with {tmdb} / {episode}… blanks
     sources: [],                                            // website sources you added (Mihon-style extensions: settings only, no code) · kind: manga | anime | tv
     repos: {},                                              // the extension repository you last opened, per section
     reader: { autoMark: true, saver: false, modes: {} },   // reader: mark chapters read at the end, data saver, reading mode per title
@@ -557,6 +558,40 @@ const siteFetch = async (url, { method = 'GET', referer, form, as = 'text' } = {
     if (typeof d?.body === 'string' && /<title>\s*just a moment|cf-chl-|challenge-platform|cf_chl_opt/i.test(d.body.slice(0, 20000))) throw new Error(`${new URL(url).hostname} blocked the request (it may be behind Cloudflare protection).`);
     if (d?.status >= 400) throw new Error(d.status === 403 || d.status === 503 ? `${new URL(url).hostname} blocked the request (it may be behind Cloudflare protection).` : `The site answered ${d.status}.`);
     return d;
+};
+// ---------- YouTube search: full songs (audio only) and free official episodes play in YouTube's own player ----------
+// Asked through the "yt" endpoint of the Edge Function; before that's deployed, the results page is read through "fetch".
+const ytTime = (t) => String(t || '').split(':').reduce((a, x) => a * 60 + (parseInt(x, 10) || 0), 0);
+const ytWalk = (o, out) => {
+    if (!o || typeof o !== 'object' || out.length >= 30) return;
+    if (Array.isArray(o)) { for (const x of o) ytWalk(x, out); return; }
+    const v = o.videoRenderer;
+    if (v?.videoId) {
+        const badges = JSON.stringify(v.ownerBadges || []);
+        out.push({ id: v.videoId, title: (v.title?.runs || []).map(r => r.text).join(''), channel: v.ownerText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || '',
+            secs: ytTime(v.lengthText?.simpleText), thumb: (v.thumbnail?.thumbnails || []).slice(-1)[0]?.url || '', badge: /OFFICIAL_ARTIST/.test(badges) ? 'artist' : /VERIFIED/.test(badges) ? 'verified' : '' });
+        return;
+    }
+    for (const k in o) ytWalk(o[k], out);
+};
+const ytCache = new Map();
+const ytSearch = async (q) => {
+    q = String(q || '').trim(); if (!q) return [];
+    if (ytCache.has(q)) return ytCache.get(q);
+    let items = null;
+    try {
+        const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'yt', q } });
+        if (!error) { const d = typeof data === 'string' ? JSON.parse(data) : data; if (Array.isArray(d?.items)) items = d.items; }
+    } catch {}
+    if (!items) {
+        const html = (await siteFetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=EgIQAQ%253D%253D&hl=en&gl=US`)).body || '';
+        const m = /var ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s.exec(html);
+        if (!m) throw new Error('YouTube search didn’t answer. Try again in a moment.');
+        items = []; ytWalk(JSON.parse(m[1]), items);
+    }
+    if (ytCache.size > 200) ytCache.clear();
+    ytCache.set(q, items);
+    return items;
 };
 const htmlDoc = (html, base) => { const d = new DOMParser().parseFromString(html || '', 'text/html'); const b = d.createElement('base'); b.href = base; d.head.prepend(b); return d; };
 const absUrl = (v, base) => { try { return new URL(v.trim().split(/\s+/)[0], base).href; } catch { return null; } };
@@ -3721,6 +3756,7 @@ createApp({
         };
         window.addEventListener('message', (e) => {
             if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin || '')) return;
+            if (!ytFrame.value || e.source !== ytFrame.value.contentWindow) return;   // only the trailer's player (the song player talks to its own)
             let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
             yt.heard = true;
             const i = d?.info;
@@ -3745,7 +3781,7 @@ createApp({
             const t = trailerOf.value?.trailer; if (!t?.id) return '';
             return t.site === 'dailymotion' ? `https://www.dailymotion.com/video/${t.id}` : `https://www.youtube.com/watch?v=${t.id}`;
         });
-        const playTrailer = (anime) => { if (anime?.type === 'SONG') { playPreview(anime); return; } if (anime?.trailer?.id) { quickMenuFor.value = null; trailerOf.value = anime; } };
+        const playTrailer = (anime) => { if (anime?.type === 'SONG') { const grid = (gridResults.value || []).map(x => x?.anime || x); playPreview(anime, grid.some(x => x?.id === anime.id) ? grid : null); return; } if (anime?.trailer?.id) { quickMenuFor.value = null; pauseSong(); trailerOf.value = anime; } };
 
         // ---------- playlists: your own "albums" of songs (Songs → Solo list) ----------
         // Saved in the playlists table (songs kept inside it, in order). Friends who can see your songs can see them.
@@ -3801,40 +3837,216 @@ createApp({
         // the song editor's "Add to playlist" picker
         const plAddSongs = computed(() => { const p = plOpenList.value; return p ? soloList.value.filter(i => typeOf(i) === 'SONG' && !inPlaylist(p, i.anime)) : []; });
 
-        // ---------- song previews: one player for the whole site (mini bar at the bottom) ----------
-        // Apple's 30-second previews. The volume you set is remembered (this browser), wherever you play from.
-        const VOL_KEY = 'anicoop_song_volume';
-        const player = reactive({ song: null, playing: false, loading: false, t: 0, dur: 30, vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(), muted: false });
+        // ---------- the song player: one for the whole site (bar at the bottom) ----------
+        // Full songs: each song is looked up on YouTube and played in YouTube's own player, kept out of sight (sound only;
+        // "Video" shows it). Nothing is downloaded or converted. If YouTube has no match (or the owner blocks playing it
+        // outside YouTube), Apple's 30-second preview plays instead. Volume, shuffle, repeat and "full songs" are remembered.
+        const VOL_KEY = 'anicoop_song_volume', PLAYER_KEY = 'anicoop_player_v1', YT_SONGS_KEY = 'anicoop_yt_songs_v1';
+        const pPrefs = readJSON(PLAYER_KEY) || {};
+        const player = reactive({
+            song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
+            vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
+            queue: [], qi: -1, shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
+            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false,
+        });
+        const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
+        const saveVol = () => { try { localStorage.setItem(VOL_KEY, String(player.vol)); } catch {} };
+        let playTok = 0, backStack = [];
+        // --- engine 1: Apple previews (a plain <audio>) ---
         const audio = new Audio(); audio.preload = 'none'; audio.volume = player.vol;
-        audio.addEventListener('timeupdate', () => { player.t = audio.currentTime; if (audio.duration) player.dur = audio.duration; });
-        audio.addEventListener('play', () => { player.playing = true; });
-        audio.addEventListener('pause', () => { player.playing = false; });
-        audio.addEventListener('ended', () => { player.playing = false; player.t = 0; });
-        audio.addEventListener('volumechange', () => { if (!audio.muted) { player.vol = audio.volume; try { localStorage.setItem(VOL_KEY, String(audio.volume)); } catch {} } player.muted = audio.muted; });
-        const setVolume = (v) => { audio.muted = false; audio.volume = clamp(Number(v) || 0, 0, 1); };
-        const toggleMute = () => { audio.muted = !audio.muted; };
-        let playTok = 0;
-        const isPlaying = (s) => !!s && player.playing && (player.song?.id === s.id || (s.pending && player.song?.title?.romaji === s.title?.romaji));
-        const playPreview = async (s) => {
+        audio.addEventListener('timeupdate', () => { if (player.mode !== 'preview') return; player.t = audio.currentTime; if (audio.duration) player.dur = audio.duration; });
+        audio.addEventListener('play', () => { if (player.mode === 'preview') player.playing = true; });
+        audio.addEventListener('pause', () => { if (player.mode === 'preview') player.playing = false; });
+        audio.addEventListener('ended', () => { if (player.mode === 'preview') songEnded(); });
+        // --- engine 2: YouTube's player (official IFrame API) ---
+        let ytP = null, ytReady = null, ytTimer = null, ytStartCheck = null;
+        const loadYtApi = () => window.YT?.Player ? Promise.resolve(window.YT) : new Promise((ok, bad) => {
+            const prev = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => { prev?.(); ok(window.YT); };
+            const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api'; sc.onerror = () => bad(new Error('YouTube’s player didn’t load'));
+            document.head.appendChild(sc);
+        });
+        const ytTick = () => { clearInterval(ytTimer); ytTimer = setInterval(() => { if (player.mode !== 'yt' || !ytP?.getCurrentTime) return; player.t = ytP.getCurrentTime() || 0; const d = ytP.getDuration?.(); if (d) player.dur = d; }, 250); };
+        // YouTube's player lives outside the app's own page (Vue never redraws it); it's see-through unless "Video" is on
+        const ytHolder = () => {
+            let box = document.getElementById('song-yt-box');
+            if (!box) { box = document.createElement('div'); box.id = 'song-yt-box'; box.className = 'song-yt'; box.setAttribute('aria-hidden', 'true'); box.innerHTML = '<div id="song-yt"></div>'; document.body.appendChild(box); }
+            return box;
+        };
+        const ytPlayer = () => ytReady || (ytReady = loadYtApi().then(YT => new Promise((ok) => {
+            ytHolder();
+            ytP = new YT.Player('song-yt', {
+                width: '100%', height: '100%', host: 'https://www.youtube-nocookie.com',
+                playerVars: { autoplay: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, rel: 0, playsinline: 1, origin: location.origin },
+                events: {
+                    onReady: () => ok(ytP),
+                    onStateChange: (e) => {
+                        if (player.mode !== 'yt') return;
+                        if (e.data === 1) { player.playing = true; player.loading = false; clearTimeout(ytStartCheck); }
+                        else if (e.data === 2) player.playing = false;
+                        else if (e.data === 0) { player.playing = false; songEnded(); }
+                    },
+                    // 100 removed · 101/150 the owner only allows it on YouTube → the preview plays instead
+                    onError: () => { if (player.mode === 'yt' && player.song) { const s = player.song; forgetYt(s); startPreview(s, playTok, 'YouTube won’t play this one here. Playing the 30-second preview.'); } },
+                },
+            });
+        })).catch(err => { ytReady = null; throw err; }));
+        const stopEngines = () => { audio.pause(); try { ytP?.pauseVideo?.(); } catch {} clearTimeout(ytStartCheck); };
+        // --- finding the song on YouTube: the artist's own upload ("Artist - Topic" = the official audio) scores highest ---
+        const ytSongs = reactive(readJSON(YT_SONGS_KEY) || {});
+        const saveYtSongs = debounce(() => { const k = Object.keys(ytSongs); if (k.length > 1500) k.slice(0, k.length - 1500).forEach(x => delete ytSongs[x]); try { localStorage.setItem(YT_SONGS_KEY, JSON.stringify(ytSongs)); } catch {} }, 800);
+        const songYtKey = (s) => songKey(s?.title?.romaji, (s?.artists || [])[0]);
+        const forgetYt = (s) => { delete ytSongs[songYtKey(s)]; saveYtSongs(); };
+        const BAD_TAKE = /\b(live|cover|karaoke|instrumental|remix|sped ?up|slowed|reverb|nightcore|8d|mashup|reaction|tutorial|lesson|piano|acoustic|extended|1 ?hour|loop)\b/i;
+        const pickSongVideo = (list, s) => {
+            const title = normTitle(String(s.title?.romaji || '').replace(/\s*[([].*?[)\]]/g, '')); const artist = normTitle((s.artists || [])[0] || '');
+            const want = s.durationMs ? s.durationMs / 1000 : null; const songText = normTitle(s.title?.romaji);
+            let best = null, bestScore = -1e9;
+            for (const v of list) {
+                if (!v.secs || v.secs > 20 * 60) continue;
+                const vt = normTitle(v.title), ch = normTitle(v.channel);
+                let sc = 0;
+                if (title && vt.includes(title)) sc += 30; else if (title && title.split(' ').filter(w => w.length > 2).every(w => vt.includes(w))) sc += 15; else sc -= 40;
+                if (/ topic$/.test(ch) && artist && ch.startsWith(artist)) sc += 45;
+                else if (artist && (ch.includes(artist) || ch.replace(/ /g, '').includes(artist.replace(/ /g, '')))) sc += 25;
+                else if (artist && vt.includes(artist)) sc += 10;
+                if (v.badge === 'artist') sc += 10;
+                if (/\bofficial audio\b/i.test(v.title)) sc += 8;
+                const bad = BAD_TAKE.exec(v.title); if (bad && !songText.includes(normTitle(bad[0]))) sc -= 45;
+                if (want) { const d = Math.abs(v.secs - want); sc += d <= 3 ? 25 : d <= 10 ? 12 : d <= 30 ? 0 : -25; }
+                if (sc > bestScore) { best = v; bestScore = sc; }
+            }
+            return bestScore >= 20 ? best : null;
+        };
+        const ytForSong = async (s) => {
+            const k = songYtKey(s); if (ytSongs[k]) return ytSongs[k];
+            const artist = (s.artists || [])[0] || '';
+            let v = pickSongVideo(await ytSearch(`${artist} - ${s.title?.romaji || ''}`), s);
+            if (!v) v = pickSongVideo(await ytSearch(`${s.title?.romaji || ''} ${artist} official audio`), s);
+            if (!v) return null;
+            ytSongs[k] = v.id; saveYtSongs(); return v.id;
+        };
+        const previewUrlOf = async (s) => {
+            let url = s.previewUrl;
+            if (!url && s.appleId) url = (await itunes('lookup', { id: s.appleId }))?.results?.[0]?.previewUrl;   // charts don't include the preview link
+            if (!url && s.extId?.startsWith('am:')) url = (await itunes('lookup', { id: s.extId.slice(3) }))?.results?.[0]?.previewUrl;
+            return url || null;
+        };
+        const startPreview = async (s, tok, note = '') => {
+            clearTimeout(ytStartCheck); try { ytP?.stopVideo?.(); } catch {}
+            let url = null; try { url = await previewUrlOf(s); } catch {}
+            if (tok !== playTok) return;
+            player.loading = false;
+            if (!url) { player.mode = null; player.playing = false; showToast(note ? 'This song can’t play here' : 'No way to play this song', 'error'); if (player.queue.length > 1) setTimeout(() => tok === playTok && nextSong(true), 1200); return; }
+            if (note) showToast(note);
+            player.mode = 'preview'; player.dur = 30; audio.src = url; audio.volume = player.vol; audio.muted = player.muted;
+            audio.play().catch(() => showToast('Tap play to start', 'error'));
+        };
+        const sameSong = (a, b) => !!a && !!b && (a.id === b.id || (!!b.pending && a.title?.romaji === b.title?.romaji));
+        const startSong = async (s) => {
+            const tok = ++playTok;
+            stopEngines();
+            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null });
+            let song = s;
+            if (s.pending && s.wiki) { try { const m = await songApi.matchAllTime(s.wiki); if (m) song = { ...m }; } catch {} if (tok !== playTok) return; player.song = song; }
+            addHistory(song, { key: 'play', label: player.full ? 'Played' : 'Played the preview', sub: (song.artists || []).join(', ') });
+            setMediaSession(song);
+            if (player.full) {
+                try {
+                    const [id, yp] = await Promise.all([ytForSong(song), ytPlayer()]);
+                    if (tok !== playTok) return;
+                    if (id) {
+                        player.mode = 'yt'; audio.pause();
+                        yp.setVolume(Math.round(player.vol * 100)); if (player.muted) yp.mute(); else yp.unMute();
+                        yp.loadVideoById(id); ytTick();
+                        // some browsers block sound that starts without a tap: then the play button starts it
+                        ytStartCheck = setTimeout(() => { if (tok === playTok && player.mode === 'yt' && !player.playing) { player.loading = false; showToast('Tap play to start the song'); } }, 5000);
+                        return;
+                    }
+                } catch {}
+                if (tok !== playTok) return;
+            }
+            startPreview(song, tok, player.full ? 'Couldn’t find the full song. Playing the 30-second preview.' : '');
+        };
+        // --- the queue: the list you pressed play in (an album, a chart, a playlist…) ---
+        const queueFrom = (list, s) => { const q = (list || []).filter(x => x?.type === 'SONG'); return q.some(x => sameSong(x, s)) ? q : [s]; };
+        const playPreview = (s, list = null) => {
             if (!s) return;
             quickMenuFor.value = null;
-            if (player.song?.id === s.id && audio.src) { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); return; }
-            let url = s.previewUrl; const tok = ++playTok;
-            player.song = s; player.t = 0; player.loading = true;
-            try {
-                if (!url && s.pending && s.wiki) { const m = await songApi.matchAllTime(s.wiki); url = m?.previewUrl; if (m) player.song = { ...m }; }
-                if (!url && s.appleId) url = (await itunes('lookup', { id: s.appleId }))?.results?.[0]?.previewUrl;   // charts don't include the preview link
-                if (!url && s.extId?.startsWith('am:')) url = (await itunes('lookup', { id: s.extId.slice(3) }))?.results?.[0]?.previewUrl;
-            } catch { url = null; }
-            if (tok !== playTok) return;   // another song was picked meanwhile
-            player.loading = false;
-            if (!url) { showToast('No preview for this song', 'error'); player.song = null; return; }
-            audio.src = url; audio.volume = player.vol;
-            audio.play().catch(() => showToast('Tap play again to start the preview', 'error'));
-            addHistory(player.song, { key: 'play', label: 'Played the preview', sub: (player.song.artists || []).join(', ') });
+            if (sameSong(player.song, s) && (player.mode || player.loading)) { togglePlay(); return; }
+            if (list) { player.queue = queueFrom(list, s).slice(0, 500); backStack = []; }
+            else if (!player.queue.some(x => sameSong(x, s))) { player.queue = [s]; backStack = []; }
+            player.qi = player.queue.findIndex(x => sameSong(x, s));
+            startSong(s);
         };
-        const seekPreview = (e) => { const r = e.currentTarget.getBoundingClientRect(); if (audio.duration) audio.currentTime = clamp((e.clientX - r.left) / r.width, 0, 1) * audio.duration; };
-        const closePlayer = () => { audio.pause(); audio.removeAttribute('src'); player.song = null; player.playing = false; };
+        const playQueueAt = (i) => { const s = player.queue[i]; if (!s) return; if (player.qi >= 0) backStack.push(player.qi); player.qi = i; startSong(s); };
+        const togglePlay = () => {
+            if (!player.song) return;
+            if (player.mode === 'yt' && ytP) { if (player.playing) ytP.pauseVideo(); else { ytP.playVideo(); player.loading = false; } }
+            else if (player.mode === 'preview') { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); }
+            else if (!player.loading) startSong(player.song);
+        };
+        const nextIndex = (auto) => {
+            const n = player.queue.length; if (!n) return -1;
+            if (player.shuffle && n > 1) {
+                const left = player.queue.map((_, i) => i).filter(i => i !== player.qi && !backStack.includes(i));
+                if (left.length) return left[Math.floor(Math.random() * left.length)];
+                if (player.repeat === 'all' || !auto) { backStack = []; const all = player.queue.map((_, i) => i).filter(i => i !== player.qi); return all[Math.floor(Math.random() * all.length)]; }
+                return -1;
+            }
+            if (player.qi + 1 < n) return player.qi + 1;
+            return player.repeat === 'all' || !auto ? 0 : -1;
+        };
+        const nextSong = (auto = false) => {
+            if (auto && player.repeat === 'one') { seekTo(0); if (player.mode === 'yt') ytP?.playVideo(); else audio.play().catch(() => {}); return; }
+            const i = nextIndex(auto);
+            if (i < 0 || (!auto && player.queue.length < 2 && player.repeat !== 'all')) { if (auto) { player.playing = false; player.t = 0; } else seekTo(player.dur - 0.5); return; }
+            playQueueAt(i);
+        };
+        const prevSong = () => {
+            if (player.t > 3 || !player.queue.length) { seekTo(0); return; }
+            const i = backStack.length ? backStack.pop() : player.qi > 0 ? player.qi - 1 : player.repeat === 'all' ? player.queue.length - 1 : -1;
+            if (i < 0) { seekTo(0); return; }
+            player.qi = i; startSong(player.queue[i]);
+        };
+        const songEnded = () => nextSong(true);
+        const toggleShuffle = () => { player.shuffle = !player.shuffle; backStack = []; savePlayerPrefs(); };
+        const cycleRepeat = () => { player.repeat = player.repeat === 'off' ? 'all' : player.repeat === 'all' ? 'one' : 'off'; savePlayerPrefs(); };
+        const toggleFullSongs = () => { player.full = !player.full; savePlayerPrefs(); showToast(player.full ? 'Full songs on (from YouTube)' : '30-second previews only'); if (player.song) startSong(player.song); };
+        const seekTo = (t) => {
+            t = clamp(t, 0, player.dur || 0); player.t = t;
+            if (player.mode === 'yt') ytP?.seekTo?.(t, true); else if (player.mode === 'preview' && audio.duration) audio.currentTime = t;
+        };
+        const seekPreview = (e) => { const r = e.currentTarget.getBoundingClientRect(); seekTo(clamp((e.clientX - r.left) / r.width, 0, 1) * (player.dur || 0)); };
+        const seekKey = (e) => { if (e.key === 'ArrowRight') seekTo(player.t + 5); else if (e.key === 'ArrowLeft') seekTo(player.t - 5); };
+        const applyVolume = () => { audio.volume = player.vol; audio.muted = player.muted; try { if (ytP?.setVolume) { ytP.setVolume(Math.round(player.vol * 100)); player.muted ? ytP.mute() : ytP.unMute(); } } catch {} };
+        const setVolume = (v) => { player.muted = false; player.vol = clamp(Number(v) || 0, 0, 1); applyVolume(); saveVol(); };
+        const toggleMute = () => { player.muted = !player.muted; applyVolume(); };
+        const isPlaying = (s) => !!s && player.playing && sameSong(player.song, s);
+        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
+        const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
+        // lock screen / keyboard media keys
+        const setMediaSession = (s) => {
+            if (!('mediaSession' in navigator)) return;
+            try {
+                navigator.mediaSession.metadata = new MediaMetadata({ title: s.title?.romaji || '', artist: (s.artists || []).join(', '), album: s.album || '', artwork: s.coverImage?.large ? [{ src: s.coverImage.large, sizes: '600x600' }] : [] });
+                navigator.mediaSession.setActionHandler('play', togglePlay); navigator.mediaSession.setActionHandler('pause', togglePlay);
+                navigator.mediaSession.setActionHandler('nexttrack', () => nextSong()); navigator.mediaSession.setActionHandler('previoustrack', prevSong);
+            } catch {}
+        };
+        // a video (episode, trailer) pauses the song
+        const pauseSong = () => { if (!player.playing) return; if (player.mode === 'yt') ytP?.pauseVideo?.(); else audio.pause(); };
+        // the bar takes room at the bottom: the page and every popup end above it, so it never covers a button
+        watch(() => !!player.song && !!currentUser.value, (on) => document.documentElement.classList.toggle('has-player', on), { immediate: true });
+        watch(() => currentAppView.value === 'tracker', (on) => document.documentElement.classList.toggle('pbar-nav', on), { immediate: true });
+        // on phones it sits right on top of the bottom tab bar, whatever that bar's real height is
+        let mnavSeen = null;
+        const mnavRO = typeof ResizeObserver === 'function' ? new ResizeObserver(([e]) => { const h = e?.target?.offsetHeight; if (h) document.documentElement.style.setProperty('--mnav-h', h + 'px'); }) : null;
+        watch(() => !!player.song && currentAppView.value === 'tracker', async (on) => {
+            if (!on || !mnavRO) return; await nextTick();
+            const nav = document.querySelector('nav.mnav'); if (nav && nav !== mnavSeen) { if (mnavSeen) mnavRO.unobserve(mnavSeen); mnavRO.observe(nav); mnavSeen = nav; }
+        }, { immediate: true });
+        watch(() => player.video && player.mode === 'yt' && !!player.song, (on) => { const b = document.getElementById('song-yt-box'); if (b) { b.classList.toggle('show', on); b.setAttribute('aria-hidden', on ? 'false' : 'true'); } });
         const closeTrailer = () => { trailerOf.value = null; };
 
         // ---------- list views ----------
@@ -5221,7 +5433,8 @@ createApp({
             top.page++; top.done = done;
             const seen = new Set(top.pool.map(x => x.id));
             const m = type === 'MANGA' && top.sub && top.sub !== 'JP' ? { ...cfg, m: cfg.m / 3 } : cfg;
-            const add = items.filter(x => !seen.has(x.id) && notHidden(x) && (x.rating || x.averageScore)).map(x => ({ ...x, rating: x.rating || x.averageScore, wScore: weighted(x.rating || x.averageScore, x.votes || 0, m) }));
+            // pages asked for together can overlap (titles with the same score swap places between pages): keep each title once
+            const add = items.filter(x => !seen.has(x.id) && seen.add(x.id) && notHidden(x) && (x.rating || x.averageScore)).map(x => ({ ...x, rating: x.rating || x.averageScore, wScore: weighted(x.rating || x.averageScore, x.votes || 0, m) }));
             top.pool = [...top.pool, ...add];
         };
         // Songs: the 100 most streamed songs of all time (Spotify's all-time list, kept up to date on Wikipedia),
@@ -5272,7 +5485,7 @@ createApp({
             finally { if (gen === top.gen) top.loading = false; }
         };
         // each leaderboard is kept for 6 hours (this browser), so opening it again is instant
-        const TOP_CACHE = 'anicoop_top_v2:';
+        const TOP_CACHE = 'anicoop_top_v3:';   // v3: older saved lists could hold the same title twice
         const topCacheKey = () => TOP_CACHE + [top.type, top.sub, hiddenOf(top.type).join(',')].join('|');
         const saveTopCache = () => {
             if (!top.type || top.type === 'SONG' || !top.pool.length) return;
@@ -5282,7 +5495,7 @@ createApp({
         const restoreTopCache = () => {
             const c = readJSON(topCacheKey());
             if (!c?.pool?.length || Date.now() - c.at > 6 * 3600e3) return false;
-            Object.assign(top, { pool: c.pool.map(normMedia), page: c.page, done: c.done });
+            const ids = new Set(); Object.assign(top, { pool: c.pool.filter(x => !ids.has(x.id) && ids.add(x.id)).map(normMedia), page: c.page, done: c.done });
             return true;
         };
         const loadTop = () => {
@@ -5796,6 +6009,8 @@ createApp({
               desc: 'Open CBZ / ZIP comic archives or a set of images from your device. Stays on your device, nothing is uploaded.' },
             { id: 'archive', kinds: ['tv'], name: 'Internet Archive', icon: 'fa-building-columns', color: '#71717a', lang: 'Multi-language', version: '1.0',
               desc: 'Public-domain and freely licensed films and shows (classics, old cartoons, documentaries), played straight from archive.org with no ads.' },
+            { id: 'youtube', kinds: ['anime', 'tv'], name: 'YouTube', icon: 'fa-play', color: '#ff0033', lang: 'Multi-language', version: '1.0',
+              desc: 'Full episodes and films that studios and distributors post for free on YouTube (Muse Asia, Ani-One, TMS, GundamInfo and others), played in YouTube’s own player. Not every title is there.' },
             { id: 'localvideo', kinds: ['anime', 'tv'], name: 'Local video files', icon: 'fa-file-video', color: '#3b82f6', lang: 'Any', version: '1.0',
               desc: 'Play an MP4 / WebM file from your device. Stays on your device, nothing is uploaded.' },
         ];
@@ -6089,10 +6304,45 @@ createApp({
         const saveMatches = debounce(() => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(srcMatches)); } catch {} }, 500);
         const readSrc = ref(null);
         const srcView = reactive({ loading: false, error: '', results: [], chapters: [], picking: false, q: '', match: null, key: '' });
+        // ---- player links (anime, movies & TV): an address with blanks the app fills in for the episode you pick ----
+        // e.g. https://player.example/embed/{tmdb}/{season}/{episode}. Nothing is searched or scraped: the address plays as it is.
+        const playerLinks = computed(() => PREFS.players || []);
+        const kindPlayers = (k) => playerLinks.value.filter(p => p.kind === k);
+        const extPlayers = computed(() => kindPlayers(extKind.value));
+        const plForm = reactive({ name: '', url: '', movieUrl: '', msg: '' });
+        const PLAYER_BLANK = /\{(tmdb|imdb|anilist|mal|title)\}/;
+        const checkPlayerUrl = (raw, need = true) => {
+            let u; try { u = new URL(raw.replace(/\{[a-z]+\}/g, '1')); } catch { throw new Error('Enter the full address, starting with https://'); }
+            if (u.protocol !== 'https:') throw new Error('The address must start with https://');
+            if (need && !PLAYER_BLANK.test(raw)) throw new Error('The address needs {tmdb}, {imdb}, {anilist}, {mal} or {title} in it, so the player knows which title to play.');
+            return u;
+        };
+        const addPlayerLink = () => {
+            const raw = plForm.url.trim(), movie = plForm.movieUrl.trim();
+            try {
+                const u = checkPlayerUrl(raw); if (movie) checkPlayerUrl(movie);
+                PREFS.players = [...(PREFS.players || []), { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: extKind.value, name: (plForm.name.trim() || u.hostname.replace(/^www\./, '')).slice(0, 40), url: raw, movieUrl: movie || null }];
+                showToast(`${PREFS.players.at(-1).name} added`);
+                Object.assign(plForm, { name: '', url: '', movieUrl: '', msg: '' });
+                if (wp.open && playKind.value === extKind.value) readSrc.value = PREFS.players.at(-1).id;
+            } catch (err) { plForm.msg = err.message; }
+        };
+        const removePlayerLink = (id) => {
+            PREFS.players = (PREFS.players || []).filter(p => p.id !== id);
+            if (readSrc.value === id) readSrc.value = readTabs.value[0]?.id || null;
+        };
+        // the source playing right now is a player link or YouTube (not a website with an episode list)
+        const directSrc = computed(() => {
+            if (readSrc.value === 'youtube') return { id: 'youtube', type: 'youtube', name: 'YouTube' };
+            const p = playerLinks.value.find(x => x.id === readSrc.value);
+            return p && p.kind === playKind.value ? { id: p.id, type: 'link', name: p.name, p } : null;
+        });
         const ARCHIVE_SRC = { id: 'archive', name: 'Internet Archive', baseUrl: IA, template: 'archive', kind: 'tv' };
         const readTabs = computed(() => {
             const k = playKind.value; if (!k) return [];
             return [
+                ...(k !== 'manga' ? kindPlayers(k).map(p => ({ id: p.id, name: p.name, icon: 'fa-link' })) : []),
+                ...(k !== 'manga' && extOn('youtube') ? [{ id: 'youtube', name: 'YouTube', icon: 'fa-play' }] : []),
                 ...(k === 'manga' && extOn('mangadex') ? [{ id: 'mangadex', name: 'MangaDex', icon: 'fa-book-open-reader' }] : []),
                 ...(k === 'tv' && extOn('archive') ? [{ id: 'archive', name: 'Internet Archive', icon: 'fa-building-columns' }] : []),
                 ...kindSources(k).map(s => ({ id: s.id, name: s.name, icon: 'fa-globe' })),
@@ -6381,7 +6631,7 @@ createApp({
         };
         watch(() => wp.season, (n) => { if (wp.open) loadTvSeason(n); });
         watch(() => selectedAnime.value?.id, () => { wp.open = false; });
-        const srcEps = computed(() => isVideoKind.value && readSrc.value !== 'mangadex' && !srcView.picking ? srcView.chapters : []);
+        const srcEps = computed(() => isVideoKind.value && readSrc.value !== 'mangadex' && !directSrc.value && !srcView.picking ? srcView.chapters : []);
         const noSeasons = computed(() => srcEps.value.every(c => !c.season));
         // the source's episode for a row of the guide
         const srcEpFor = (season, ep, abs) => {
@@ -6394,7 +6644,8 @@ createApp({
             const a = selectedAnime.value; const k = playKind.value;
             if (!a || !k || k === 'manga') return [];
             const prog = myProgress(a); const done = myEntry(a.id)?.status === 'COMPLETED';
-            const row = (r) => ({ ...r, watched: done || (r.abs != null && r.abs > 0 && prog >= r.abs) });
+            const direct = !!directSrc.value;   // a player link / YouTube can play any episode of the guide
+            const row = (r) => ({ ...r, play: !!r.item || direct, watched: done || (r.abs != null && r.abs > 0 && prog >= r.abs) });
             if (isMovie.value) return [row({ key: 'movie', n: 1, abs: 1, title: titleOf(a), desc: plainText(a.description).slice(0, 320), thumb: a.bannerImage || a.coverImage?.large, runtime: a.runtime, item: srcEps.value[0] || null })];
             if (a.type === 'TV') {
                 const eps = tvSeasons[`${a.id}:${wp.season}`];
@@ -6417,13 +6668,14 @@ createApp({
         const wpContinue = computed(() => {
             if (playKind.value === 'manga') return continueChapter.value ? { label: `ch ${continueChapter.value.ch}`, chapter: continueChapter.value } : null;
             const prog = myProgress(selectedAnime.value);
-            const r = wpRows.value.find(x => x.item && x.abs > prog) || (prog ? null : wpRows.value.find(x => x.item));
+            const r = wpRows.value.find(x => x.play && x.abs > prog) || (prog ? null : wpRows.value.find(x => x.play));
             return r ? { label: isMovie.value ? '' : selectedAnime.value?.type === 'TV' ? `S${wp.season} E${r.n}` : `ep ${r.n}`, row: r } : null;
         });
         const playContinue = () => { const c = wpContinue.value; if (!c) return; if (c.chapter) openChapter(c.chapter); else playRow(c.row); };
         const wpStarted = computed(() => myProgress(selectedAnime.value) > 0);
         const playRow = (r) => {
             if (r.item) return openEpisode(r.item, selectedAnime.value, r);
+            if (directSrc.value) return openDirect(r);
             if (!readTabs.value.length) { openExtensions(); return; }
             if (srcView.loading) { showToast(`Still looking on ${currentSite.value?.name || 'the source'}…`); return; }
             showToast(srcView.picking ? 'Pick the right title first' : `${currentSite.value?.name || 'This source'} doesn’t have this one. Try another source.`, 'error');
@@ -6440,6 +6692,7 @@ createApp({
             const s = c.src === 'archive' ? ARCHIVE_SRC : siteSources.value.find(x => x.id === c.src);
             stopVideo();
             const abs = r?.abs ?? (c.movie ? 1 : anime?.type === 'TV' && c.season ? absOf(anime, c.season, c.ep) : Math.floor(c.ep || 0) || null);
+            pauseSong();
             Object.assign(vp, { open: true, anime, ep: c, abs, label: vpLabel(anime, c, r), servers: [], i: 0, loading: true, error: '', marked: false, local: false });
             addHistory(anime, { key: 'ep:' + vp.label, label: vp.label, sub: s?.name || '' });
             try {
@@ -6448,6 +6701,82 @@ createApp({
                 if (vp.ep?.id !== c.id) return;
                 if (!list.length) throw new Error(`${s.name} didn’t show a player for this episode. The site probably loads its player with protected code of its own, which only its Aniyomi extension can run. Try another source: "Find sources with this title" in Extensions only marks ones that play here.`);
                 vp.servers = list.sort((x, y) => (x.kind === 'embed') - (y.kind === 'embed'));   // plain video files first: they play with nothing around them
+            } catch (err) { if (vp.ep?.id === c.id) vp.error = friendlyErr(err); }
+            finally { if (vp.ep?.id === c.id) vp.loading = false; }
+        };
+        // ---- player links + YouTube: build the player for one row of the episode guide ----
+        const extIds = reactive({});   // "anilistId" → { tmdb, imdb, mal } found for player links
+        const idsFor = async (a, need) => {
+            const k = String(a.id); const have = extIds[k] || (extIds[k] = {});
+            const movie = a.format === 'MOVIE';
+            if (need.tmdb || need.imdb) {
+                if (have.tmdb == null) {
+                    if (a.type === 'TV') have.tmdb = a.extId;
+                    else {   // an anime: find it on TMDB by name (AniList has no TMDB link)
+                        const q = a.title?.english || a.title?.romaji || titleOf(a);
+                        const d = await tmdbCall(movie ? 'search/movie' : 'search/tv', { query: q, ...(a.seasonYear ? { [movie ? 'year' : 'first_air_date_year']: a.seasonYear } : {}) }).catch(() => null);
+                        const d2 = d?.results?.length ? d : await tmdbCall(movie ? 'search/movie' : 'search/tv', { query: q }).catch(() => null);
+                        have.tmdb = d2?.results?.[0]?.id || 0;
+                    }
+                }
+                if (!have.tmdb) throw new Error('Couldn’t find this title on TMDB, which this player link needs ({tmdb} / {imdb}).');
+            }
+            if (need.imdb && have.imdb == null) {
+                const d = await tmdbCall(`${movie ? 'movie' : 'tv'}/${have.tmdb}/external_ids`).catch(() => null);
+                have.imdb = d?.imdb_id || '';
+                if (!have.imdb) throw new Error('Couldn’t get the IMDb number for this title. Use {tmdb} in the player link, or redeploy the Edge Function (the IMDb lookup needs the latest one).');
+            }
+            if (need.mal && have.mal == null) {
+                if (a.type !== 'ANIME' && a.type !== 'MANGA') throw new Error('{mal} only works for anime.');
+                const d = await anilist('query ($id: Int) { Media(id: $id) { idMal } }', { id: a.id }).catch(() => null);
+                have.mal = d?.Media?.idMal || 0;
+                if (!have.mal) throw new Error('This anime has no MyAnimeList number.');
+            }
+            return have;
+        };
+        const linkServer = async (p, a, c) => {
+            const tpl = (c.movie && p.movieUrl) || p.url;
+            const need = { tmdb: /\{tmdb\}/.test(tpl), imdb: /\{imdb\}/.test(tpl), mal: /\{mal\}/.test(tpl) };
+            if (/\{anilist\}/.test(tpl) && a.type !== 'ANIME') throw new Error('{anilist} only works for anime.');
+            const ids = await idsFor(a, need);
+            const url = tpl.replace(/\{(tmdb|imdb|anilist|mal|season|episode|title)\}/g, (_, k) => encodeURIComponent(
+                k === 'tmdb' ? ids.tmdb : k === 'imdb' ? ids.imdb : k === 'mal' ? ids.mal : k === 'anilist' ? a.id : k === 'season' ? (c.season || 1) : k === 'episode' ? (c.ep || 1) : (a.title?.english || a.title?.romaji || titleOf(a))));
+            return { name: p.name, url, kind: /\.m3u8(\?|$)/i.test(url) ? 'hls' : /\.(mp4|webm|m4v)(\?|$)/i.test(url) ? 'file' : 'embed' };
+        };
+        // YouTube: the free, official uploads of this episode (studios' and distributors' own channels first)
+        const OFFICIAL_YT = /muse asia|muse indonesia|muse india|ani-one|tms anime|gundam ?info|tezuka|toei anim|crunchyroll|aniplex|viz media|discotek|retrocrush|pok[eé]mon|sentai|kadokawa|bandai namco|sunrise|nippon animation|dreamworks|pbs kids|cartoon network|nickelodeon|disney|warner bros|lionsgate|mgm|paramount|sony pictures|popcornflix|filmrise|moviesphere|youtube movies/i;
+        const ytEpisodeServers = async (a, c) => {
+            const names = [...new Set([a.title?.english, a.title?.romaji, titleOf(a)].filter(Boolean))];
+            const movie = !!c.movie;
+            const q = movie ? `${names[0]} full movie` : a.type === 'TV' && c.season ? `${names[0]} season ${c.season} episode ${c.ep}` : `${names[0]} episode ${c.ep}`;
+            const list = [...await ytSearch(q), ...(names[1] && !movie ? await ytSearch(`${names[1]} episode ${c.ep}`).catch(() => []) : [])];
+            const words = names.map(n => normTitle(n).split(' ').filter(w => w.length > 2));
+            const epRx = new RegExp(`(?:ep(?:isode)?\\.?\\s*|#|\\be)0*${c.ep}(?!\\d)|\\b0*${c.ep}\\s*(?:[:\\-|–]|$)`, 'i');
+            const seen = new Set();
+            const hits = list.filter(v => {
+                if (seen.has(v.id)) return false; seen.add(v.id);
+                if (!v.secs || v.secs < (movie ? 45 * 60 : 6 * 60)) return false;   // trailers, clips, Shorts
+                const t = normTitle(v.title);
+                if (!words.some(ws => ws.length && ws.every(w => t.includes(w)))) return false;
+                if (/\b(trailer|teaser|preview|clip|opening|ending|amv|reaction|review|recap|explained|compilation)\b/i.test(v.title)) return false;
+                return movie || epRx.test(v.title);
+            }).map(v => ({ v, sc: (OFFICIAL_YT.test(v.channel) ? 30 : 0) + (v.badge ? 10 : 0) }))
+              .sort((x, y) => y.sc - x.sc).slice(0, 6);
+            return hits.map(({ v }) => ({ name: `${v.channel || 'YouTube'} · ${fmtClock(v.secs)}`, url: `https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&rel=0&playsinline=1&iv_load_policy=3`, kind: 'embed', yt: true }));
+        };
+        const openDirect = async (r, anime = selectedAnime.value) => {
+            const d = directSrc.value; if (!d || !anime) return;
+            const movie = isMovie.value || anime.format === 'MOVIE';
+            const tv = anime.type === 'TV' && !movie;
+            const c = { id: `direct:${d.id}:${anime.id}:${r.key}`, key: r.key, title: r.title, season: tv ? wp.season : null, ep: movie ? null : r.n, movie, src: d.id, direct: true };
+            pauseSong(); stopVideo();
+            Object.assign(vp, { open: true, anime, ep: c, abs: r.abs, label: vpLabel(anime, c, r), servers: [], i: 0, loading: true, error: '', marked: false, local: false });
+            addHistory(anime, { key: 'ep:' + vp.label, label: vp.label, sub: d.name });
+            try {
+                const list = d.type === 'youtube' ? await ytEpisodeServers(anime, c) : [await linkServer(d.p, anime, c)];
+                if (vp.ep?.id !== c.id) return;
+                if (!list.length) throw new Error(`YouTube has no free upload of ${movie ? 'this film' : 'this episode'}. Try another source.`);
+                vp.servers = list;
             } catch (err) { if (vp.ep?.id === c.id) vp.error = friendlyErr(err); }
             finally { if (vp.ep?.id === c.id) vp.loading = false; }
         };
@@ -6479,9 +6808,13 @@ createApp({
         const onVideoTime = (e) => { const v = e.target; if (!vp.marked && v.duration && v.currentTime / v.duration > 0.9) markEpisodeWatched(); };
         const onVideoError = () => { if (vpServer.value && vpServer.value.kind !== 'embed' && !hls) vp.error = 'This video didn’t load. Try another server.'; };
         const vpList = () => srcView.chapters.filter(c => c.src === vp.ep?.src);
-        const vpNeighbour = (d) => { const list = vpList(); const k = list.findIndex(c => c.id === vp.ep?.id); return k === -1 ? null : list[k + d] || null; };
+        const vpNeighbour = (d) => {
+            if (vp.ep?.direct) { const rows = wpRows.value; const k = rows.findIndex(r => r.key === vp.ep.key); return k === -1 ? null : rows[k + d] || null; }
+            const list = vpList(); const k = list.findIndex(c => c.id === vp.ep?.id); return k === -1 ? null : list[k + d] || null;
+        };
         const vpGo = async (d) => {
             const c = vpNeighbour(d); if (!c) return;
+            if (vp.ep?.direct) { if (d > 0 && !vp.marked) markEpisodeWatched(); openDirect(c, vp.anime); return; }
             if (d > 0 && !vp.marked) markEpisodeWatched();   // moving on = you watched this one
             if (c.season && selectedAnime.value?.type === 'TV') wp.season = c.season;
             openEpisode(c, vp.anime, wpRows.value.find(r => r.item?.id === c.id) || null);
@@ -7779,6 +8112,7 @@ createApp({
 
         return {
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
             gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
@@ -7839,7 +8173,7 @@ createApp({
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, closePlayer, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
             picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,
