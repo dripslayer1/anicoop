@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=8.7">
+    <link rel="stylesheet" href="app.css?v=8.8">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=8.7" defer></script>
+    <script src="app.js?v=8.8" defer></script>
 </head>
 <body>
 
@@ -210,7 +210,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v8.7</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v8.8</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -224,21 +224,11 @@
                             <span class="w-8 h-8 rounded-[9px] bg-volt flex items-center justify-center font-pixel font-semibold text-lg text-onvolt shrink-0">A</span>
                             <span class="font-display font-brand font-bold text-ink text-lg tracking-tight hdr-wordmark">anicoop</span>
                         </button>
-                    </div>
-                    <nav class="seg hidden md:flex">
-                        <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="{ 'is-on': activeTab === t.id && !selectedAnime && !viewUserId && !entity }" class="seg-btn">
-                            {{ t.label }}
-                            <span v-if="t.id === 'profile' && pendingRequests.length" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-pink text-white text-[10px] font-bold flex items-center justify-center">{{ pendingRequests.length }}</span>
-                        </button>
-                    </nav>
-                    <div class="hdr-side flex items-center justify-end gap-2">
-                        <div class="relative" @click.stop>
+                        <span class="hdr-divider" aria-hidden="true"></span>
+                        <div class="relative shrink-0" @click.stop>
                             <button @click="sectionMenu = !sectionMenu" class="section-switch" :class="{ 'is-open': sectionMenu }" :style="{ '--c': currentSection.color }" title="Switch section">
                                 <span class="section-switch-icon"><i :class="currentSection.icon" class="fa-solid"></i></span>
-                                <span class="flex flex-col items-start leading-none text-left">
-                                    <span class="font-mono text-[8px] font-bold tracking-[.18em] uppercase section-switch-hint hidden sm:block">Section</span>
-                                    <span class="font-display text-[15px] font-bold text-ink whitespace-nowrap section-switch-name">{{ currentSection.short }}</span>
-                                </span>
+                                <span class="font-display text-[14px] font-bold text-ink whitespace-nowrap section-switch-name">{{ currentSection.short }}</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] ml-1 transition-transform duration-200" :class="{ 'rotate-180': sectionMenu }"></i>
                             </button>
                             <transition name="pop">
@@ -258,6 +248,14 @@
                                 </div>
                             </transition>
                         </div>
+                    </div>
+                    <nav class="seg hidden md:flex">
+                        <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="{ 'is-on': activeTab === t.id && !selectedAnime && !viewUserId && !entity }" class="seg-btn">
+                            {{ t.label }}
+                            <span v-if="t.id === 'profile' && pendingRequests.length" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-pink text-white text-[10px] font-bold flex items-center justify-center">{{ pendingRequests.length }}</span>
+                        </button>
+                    </nav>
+                    <div class="hdr-side flex items-center justify-end gap-2">
                         <span class="hdr-gap hdr-extra" aria-hidden="true"></span>
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
@@ -277,7 +275,7 @@
             </header>
 
             <!-- mobile bottom tab bar -->
-            <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 glass border-t border-line grid pb-[env(safe-area-inset-bottom)]" :style="{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }">
+            <nav class="mnav md:hidden fixed bottom-0 inset-x-0 z-50 glass border-t border-line grid pb-[env(safe-area-inset-bottom)]" :style="{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }">
                 <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="activeTab === t.id && !selectedAnime && !viewUserId && !entity ? 'text-volt' : 'text-mute'" class="relative flex flex-col items-center gap-1 py-2.5 transition-colors">
                     <i :class="t.icon" class="fa-solid text-base"></i>
                     <span class="font-mono text-[9px] font-bold tracking-wider uppercase whitespace-nowrap">{{ t.label }}</span>
@@ -315,11 +313,11 @@
                                 <h1 class="mt-3 font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ entityData.name.full }}</h1>
                                 <button @click="openArtist(entityData.artistId, entityData.artist)" :disabled="!entityData.artistId" class="mt-3 text-lg font-semibold text-sub hover:text-volt transition-colors">{{ entityData.artist }} <i class="fa-solid fa-arrow-right text-xs"></i></button>
                                 <div class="mt-6 flex flex-wrap gap-2">
-                                    <button v-if="albumSongs.length" @click="playPreview(albumSongs[0])" class="play-cta"><i class="fa-solid" :class="isPlaying(albumSongs[0]) ? 'fa-pause' : 'fa-play'"></i> {{ isPlaying(albumSongs[0]) ? 'Pause' : 'Play' }}</button>
+                                    <button v-if="albumSongs.length" @click="playPreview(albumSongs[0], albumSongs)" class="play-cta"><i class="fa-solid" :class="isPlaying(albumSongs[0]) ? 'fa-pause' : 'fa-play'"></i> {{ isPlaying(albumSongs[0]) ? 'Pause' : 'Play' }}</button>
                                     <button v-if="entityData.artistId" @click="openArtist(entityData.artistId, entityData.artist)" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid fa-microphone-lines"></i> Artist page</button>
                                 </div>
                                 <div class="track-list mt-8">
-                                    <track-row v-for="s in albumSongs" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s)" :n="s.trackNo || ''" :entry="myEntry(s.id)" :album="false" :cover="false"
+                                    <track-row v-for="s in albumSongs" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s, albumSongs)" :n="s.trackNo || ''" :entry="myEntry(s.id)" :album="false" :cover="false"
                                         @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
                                 </div>
                                 <p v-if="!albumSongs.length" class="panel py-12 text-center text-sm text-mute mt-8">No songs listed for this release.</p>
@@ -365,7 +363,7 @@
                                         <section v-if="artistDiscog.popular.length" class="mt-10">
                                             <div class="disc-head"><h3>Popular</h3><span>{{ entityData.songCount }} songs in total</span></div>
                                             <div class="track-list">
-                                                <track-row v-for="(s, i) in artistDiscog.popular.slice(0, artistPopularShown)" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s)" :n="i + 1" :entry="myEntry(s.id)"
+                                                <track-row v-for="(s, i) in artistDiscog.popular.slice(0, artistPopularShown)" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s, artistDiscog.popular)" :n="i + 1" :entry="myEntry(s.id)"
                                                     @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
                                             </div>
                                             <button v-if="artistDiscog.popular.length > 5" @click="artistPopularShown = artistPopularShown > 5 ? 5 : 10" class="disc-more">{{ artistPopularShown > 5 ? 'Show less' : 'Show 5 more' }}</button>
@@ -392,7 +390,7 @@
                                                             <p class="label">{{ discOpenRelease.kind }} · {{ discOpenRelease.year }}<template v-if="discOpenRelease.tracks"> · {{ discOpenRelease.tracks }} songs</template></p>
                                                             <h4 class="disc-title">{{ discOpenRelease.name }}</h4>
                                                             <div class="mt-2 flex flex-wrap items-center gap-3">
-                                                                <button v-if="discOpenRelease.songs.length" @click="playPreview(discOpenRelease.songs[0])" class="sp-play !w-9 !h-9 !text-xs" title="Play the first song"><i class="fa-solid fa-play"></i></button>
+                                                                <button v-if="discOpenRelease.songs.length" @click="playPreview(discOpenRelease.songs[0], discOpenRelease.songs)" class="sp-play !w-9 !h-9 !text-xs" title="Play the first song"><i class="fa-solid fa-play"></i></button>
                                                                 <button @click="openAlbumPage(discOpenRelease.id)" class="text-[11px] font-bold text-sub hover:text-volt"><i class="fa-solid fa-compact-disc mr-1"></i>Album page</button>
                                                                 <a v-if="discOpenRelease.url" :href="discOpenRelease.url" target="_blank" rel="noopener" class="text-[11px] text-mute hover:text-ink"><i class="fa-brands fa-apple mr-1"></i>Apple Music</a>
                                                             </div>
@@ -401,7 +399,7 @@
                                                     </header>
                                                     <div v-if="albumLoading[discOpenRelease.id] && !discOpenRelease.songs.length" class="mt-4 h-24 rounded-xl skeleton"></div>
                                                     <div v-else class="track-list mt-4">
-                                                        <track-row v-for="s in discOpenRelease.songs" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s)" :n="s.trackNo || ''" :entry="myEntry(s.id)" :album="false" :cover="false"
+                                                        <track-row v-for="s in discOpenRelease.songs" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s, discOpenRelease.songs)" :n="s.trackNo || ''" :entry="myEntry(s.id)" :album="false" :cover="false"
                                                             @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
                                                     </div>
                                                     <p v-if="albumLoading[discOpenRelease.id] && discOpenRelease.songs.length" class="label mt-3"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>Loading the rest…</p>
@@ -413,7 +411,7 @@
                                         <section v-if="artistDiscog.elsewhere.length" class="mt-12">
                                             <div class="disc-head"><h3>Features &amp; other releases</h3><span>{{ artistDiscog.elsewhere.length }}</span></div>
                                             <div class="track-list">
-                                                <track-row v-for="s in artistDiscog.elsewhere" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s)" :entry="myEntry(s.id)" n=""
+                                                <track-row v-for="s in artistDiscog.elsewhere" :key="s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s, artistDiscog.elsewhere)" :entry="myEntry(s.id)" n=""
                                                     @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
                                             </div>
                                         </section>
@@ -1407,7 +1405,7 @@
                                 <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-12 h-12 object-cover rounded-lg" loading="lazy" decoding="async" alt="">
                                 <span v-else class="block w-12 h-12 rounded-lg skeleton"></span>
                                 <!-- play the preview without leaving the list -->
-                                <button @click.stop="playPreview(a)" class="top-play" :class="{ on: player.song?.id === a.id || (a.wiki && player.song?.title?.romaji === a.title?.romaji) }" :title="isPlaying(a) ? 'Pause' : 'Play preview'" :aria-label="isPlaying(a) ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="player.loading && player.song?.id === a.id ? 'fa-circle-notch fa-spin' : isPlaying(a) ? 'fa-pause' : 'fa-play'"></i></button>
+                                <button @click.stop="playPreview(a, topItems)" class="top-play" :class="{ on: player.song?.id === a.id || (a.wiki && player.song?.title?.romaji === a.title?.romaji) }" :title="isPlaying(a) ? 'Pause' : 'Play preview'" :aria-label="isPlaying(a) ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="player.loading && player.song?.id === a.id ? 'fa-circle-notch fa-spin' : isPlaying(a) ? 'fa-pause' : 'fa-play'"></i></button>
                             </span>
                             <template v-else>
                                 <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-10 h-14 object-cover rounded-lg shrink-0" loading="lazy" decoding="async" alt="">
@@ -1657,7 +1655,7 @@
                                         <span class="font-mono text-[11px] text-mute shrink-0">{{ g.items.length }} {{ g.items.length === 1 ? 'song' : 'songs' }}</span>
                                     </header>
                                     <div class="track-list">
-                                        <track-row v-for="(s, i) in g.items" :key="g.key + s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s)" :n="g.trackNo ? (s.trackNo || '') : i + 1" :entry="myEntry(s.id)" :album="!g.trackNo && g.items.some(x => x.album)"
+                                        <track-row v-for="(s, i) in g.items" :key="g.key + s.id" :song="s" :playing="isPlaying(s)" @play="playPreview(s, g.items)" :n="g.trackNo ? (s.trackNo || '') : i + 1" :entry="myEntry(s.id)" :album="!g.trackNo && g.items.some(x => x.album)"
                                             :selectable="selectMode" :selected="isSelected(s.id)" @select="toggleSelect(s)"
                                             @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
                                     </div>
@@ -2399,7 +2397,7 @@
                                                 <p class="label">Playlist · {{ (plOpenList.songs || []).length }} songs<template v-if="(plOpenList.songs || []).length"> · {{ plLength(plOpenList) }}</template></p>
                                                 <h4 class="disc-title">{{ plOpenList.name }}</h4>
                                                 <div class="mt-2 flex flex-wrap items-center gap-2">
-                                                    <button v-if="(plOpenList.songs || []).length" @click="playPreview(plOpenList.songs[0])" class="sp-play !w-9 !h-9 !text-xs" title="Play"><i class="fa-solid fa-play"></i></button>
+                                                    <button v-if="(plOpenList.songs || []).length" @click="playPreview(plOpenList.songs[0], plOpenList.songs)" class="sp-play !w-9 !h-9 !text-xs" title="Play"><i class="fa-solid fa-play"></i></button>
                                                     <button @click="renamePlaylist(plOpenList)" class="role-act" title="Rename"><i class="fa-solid fa-pen"></i></button>
                                                     <button @click="deletePlaylist(plOpenList)" class="role-act danger" title="Delete playlist"><i class="fa-solid fa-trash-can"></i></button>
                                                 </div>
@@ -2408,7 +2406,7 @@
                                         </header>
                                         <div v-if="(plOpenList.songs || []).length" class="track-list mt-4">
                                             <div v-for="(s, i) in plOpenList.songs" :key="s.id" class="pl-row">
-                                                <track-row :song="s" :n="i + 1" :entry="myEntry(s.id)" :playing="isPlaying(s)" @play="playPreview(s)" @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
+                                                <track-row :song="s" :n="i + 1" :entry="myEntry(s.id)" :playing="isPlaying(s)" @play="playPreview(s, plOpenList.songs)" @open="fetchAnimeDetails(s)" @artist="k => openTrackArtist(s, k)" @action="quickSolo(s, $event)" @edit="openEditor(s)"></track-row>
                                                 <span class="pl-tools">
                                                     <button @click="movePlaylistSong(plOpenList, i, -1)" :disabled="i === 0" class="role-act" title="Move up"><i class="fa-solid fa-arrow-up"></i></button>
                                                     <button @click="movePlaylistSong(plOpenList, i, 1)" :disabled="i === plOpenList.songs.length - 1" class="role-act" title="Move down"><i class="fa-solid fa-arrow-down"></i></button>
@@ -2679,19 +2677,54 @@
         <!-- back to top: shows once you've scrolled a good way down -->
         <transition name="to-top"><button v-if="showToTop && currentUser && currentAppView !== 'home'" @click="scrollToTop" class="to-top" title="Back to top" aria-label="Back to top"><i class="fa-solid fa-arrow-up"></i></button></transition>
         <!-- song preview mini player (the same audio as every play button; the volume is remembered) -->
-        <transition name="to-top"><div v-if="player.song && currentUser" class="mini-player" :class="{ 'with-top': showToTop && currentAppView !== 'home' }">
-            <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" class="w-11 h-11 rounded-lg object-cover shrink-0 cursor-pointer" @click="fetchAnimeDetails(player.song)" alt="">
-            <div class="min-w-0 flex-grow">
-                <p class="text-sm font-semibold text-ink truncate cursor-pointer" @click="fetchAnimeDetails(player.song)">{{ player.song.title?.romaji }}</p>
-                <p class="text-[11px] text-sub truncate">{{ (player.song.artists || []).join(', ') }}</p>
-                <div class="sp-bar mt-1.5" @click="seekPreview"><div :style="{ width: Math.min(100, player.t / (player.dur || 30) * 100) + '%' }"></div></div>
+        <!-- the song player: full songs (sound from YouTube), queue, shuffle, repeat. It sits above every window, and the page and windows end above it -->
+        <transition name="pbar"><div v-if="player.song && currentUser" class="pbar" :class="{ 'above-nav': currentAppView === 'tracker' }" role="region" aria-label="Song player">
+            <div class="pbar-song">
+                <button class="pbar-cover" @click="fetchAnimeDetails(player.song)" :title="'Open ' + player.song.title?.romaji">
+                    <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt=""><i v-else class="fa-solid fa-music"></i>
+                </button>
+                <div class="min-w-0">
+                    <p class="pbar-title" @click="fetchAnimeDetails(player.song)">{{ player.song.title?.romaji }}</p>
+                    <p class="pbar-artist"><template v-for="(ar, k) in (player.song.artists || [])" :key="k"><span v-if="k">, </span><button @click="openTrackArtist(player.song, k)">{{ ar }}</button></template></p>
+                </div>
             </div>
-            <button @click="playPreview(player.song)" class="sp-play !w-10 !h-10" :title="player.playing ? 'Pause' : 'Play'"><i class="fa-solid" :class="player.loading ? 'fa-circle-notch fa-spin' : player.playing ? 'fa-pause' : 'fa-play'"></i></button>
-            <div class="vol hidden sm:flex">
-                <button @click="toggleMute" class="vol-btn" title="Mute"><i class="fa-solid" :class="player.muted || !player.vol ? 'fa-volume-xmark' : player.vol < 0.5 ? 'fa-volume-low' : 'fa-volume-high'"></i></button>
-                <input type="range" min="0" max="1" step="0.01" :value="player.muted ? 0 : player.vol" @input="setVolume($event.target.value)" class="vol-range" :style="{ '--v': (player.muted ? 0 : player.vol) * 100 + '%' }" aria-label="Volume">
+            <div class="pbar-mid">
+                <div class="pbar-ctrls">
+                    <button @click="toggleShuffle" class="pbar-btn pbar-opt" :class="{ on: player.shuffle }" :title="player.shuffle ? 'Shuffle on' : 'Shuffle'" :aria-pressed="player.shuffle"><i class="fa-solid fa-shuffle"></i></button>
+                    <button @click="prevSong" class="pbar-btn" title="Previous"><i class="fa-solid fa-backward-step"></i></button>
+                    <button @click="togglePlay" class="pbar-play" :title="player.playing ? 'Pause' : 'Play'"><i class="fa-solid" :class="player.loading ? 'fa-circle-notch fa-spin' : player.playing ? 'fa-pause' : 'fa-play'"></i></button>
+                    <button @click="nextSong()" class="pbar-btn" title="Next"><i class="fa-solid fa-forward-step"></i></button>
+                    <button @click="cycleRepeat" class="pbar-btn pbar-opt" :class="{ on: player.repeat !== 'off' }" :title="player.repeat === 'one' ? 'Repeating this song' : player.repeat === 'all' ? 'Repeating the list' : 'Repeat'"><i class="fa-solid fa-repeat"></i><span v-if="player.repeat === 'one'" class="pbar-one">1</span></button>
+                </div>
+                <div class="pbar-time">
+                    <span class="pbar-clock">{{ fmtClock(player.t) }}</span>
+                    <div class="pbar-seek" role="slider" tabindex="0" aria-label="Seek" :aria-valuenow="Math.round(player.t)" :aria-valuemax="Math.round(player.dur)" @click="seekPreview" @keydown="seekKey"><div :style="{ width: Math.min(100, player.t / (player.dur || 30) * 100) + '%' }"></div></div>
+                    <span class="pbar-clock">{{ fmtClock(player.dur) }}</span>
+                </div>
             </div>
-            <button @click="closePlayer" class="vol-btn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            <div class="pbar-side">
+                <button @click="toggleFullSongs" class="pbar-src" :class="{ on: player.mode === 'yt' }" :title="player.full ? 'Full songs from YouTube (click for 30-second previews only)' : 'Previews only (click for full songs)'">{{ player.mode === 'yt' ? 'Full' : player.mode === 'preview' ? '0:30' : player.full ? 'Full' : '0:30' }}</button>
+                <button v-if="player.mode === 'yt'" @click="player.video = !player.video" class="pbar-btn pbar-opt" :class="{ on: player.video }" :title="player.video ? 'Hide the video' : 'Show the video'"><i class="fa-solid fa-film"></i></button>
+                <div class="relative">
+                    <button @click="player.queueOpen = !player.queueOpen" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: player.queueOpen }" title="Queue"><i class="fa-solid fa-list-ul"></i></button>
+                    <transition name="pop"><div v-if="player.queueOpen" class="pbar-queue">
+                        <div class="flex items-center justify-between px-3 pt-2.5 pb-1.5"><p class="font-mono text-[10px] font-bold tracking-[.16em] text-mute">QUEUE · {{ player.queue.length }}</p><button @click="player.queueOpen = false" class="vol-btn !w-7 !h-7" title="Close"><i class="fa-solid fa-xmark"></i></button></div>
+                        <div class="pbar-queue-list">
+                            <div v-for="(q, i) in player.queue" :key="i + ':' + q.id" class="pbar-q" :class="{ on: i === player.qi }" role="button" tabindex="0" @click="i === player.qi ? togglePlay() : playQueueAt(i)" @keydown.enter="playQueueAt(i)">
+                                <span class="pbar-q-n"><i v-if="i === player.qi" class="fa-solid" :class="player.playing ? 'fa-volume-high' : 'fa-pause'"></i><template v-else>{{ i + 1 }}</template></span>
+                                <img v-if="q.coverImage?.large" :src="q.coverImage.large" alt="" loading="lazy"><span v-else class="pbar-q-ph"><i class="fa-solid fa-music"></i></span>
+                                <span class="min-w-0 flex-grow"><span class="pbar-q-t block truncate text-[13px] font-semibold text-ink">{{ q.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (q.artists || []).join(', ') }}</span></span>
+                                <button v-if="i !== player.qi" @click.stop="removeFromQueue(i)" class="vol-btn !w-7 !h-7 shrink-0" title="Remove from the queue"><i class="fa-solid fa-xmark text-[11px]"></i></button>
+                            </div>
+                        </div>
+                    </div></transition>
+                </div>
+                <div class="vol pbar-vol">
+                    <button @click="toggleMute" class="vol-btn" title="Mute"><i class="fa-solid" :class="player.muted || !player.vol ? 'fa-volume-xmark' : player.vol < 0.5 ? 'fa-volume-low' : 'fa-volume-high'"></i></button>
+                    <input type="range" min="0" max="1" step="0.01" :value="player.muted ? 0 : player.vol" @input="setVolume($event.target.value)" class="vol-range" :style="{ '--v': (player.muted ? 0 : player.vol) * 100 + '%' }" aria-label="Volume">
+                </div>
+                <button @click="closePlayer" class="pbar-btn" title="Close the player"><i class="fa-solid fa-xmark"></i></button>
+            </div>
         </div></transition>
     <transition name="pop">
         <div v-if="friendsOpen && currentUser" class="notif-panel" @click.stop>
@@ -3781,21 +3814,22 @@
                         <div v-else>
                             <p v-if="currentSite && srcView.loading" class="wp-note"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Looking for it on {{ currentSite.name }}…</p>
                             <p v-else-if="currentSite && srcView.error" class="wp-note">{{ srcView.error }}</p>
+                            <p v-if="directSrc" class="wp-note !text-mute"><i class="fa-solid mr-2" :class="directSrc.type === 'youtube' ? 'fa-play' : 'fa-link'"></i>{{ directSrc.type === 'youtube' ? 'Pick an episode: anicoop looks for a free, official upload of it on YouTube.' : 'Pick an episode: it plays from ' + directSrc.name + '.' }}</p>
                             <div v-if="selectedAnime.type === 'TV' && !isMovie && tvSeasons[selectedAnime.id + ':' + wp.season] === 'loading'" class="space-y-2"><div v-for="n in 4" :key="n" class="h-24 rounded-xl skeleton"></div></div>
                             <p v-else-if="!wpRows.length" class="wp-note">{{ readTabs.length ? 'No episodes found on this source.' : 'Episodes show up here once you install a source.' }}</p>
                             <div class="ep-list">
-                                <div v-for="r in wpRows.slice(0, wpShown)" :key="r.key" class="ep-row" :class="{ watched: r.watched, off: !r.item }" role="button" tabindex="0" @click="playRow(r)" @keydown.enter.self="playRow(r)">
+                                <div v-for="r in wpRows.slice(0, wpShown)" :key="r.key" class="ep-row" :class="{ watched: r.watched, off: !r.play }" role="button" tabindex="0" @click="playRow(r)" @keydown.enter.self="playRow(r)">
                                     <span class="ep-row-n">{{ isMovie ? '' : r.n }}</span>
                                     <span class="ep-row-thumb">
                                         <img v-if="r.thumb" :src="r.thumb" loading="lazy" decoding="async" alt="">
                                         <i v-else class="fa-solid" :class="isMovie ? 'fa-film' : 'fa-tv'"></i>
-                                        <span class="ep-row-play"><i class="fa-solid" :class="r.item ? 'fa-play' : 'fa-lock'"></i></span>
+                                        <span class="ep-row-play"><i class="fa-solid" :class="r.play ? 'fa-play' : 'fa-lock'"></i></span>
                                         <span v-if="r.watched" class="ep-row-bar"></span>
                                     </span>
                                     <span class="ep-row-body">
                                         <span class="ep-row-top"><b>{{ r.title }}</b><span v-if="r.runtime" class="ep-row-len">{{ r.runtime }}m</span></span>
                                         <span v-if="r.desc" class="ep-row-desc">{{ r.desc }}</span>
-                                        <span v-if="!r.item" class="ep-row-miss">{{ !readTabs.length ? 'Install a source to watch' : srcView.loading ? 'Checking the source…' : srcView.picking ? 'Pick the right title above' : 'Not on this source' }}</span>
+                                        <span v-if="!r.play" class="ep-row-miss">{{ !readTabs.length ? 'Install a source to watch' : srcView.loading ? 'Checking the source…' : srcView.picking ? 'Pick the right title above' : 'Not on this source' }}</span>
                                     </span>
                                     <button v-if="r.abs" @click.stop="toggleRowWatched(r)" class="ep-check" :class="{ on: r.watched }" :title="r.watched ? 'Mark unwatched' : 'Mark watched up to here'"><i class="fa-solid fa-check"></i></button>
                                 </div>
@@ -3905,6 +3939,34 @@
                             </div>
                             <button @click="toggleExt(x.id)" :class="extOn(x.id) ? 'btn-ghost' : 'btn-primary'" class="!py-2 !px-3.5 !text-xs shrink-0">{{ extOn(x.id) ? 'Remove' : 'Install' }}</button>
                         </div>
+                    </div>
+
+                    <!-- player links (anime, movies & TV) -->
+                    <div v-if="extKind !== 'manga'" class="mt-6">
+                        <p class="label mb-2.5">Player links <span class="text-mute">· {{ extPlayers.length }}</span></p>
+                        <div v-if="extPlayers.length" class="space-y-2">
+                            <div v-for="p in extPlayers" :key="p.id" class="ext-card !py-2.5">
+                                <span class="w-9 h-9 rounded-lg bg-raised text-sub flex items-center justify-center shrink-0"><i class="fa-solid fa-link"></i></span>
+                                <div class="min-w-0 flex-grow">
+                                    <p class="text-ink font-semibold text-sm truncate">{{ p.name }}</p>
+                                    <p class="text-[11px] text-mute truncate font-mono">{{ p.url }}</p>
+                                </div>
+                                <button @click="removePlayerLink(p.id)" class="btn-ghost !py-2 !px-3 !text-xs shrink-0">Remove</button>
+                            </div>
+                        </div>
+                        <details class="ext-add mt-2" :open="!extPlayers.length">
+                            <summary><i class="fa-solid fa-plus mr-2"></i>Add a player link</summary>
+                            <form @submit.prevent="addPlayerLink" class="space-y-2.5 mt-3">
+                                <input v-model="plForm.name" maxlength="40" placeholder="Name (optional)" class="field !py-2.5 !text-sm">
+                                <input v-model="plForm.url" :placeholder="extKind === 'tv' ? 'Shows, e.g. https://player.example/tv/{tmdb}/{season}/{episode}' : 'e.g. https://player.example/anime/{anilist}/{episode}'" class="field !py-2.5 !text-sm font-mono">
+                                <input v-if="extKind === 'tv'" v-model="plForm.movieUrl" placeholder="Movies (optional), e.g. https://player.example/movie/{tmdb}" class="field !py-2.5 !text-sm font-mono">
+                                <p class="text-[11px] text-mute leading-relaxed">The address of a player page, with blanks anicoop fills in for the episode you pick:
+                                    <span class="font-mono text-sub">{tmdb} {imdb}</span>{{ extKind === 'anime' ? ' ' : '' }}<span v-if="extKind === 'anime'" class="font-mono text-sub">{anilist} {mal}</span> <span class="font-mono text-sub">{season} {episode} {title}</span>.
+                                    It plays inside the pop-up-blocking frame. Only add players you’re allowed to use.</p>
+                                <p v-if="plForm.msg" class="text-xs text-sub">{{ plForm.msg }}</p>
+                                <button type="submit" :disabled="!plForm.url.trim()" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid fa-plus"></i> Add</button>
+                            </form>
+                        </details>
                     </div>
 
                     <!-- website sources (settings-only extensions) -->
@@ -4355,7 +4417,7 @@
 
     <!-- ============ TOAST ============ -->
     <transition name="toast">
-        <div v-if="toast.message" :class="toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-ink text-inv'" class="fixed z-[95] bottom-24 md:bottom-8 left-0 right-0 mx-auto md:left-auto md:right-8 md:mx-0 w-max max-w-[calc(100vw-2rem)] px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3">
+        <div v-if="toast.message" :class="toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-ink text-inv'" class="lift-pbar fixed z-[125] bottom-24 md:bottom-8 left-0 right-0 mx-auto md:left-auto md:right-8 md:mx-0 w-max max-w-[calc(100vw-2rem)] px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3">
             <i :class="toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-check'" class="fa-solid"></i>
             <span class="font-semibold text-sm">{{ toast.message }}</span>
         </div>
@@ -4363,7 +4425,7 @@
 
     <!-- ============ INSTALL PROMPT ============ -->
     <transition name="toast">
-        <div v-if="installPrompt && currentUser && !selectMode" class="fixed z-[75] bottom-24 md:bottom-8 left-4 md:left-8 max-w-sm panel !rounded-2xl p-4 flex items-center gap-3 shadow-2xl">
+        <div v-if="installPrompt && currentUser && !selectMode" class="lift-pbar fixed z-[75] bottom-24 md:bottom-8 left-4 md:left-8 max-w-sm panel !rounded-2xl p-4 flex items-center gap-3 shadow-2xl">
             <span class="w-10 h-10 rounded-xl bg-volt flex items-center justify-center font-pixel font-semibold text-xl text-onvolt shrink-0">A</span>
             <div class="min-w-0">
                 <p class="text-ink text-sm font-semibold">Install anicoop</p>
