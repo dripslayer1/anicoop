@@ -253,3 +253,31 @@ achievements and the admin rules), then re-upload the folder. No Edge Function c
 * **Artist pages** show in under a second: the first 50 songs, then the full list, photo and bio fill in.
 * **Removed** the watch / read links (streaming sites, reading sites, "Where to watch"). Episode and chapter lists stay.
 * **Fix:** squad chips no longer hang off the bottom of a friend's profile card in the List view.
+
+## v8.6 — Read / Watch window, anime & movie extensions, history, songs upgrades
+
+**Update:** just re-upload the folder (no database change, no Edge Function change).
+
+* **Read / Watch:** every manga, anime, movie and show has a big **Read** / **Watch** button (on the banner and in the
+  button row). It opens one window with your sources and every chapter / episode, Netflix-style (number, picture, name,
+  length, summary; TV shows have a season picker from TMDB). The old Extensions buttons are gone from the pages;
+  Extensions now live inside this window.
+* **Extensions for Anime and Movies & TV:** install Aniyomi repositories (e.g. `https://github.com/yuzono/anime-repo`)
+  the same way as Mihon ones for manga. anicoop reads sites built on the **AnimeStream** and **DooPlay** WordPress themes
+  and, otherwise, looks for the players on a site's episode pages. Episodes play in anicoop's own player: plain video
+  files and HLS streams directly, site players inside a locked frame that can't open pop-ups or redirect you
+  (a "pop-up blocker" switch is there in case a player refuses to load). Built in: **Internet Archive** (public-domain
+  films & shows) for Movies & TV, and **Local video files** for Anime and Movies & TV.
+* **Find sources with this title:** opened from a title, the check searches every source for *that* title — its own
+  name, then its "Also known as" names, then the site's own "Alternative names" — and only marks sources that really
+  have it and open here. It works again on the next title (it used to only work once).
+* **18+ extensions** only show (and install) while the 18+ filter is on.
+* **History** (button on every section's Browse page): chapters read, episodes watched, songs played and trailers
+  watched, grouped by day. Remove one entry or clear a section. Kept on this device.
+* **Songs:** Browse opens like the other sections (rows: Most streamed ever, USA, UK, Korea; covers view by default),
+  "Show 100 more songs" on the chart and "Show 100 more" on Most streamed (beyond Wikipedia's 100, from kworb.net),
+  a play button on each Most streamed row when you hover it, and the Artist / Album rows in a song's Info open the
+  artist page / album.
+* **Fixes:** the Home picks no longer flicker when you hover their edge; a friend's rankings are as wide as yours;
+  the header fits on tablets and small or zoomed laptops (settings + feedback move into the section menu there), and
+  the Feed's buttons wrap on phones. Nothing changes at 1100 px and wider.
