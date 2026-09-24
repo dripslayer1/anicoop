@@ -357,3 +357,15 @@ to search YouTube reliably. No database change.
   the preview starts within a few seconds, and for the next 10 minutes songs go straight to the preview.
 * **The player tells you why:** "Finding it on YouTube Music…" while it looks; if the preview plays instead, the
   amber "0:30" badge explains why (hover it) and clicking it tries the full song again.
+
+## v9.1 — add to playlist from anywhere, song fixes
+
+**Update:** re-upload the folder (no database or Edge Function change).
+
+* **Add to playlist from anywhere:** one small picker lists your playlists (a tick on the ones that already have the
+  song) plus "New playlist". Open it from a song card's + menu ("Add to playlist…"), the ⊕ button on any song row
+  (albums, artists, charts, playlists), the ⊕ in the player bar, or "Playlist" on a song's page.
+* **Card menu no longer covers the card:** it opens beside the card (right, or left near the edge) after a short
+  hover, so the card's play button stays clickable.
+* **Songs:** the "+1 Play" row is gone from the card menu.
+* **Random pick:** only uses titles (and genres) from the section you're in; on Browse it used to mix every section.
