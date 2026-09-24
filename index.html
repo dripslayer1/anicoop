@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=8.8">
+    <link rel="stylesheet" href="app.css?v=8.9">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=8.8" defer></script>
+    <script src="app.js?v=8.9" defer></script>
 </head>
 <body>
 
@@ -123,7 +123,6 @@
                 <div class="flex items-center gap-2">
                     <button @click.stop="openSettings()" class="icon-btn !w-9 !h-9" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                     <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
-                    <span class="hdr-gap" aria-hidden="true"></span>
                     <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                         <i class="fa-solid fa-bell text-sm"></i>
                         <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
@@ -210,7 +209,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v8.8</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v8.9</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -256,10 +255,8 @@
                         </button>
                     </nav>
                     <div class="hdr-side flex items-center justify-end gap-2">
-                        <span class="hdr-gap hdr-extra" aria-hidden="true"></span>
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
-                        <span class="hdr-gap hdr-extra" aria-hidden="true"></span>
                         <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                             <i class="fa-solid fa-bell text-sm"></i>
                             <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
@@ -654,6 +651,7 @@
                                         <p class="label mb-3"><i class="fa-brands fa-steam text-[#66c0f4] mr-1.5"></i>Steam</p>
                                         <template v-if="gameExtra.steam">
                                             <div class="ttb-row"><span>Price</span><b><template v-if="gameExtra.steam.free">Free to play</template><template v-else-if="gameExtra.steam.price">{{ gameExtra.steam.price.text }}<span v-if="gameExtra.steam.price.discount" class="ml-1.5 px-1.5 rounded bg-[#4c6b22] text-[#beee11] text-[10px]">-{{ gameExtra.steam.price.discount }}%</span></template><template v-else>{{ gameExtra.steam.comingSoon ? 'Coming soon' : '–' }}</template></b></div>
+                                            <button v-if="gameExtra.steam.appid && gameExtra.steam.price" @click="openRegionPrices" class="region-btn"><i class="fa-solid fa-earth-americas"></i> Prices in other regions</button>
                                             <div v-if="gameExtra.steam.reviews" class="ttb-row"><span>Reviews</span><b :title="gameExtra.steam.reviews.total.toLocaleString() + ' reviews'">{{ gameExtra.steam.reviews.desc }} · {{ Math.round(gameExtra.steam.reviews.positive / gameExtra.steam.reviews.total * 100) }}%</b></div>
                                             <div v-if="gameExtra.steam.metacritic" class="ttb-row"><span>Metacritic</span><a :href="gameExtra.steam.metacritic.url" target="_blank" rel="noopener" class="meta-score" :class="gameExtra.steam.metacritic.score >= 75 ? 'good' : gameExtra.steam.metacritic.score >= 50 ? 'mid' : 'bad'">{{ gameExtra.steam.metacritic.score }}</a></div>
                                             <div v-if="gameExtra.steam.players != null" class="ttb-row"><span>Playing right now</span><b class="text-[#22c55e]"><span class="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e] mr-1.5 align-middle"></span>{{ gameExtra.steam.players.toLocaleString() }}</b></div>
@@ -2678,7 +2676,7 @@
         <transition name="to-top"><button v-if="showToTop && currentUser && currentAppView !== 'home'" @click="scrollToTop" class="to-top" title="Back to top" aria-label="Back to top"><i class="fa-solid fa-arrow-up"></i></button></transition>
         <!-- song preview mini player (the same audio as every play button; the volume is remembered) -->
         <!-- the song player: full songs (sound from YouTube), queue, shuffle, repeat. It sits above every window, and the page and windows end above it -->
-        <transition name="pbar"><div v-if="player.song && currentUser" class="pbar" :class="{ 'above-nav': currentAppView === 'tracker' }" role="region" aria-label="Song player">
+        <transition name="pbar"><div v-if="player.song && currentUser && !player.hidden" class="pbar" :class="{ 'above-nav': currentAppView === 'tracker' }" role="region" aria-label="Song player">
             <div class="pbar-song">
                 <button class="pbar-cover" @click="fetchAnimeDetails(player.song)" :title="'Open ' + player.song.title?.romaji">
                     <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt=""><i v-else class="fa-solid fa-music"></i>
@@ -2723,9 +2721,14 @@
                     <button @click="toggleMute" class="vol-btn" title="Mute"><i class="fa-solid" :class="player.muted || !player.vol ? 'fa-volume-xmark' : player.vol < 0.5 ? 'fa-volume-low' : 'fa-volume-high'"></i></button>
                     <input type="range" min="0" max="1" step="0.01" :value="player.muted ? 0 : player.vol" @input="setVolume($event.target.value)" class="vol-range" :style="{ '--v': (player.muted ? 0 : player.vol) * 100 + '%' }" aria-label="Volume">
                 </div>
-                <button @click="closePlayer" class="pbar-btn" title="Close the player"><i class="fa-solid fa-xmark"></i></button>
+                <button @click="hidePlayer" class="pbar-btn" title="Hide the player (the music keeps playing)"><i class="fa-solid fa-chevron-down"></i></button>
             </div>
         </div></transition>
+        <!-- the player, hidden: a small button in the bottom-left corner brings it back -->
+        <transition name="to-top"><button v-if="player.song && currentUser && player.hidden" @click="showPlayer" class="pbar-peek" :class="{ 'above-nav': currentAppView === 'tracker', on: player.playing }" :title="'Show the player · ' + player.song.title?.romaji" aria-label="Show the song player">
+            <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt=""><i v-else class="fa-solid fa-music"></i>
+            <span class="pbar-peek-eq" aria-hidden="true"><span></span><span></span><span></span></span>
+        </button></transition>
     <transition name="pop">
         <div v-if="friendsOpen && currentUser" class="notif-panel" @click.stop>
             <div class="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
@@ -2932,6 +2935,39 @@
                         <button @click="closeEditor" class="btn-ghost">Cancel</button>
                         <button @click="saveEditor" :disabled="isSaving" class="btn-primary"><i v-if="isSaving" class="fa-solid fa-circle-notch fa-spin"></i> Save</button>
                     </div>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
+    <!-- ============ STEAM PRICES BY REGION ============ -->
+    <transition name="fade">
+        <div v-if="regionPrices.open" class="modal-back !z-[84]" @click.self="regionPrices.open = false">
+            <transition name="pop" appear>
+                <div class="modal-card max-w-md p-5 sm:p-6 flex flex-col max-h-[88dvh]">
+                    <div class="flex items-start justify-between gap-3 mb-4">
+                        <div class="min-w-0">
+                            <p class="kicker"><i class="fa-brands fa-steam mr-1"></i>// steam prices</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-xl truncate">{{ regionPrices.name }}</h3>
+                            <p class="text-xs text-sub mt-1">The store price in each region, cheapest first{{ regionPrices.fx ? ', with roughly what it costs in US dollars' : '' }}.</p>
+                        </div>
+                        <button @click="regionPrices.open = false" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div v-if="regionPrices.loading" class="space-y-2"><div v-for="n in 8" :key="n" class="h-10 rounded-xl skeleton"></div></div>
+                    <p v-else-if="regionPrices.error" class="text-sm text-sub">{{ regionPrices.error }}</p>
+                    <div v-else class="region-list">
+                        <div v-for="r in regionPrices.rows" :key="r.cc" class="region-row" :class="{ best: r.best, mine: r.mine, na: r.na }">
+                            <span class="region-flag" aria-hidden="true">{{ r.flag }}</span>
+                            <span class="min-w-0 flex-grow truncate text-sm text-ink">{{ r.name }}<span v-if="r.mine" class="region-tag">you</span><span v-if="r.best" class="region-tag best">cheapest</span></span>
+                            <template v-if="r.na"><span class="text-xs text-mute">{{ r.failed ? 'Couldn’t check' : 'Not sold here' }}</span></template>
+                            <template v-else>
+                                <span v-if="r.discount" class="region-off">-{{ r.discount }}%</span>
+                                <span class="region-local">{{ r.text }}</span>
+                                <span v-if="regionPrices.fx && r.currency !== 'USD' && r.usd != null" class="region-usd">≈ {{ fmtUsd(r.usd) }}</span>
+                            </template>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-mute mt-3 leading-relaxed">Steam only lets you buy in the region your account and payment method are from. Dollar values are estimates.</p>
                 </div>
             </transition>
         </div>
