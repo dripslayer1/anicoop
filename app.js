@@ -82,7 +82,8 @@ const defaultPrefs = () => ({
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
     hiddenGenres: { ANIME: [], MANGA: [], GAME: [], TV: [], SONG: [] },   // genres you never want to see (Browse, Top 100, trending, random)
     extensions: [],                                         // manga reading extensions you installed (Mihon-style)
-    sources: [],                                            // website sources you added (Mihon-style extensions: settings only, no code)
+    sources: [],                                            // website sources you added (Mihon-style extensions: settings only, no code) · kind: manga | anime | tv
+    repos: {},                                              // the extension repository you last opened, per section
     reader: { autoMark: true, saver: false, modes: {} },   // reader: mark chapters read at the end, data saver, reading mode per title
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
@@ -524,7 +525,25 @@ const SOURCE_TEMPLATES = {
     },
     generic: { label: 'Generic (smart guess)', search: { url: '{base}/?s={q}' }, chapters: {}, pages: {} },   // everything by the smart fallback
     custom: { label: 'Custom (my own selectors)', search: {}, chapters: {}, pages: {} },
+    // ---- video sites (anime, movies & TV). Their "chapters" are episodes and "pages" are the video servers. ----
+    animestream: {
+        label: 'AnimeStream (WordPress anime sites)', video: true,
+        search: { url: '{base}/?s={q}', item: 'div.listupd article, .listupd .bs', title: ['div.tt', 'div.ttl', '.tt', 'a@title'], link: 'a@href', cover: 'img@data-src|data-lazy-src|srcset|src' },
+        chapters: { item: 'div.eplister li, .eplister li', name: ['.epl-title', '.epl-num', 'a'], num: '.epl-num', link: 'a@href', date: '.epl-date' },
+        pages: { servers: 'select.mirror option, ul.mirror a' },
+    },
+    dooplay: {
+        label: 'DooPlay (WordPress movie & TV sites)', video: true,
+        search: { url: '{base}/?s={q}', item: 'div.result-item, .search-page .result-item', title: ['.title a', 'img@alt'], link: ['.title a@href', 'div.image a@href', 'a@href'], cover: 'img@data-src|data-lazy-src|srcset|src' },
+        chapters: { item: 'ul.episodios li', name: ['.episodiotitle a', '.episodiotitle', 'a'], num: '.numerando', link: ['.episodiotitle a@href', 'a@href'], date: '.date' },
+        pages: { dooplay: true },
+    },
+    genericvideo: { label: 'Generic video site (smart guess)', video: true, search: { url: '{base}/?s={q}' }, chapters: {}, pages: {} },
 };
+// which templates fit a section: manga sites for Manga, video sites for Anime and Movies & TV
+const templatesFor = (kind) => Object.fromEntries(Object.entries(SOURCE_TEMPLATES).filter(([k, t]) => k === 'custom' || !!t.video === (kind !== 'manga')));
+const MEDIA_KIND = { MANGA: 'manga', ANIME: 'anime', TV: 'tv' };
+const KIND_LABEL = { manga: 'Manga & manhwa', anime: 'Anime', tv: 'Movies & TV' };
 const srcDef = (s) => {
     const t = SOURCE_TEMPLATES[s?.template] || SOURCE_TEMPLATES.custom; const c = s?.selectors || {};
     return { search: { ...t.search, ...(c.search || {}) }, chapters: { ...t.chapters, ...(c.chapters || {}) }, pages: { ...t.pages, ...(c.pages || {}) } };
@@ -556,14 +575,16 @@ const pick = (root, spec, base) => {
 // the biggest group of images on the page. This also powers the "Generic" template.
 const MANGA_LINK = /\/(manga|manhwa|manhua|series|serie|comic|comics|webtoon|webtoons|title|titles|book|obra|project)s?\/(?:\d+\/)?[^/?#]+\/?$/i;   // also /manga/123/slug
 const CHAPTER_LINK = /(chapter|chapitre|capitulo|cap[-_]|chap[-_]|\bch[-_.]?\d|episode|\bep[-_.]?\d)/i;
+// anime / movie / show pages on video sites (episode pages are told apart by CHAPTER_LINK)
+const VIDEO_LINK = /\/(anime|animes|watch|series|serie|movie|movies|film|films|tv|tvshows?|shows?|drama|dramas|donghua|ova|title)\/(?:\d+\/)?[^/?#]+\/?$/i;
 const JUNK_IMG = /logo|avatar|icon|banner|ads?[-_/]|sprite|loading|spinner|emoji|gravatar|placeholder|flags?\/|\.svg(\?|$)/i;
 const imgSrc = (img, base) => pick(img, '@data-src|data-lazy-src|data-original|data-cfsrc|data-url|srcset|src', base);
 const guess = {
-    search(doc, base) {
-        const origin = new URL(base).origin; const out = new Map();
+    search(doc, base, video = false) {
+        const origin = new URL(base).origin; const out = new Map(); const LINK = video ? VIDEO_LINK : MANGA_LINK;
         doc.querySelectorAll('a[href]').forEach(a => {
             const href = absUrl(a.getAttribute('href'), base); if (!href || !href.startsWith(origin) || a.closest('nav, header, footer, [class*="menu"], [class*="navbar"]')) return;   // skip site menus
-            const path = new URL(href).pathname; if (!MANGA_LINK.test(path) || CHAPTER_LINK.test(path)) return;
+            const path = new URL(href).pathname; if (!LINK.test(path) || (CHAPTER_LINK.test(path) && !(video && /\/(movie|movies|film|films)\//i.test(path)))) return;
             const box = a.closest('article, li, .item, .card, [class*="item"], [class*="card"], div') || a;
             const img = a.querySelector('img') || box.querySelector('img');
             // prefer a real title: the link's title, a heading in the card, the cover's alt text — the link's full text is last (it often includes the latest chapter)
@@ -576,7 +597,7 @@ const guess = {
             if (!cur.cover && img) cur.cover = imgSrc(img, base);
             out.set(href, cur);
         });
-        return [...out.values()].filter(x => x.title && !/^(read|more|next|prev|home|manga|series|comics?)$/i.test(x.title));
+        return [...out.values()].filter(x => x.title && !/^(read|more|next|prev|home|manga|series|comics?|watch|movies?|tv ?shows?|anime)$/i.test(x.title));
     },
     chapters(doc, mangaUrl, s) {
         const origin = new URL(mangaUrl).origin; const out = new Map();
@@ -604,6 +625,20 @@ const guess = {
         if (!best || bestN < 2) return [];
         return [...best.querySelectorAll('img')].map(img => imgSrc(img, chapterUrl)).filter(u => u && !JUNK_IMG.test(u));
     },
+    // video sites: the players on an episode page — iframes, server buttons that carry the player address, <video> tags,
+    // and .m3u8 / .mp4 addresses written into the page's scripts
+    videos(doc, html, pageUrl) {
+        const out = [];
+        doc.querySelectorAll('iframe').forEach(f => { const u = f.getAttribute('src') || f.getAttribute('data-src') || f.getAttribute('data-lazy-src'); if (u) out.push({ name: '', url: u }); });
+        doc.querySelectorAll('[data-embed], [data-video], [data-em], [data-link], [data-player]').forEach(el => {
+            const u = embedFrom(el.getAttribute('data-embed') || el.getAttribute('data-video') || el.getAttribute('data-em') || el.getAttribute('data-link') || el.getAttribute('data-player'), pageUrl);
+            if (u) out.push({ name: textOf(el).slice(0, 40), url: u });
+        });
+        doc.querySelectorAll('video[src], video source[src]').forEach(v => out.push({ name: 'Video', url: v.getAttribute('src') }));
+        const text = String(html || '').replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
+        for (const m of text.matchAll(/https?:\/\/[^"'\s<>\\]+?\.(?:m3u8|mp4)(?:\?[^"'\s<>\\]*)?/gi)) if (!/trailer|preview|thumb|sprite/i.test(m[0])) out.push({ name: /m3u8/i.test(m[0]) ? 'Stream' : 'Video', url: m[0] });
+        return out;
+    },
     // sites that draw pages with JavaScript still ship the image addresses inside the page's data:
     // take every image URL in the raw HTML and keep the biggest group from the same folder
     pagesFromData(html) {
@@ -628,13 +663,76 @@ const cleanChapterName = (t) => String(t || '').replace(/\s+/g, ' ')
     .replace(/\s*(new|hot|free|up)\s*$/i, '').replace(/^[○●•·\-\s]+/, '').replace(/\s+/g, ' ').trim();
 const chapNo = (name) => { const m = /(?:ch(?:apter)?|ep(?:isode)?|#)\.?\s*(\d+(?:\.\d+)?)/i.exec(name || '') || /(\d+(?:\.\d+)?)/.exec(name || ''); return m ? m[1] : null; };
 const normTitle = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+const isVideoSrc = (s) => s?.id === 'archive' || !!SOURCE_TEMPLATES[s?.template]?.video || s?.kind === 'anime' || s?.kind === 'tv';
+const hostName = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return 'Server'; } };
+// season + episode number from what a site shows: "S2 E5", "2x5", DooPlay's "2 - 5", "/season-2-episode-5/", "Episode 5", "05"
+const epMeta = (c) => {
+    let path = ''; try { path = decodeURIComponent(new URL(c.link).pathname); } catch {}
+    const texts = [c.num, c.title, path].filter(Boolean).map(String);
+    let season = null, ep = null;
+    for (const t of texts) {
+        const m = /\bs(?:eason)?[-_ .]?(\d{1,2})[-_ .]*e(?:p(?:isode)?)?[-_ .]?(\d{1,4})\b/i.exec(t) || /\b(\d{1,2})\s*[x×]\s*(\d{1,4})\b/.exec(t) || /^\s*(\d{1,2})\s*-\s*(\d{1,4})\s*$/.exec(t);
+        if (m) { season = +m[1]; ep = +m[2]; break; }
+    }
+    if (ep == null) for (const t of texts) { const m = /(?:episode|\bep)[-_ .]?(\d{1,4}(?:\.\d)?)/i.exec(t) || /^\s*(\d{1,4}(?:\.\d)?)\s*$/.exec(t); if (m) { ep = parseFloat(m[1]); break; } }
+    if (ep == null) { const n = chapNo(c.num || c.title); if (n) ep = parseFloat(n); }
+    const bare = !c.title || /^\s*(?:episode|ep\.?)?\s*[\d.]+\s*$/i.test(c.title);
+    return { ...c, season, ep, ch: ep != null ? String(ep) : c.ch, title: bare && ep != null ? `Episode ${ep}` : c.title };
+};
+// a server button's value can be a link, a bit of HTML, or HTML in base64: find the player address inside
+const embedFrom = (raw, base) => {
+    raw = String(raw || '').trim(); if (!raw) return null;
+    if (/^(https?:)?\/\//i.test(raw)) return absUrl(raw, base);
+    let html = raw;
+    if (!/[<>]/.test(raw)) { try { html = atob(raw.replace(/\s/g, '')); } catch { return null; } }
+    const d = new DOMParser().parseFromString(html, 'text/html');
+    const el = d.querySelector('iframe'); const src = el?.getAttribute('src') || el?.getAttribute('data-src') || d.querySelector('[itemprop=embedUrl]')?.getAttribute('content') || d.querySelector('video source, video')?.getAttribute('src');
+    if (src) return absUrl(src, base);
+    const m = /https?:\/\/[^"'\s<>]+/.exec(html); return m ? m[0] : null;
+};
+const NOT_PLAYER = /facebook\.com|disqus|googletagmanager|doubleclick|googlesyndication|recaptcha|twitter\.com|x\.com\/|instagram|discord|youtube\.com|youtu\.be|about:blank|\/ads?\//i;
+const videoOf = (u, base) => {
+    const url = u && absUrl(u, base); if (!url || !/^https?:/i.test(url) || NOT_PLAYER.test(url)) return null;
+    return { url, kind: /\.m3u8(\?|$)/i.test(url) ? 'hls' : /\.(mp4|webm|ogv|m4v)(\?|$)/i.test(url) ? 'file' : 'embed' };
+};
+// Internet Archive: public-domain and freely licensed films & TV, played straight from archive.org
+const IA = 'https://archive.org';
+const textAny = async (url) => {
+    try { const r = await fetch(url); if (r.ok) return await r.text(); } catch {}
+    return (await siteFetch(url)).body;
+};
+const archiveApi = {
+    async search(q) {
+        const query = `title:(${q.replace(/[():"]/g, ' ')}) AND mediatype:(movies) AND -collection:(trailers)`;
+        const j = JSON.parse(await textAny(`${IA}/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier&fl[]=title&fl[]=year&sort[]=downloads+desc&rows=24&output=json`));
+        return (j?.response?.docs || []).map(d => ({ title: String(d.title || d.identifier), year: d.year || null, url: `${IA}/details/${d.identifier}`, cover: `${IA}/services/img/${d.identifier}` }));
+    },
+    async episodes(url) {
+        const id = (/\/details\/([^/?#]+)/.exec(url) || [])[1]; if (!id) return [];
+        const j = JSON.parse(await textAny(`${IA}/metadata/${id}`));
+        // one file per video: the h.264 / MPEG4 copy, not the small 512kb version or the .ogv
+        const best = new Map();
+        (j?.files || []).filter(f => /\.(mp4|m4v|webm|ogv)$/i.test(f.name || '')).forEach(f => {
+            const key = f.name.replace(/(_512kb)?\.(ia\.)?(mp4|m4v|webm|ogv)$/i, '');
+            const rank = /512kb/i.test(f.name) ? 1 : /\.ogv$/i.test(f.name) ? 0 : /\.webm$/i.test(f.name) ? 2 : 3;
+            if (!best.has(key) || best.get(key).rank < rank) best.set(key, { f, rank });
+        });
+        const files = [...best.values()].map(x => x.f).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        // file names are often years or reel numbers, so episodes are simply counted in order
+        return files.map((f, n) => ({ id: `${id}/${f.name}`, link: `${IA}/download/${id}/${encodeURIComponent(f.name).replace(/%2F/g, '/')}`, ch: String(n + 1), ep: n + 1, season: null,
+            title: files.length === 1 ? 'Movie' : (f.title || f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ')), movie: files.length === 1, src: 'archive', group: 'Internet Archive', url: null }));
+    },
+    async videos(link) { return [{ name: 'Internet Archive', ...videoOf(link, IA) }]; },
+};
 const sourceApi = {
     async search(s, q) {
         const def = srcDef(s).search; const base = s.baseUrl.replace(/\/+$/, '');
         // Generic sites: find which search address the site uses (?s=, /search?q=, …) and remember it on the source
-        if (s.template === 'generic' && !s.selectors?.search?.url) {
+        if (s.id === 'archive') return archiveApi.search(q);
+        const video = isVideoSrc(s);
+        if ((s.template === 'generic' || s.template === 'genericvideo') && !s.selectors?.search?.url) {
             const run = async (p) => {
-                try { return guess.search(htmlDoc((await siteFetch(p.replace('{base}', base).replace('{q}', encodeURIComponent(q)))).body, base + '/'), base + '/').filter((x, n, all) => all.findIndex(y => y.url === x.url) === n); }
+                try { return guess.search(htmlDoc((await siteFetch(p.replace('{base}', base).replace('{q}', encodeURIComponent(q)))).body, base + '/'), base + '/', video).filter((x, n, all) => all.findIndex(y => y.url === x.url) === n); }
                 catch { return null; }
             };
             const want = normTitle(q).split(' ').filter(w => w.length > 2);
@@ -658,14 +756,15 @@ const sourceApi = {
         const doc = htmlDoc((await siteFetch(url)).body, base + '/');
         let list = def.item ? [...doc.querySelectorAll(def.item)].map(el => ({ title: pick(el, def.title, base), url: pick(el, def.link, base), cover: pick(el, def.cover, base) })) : [];
         list = list.filter(x => x.title && x.url);
-        if (!list.length) list = guess.search(doc, base + '/');   // layout differs from the template → smart fallback
+        if (!list.length) list = guess.search(doc, base + '/', video);   // layout differs from the template → smart fallback
         return list.filter((x, n, all) => all.findIndex(y => y.url === x.url) === n).slice(0, 20);   // nested cards can match twice
     },
     async chapters(s, mangaUrl) {
+        if (s.id === 'archive') return archiveApi.episodes(mangaUrl);
         const def = srcDef(s).chapters; const base = s.baseUrl.replace(/\/+$/, '');
         const read = (doc) => def.item ? [...doc.querySelectorAll(def.item)].map(el => {
             const name = cleanChapterName(pick(el, def.name, base)); const link = pick(el, def.link, base);
-            return link ? { id: link, link, ch: chapNo(name), title: name, at: def.date ? pick(el, def.date, base) : null, src: s.id, group: s.name, url: null } : null;
+            return link ? { id: link, link, ch: chapNo(name), title: name, num: def.num ? pick(el, def.num, base) : null, at: def.date ? pick(el, def.date, base) : null, src: s.id, group: s.name, url: null } : null;
         }).filter(Boolean) : [];
         const page = htmlDoc((await siteFetch(mangaUrl)).body, mangaUrl);
         let list = read(page);
@@ -675,7 +774,36 @@ const sourceApi = {
         }
         if (!list.length) list = guess.chapters(page, mangaUrl, s);
         const seen = new Set();
-        return list.filter(c => !seen.has(c.link) && seen.add(c.link));
+        list = list.filter(c => !seen.has(c.link) && seen.add(c.link));
+        if (!isVideoSrc(s)) return list;
+        // video sites: episodes in order (season, then episode). A page with no episode list is a movie: the page itself plays.
+        list = list.map(epMeta).sort((a, b) => (a.season || 0) - (b.season || 0) || (a.ep ?? 1e6) - (b.ep ?? 1e6));
+        return list.length ? list : [{ id: mangaUrl, link: mangaUrl, ch: '1', ep: 1, season: null, title: 'Movie', movie: true, src: s.id, group: s.name, url: null }];
+    },
+    // video servers for one episode: [{ name, url, kind: 'embed' | 'hls' | 'file' }]
+    async videos(s, epUrl) {
+        if (s.id === 'archive') return archiveApi.videos(epUrl);
+        const def = srcDef(s).pages; const base = s.baseUrl.replace(/\/+$/, '');
+        const html = (await siteFetch(epUrl, { referer: s.baseUrl })).body;
+        const doc = htmlDoc(html, epUrl);
+        const out = [];
+        const add = (name, u) => { const v = videoOf(u, epUrl); if (v && !out.some(o => o.url === v.url)) out.push({ ...v, name: (name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || hostName(v.url) }); };
+        if (def.servers) doc.querySelectorAll(def.servers).forEach(el => add(textOf(el), embedFrom(el.getAttribute('value') || el.getAttribute('data-em') || el.getAttribute('data-src') || '', epUrl)));
+        if (def.dooplay) {
+            // DooPlay asks the site for each server's player: the newer JSON address first, the older admin-ajax call if that fails
+            const opts = [...doc.querySelectorAll('li.dooplay_player_option[data-post], #playeroptionsul li[data-post]')].filter(li => li.getAttribute('data-nume') !== 'trailer').slice(0, 8);
+            const found = await Promise.all(opts.map(async (li) => {
+                const [post, type, nume] = ['data-post', 'data-type', 'data-nume'].map(a => encodeURIComponent(li.getAttribute(a) || ''));
+                const embed = (d) => { try { return embedFrom(JSON.parse(d.body).embed_url, epUrl); } catch { return null; } };
+                let u = null;
+                try { u = embed(await siteFetch(`${base}/wp-json/dooplayer/v2/${post}/${type}/${nume}`, { referer: epUrl })); } catch {}
+                if (!u) { try { u = embed(await siteFetch(`${base}/wp-admin/admin-ajax.php`, { method: 'POST', referer: epUrl, form: `action=doo_player_ajax&post=${post}&nume=${nume}&type=${type}` })); } catch {} }
+                return u ? [textOf(li.querySelector('.title') || li), u] : null;
+            }));
+            found.filter(Boolean).forEach(([n, u]) => add(n, u));
+        }
+        if (!out.length) guess.videos(doc, html, epUrl).forEach(v => add(v.name, v.url));
+        return out;
     },
     async pages(s, chapterUrl) {
         const def = srcDef(s).pages;
@@ -691,6 +819,55 @@ const sourceApi = {
         if (urls.length <= 1) { const g = guess.pagesFromData(html); if (g.length > urls.length) urls = g; }
         return [...new Set(urls)];
     },
+};
+// ---- finding one title on a source: its own names first, then its "Also known as" names ----
+// names written into a description: "Also known as: X, Y", "a.k.a. X", "Alternative titles: X / Y"
+const akaFromDesc = (html) => {
+    const t = String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ');
+    const m = /(?:also known as|a\.k\.a\.?|aka|alternative (?:titles?|names?)|other names?)\s*[:\-–]?\s*([^\n.]{2,200})/i.exec(t);
+    return m ? m[1].split(/[,;/|]|\bor\b/).map(x => x.replace(/["“”‘’()]/g, '').trim()).filter(x => x.length > 1 && x.length < 120) : [];
+};
+const namesOf = (a) => [...new Set([a?.title?.english, a?.title?.romaji, a?.title?.native, ...(a?.synonyms || []), ...akaFromDesc(a?.description)].filter(Boolean).map(String))];
+// same title, ignoring punctuation, "The", "Season 2" / "(TV)" style tails and the word "manga"/"anime"
+const SAME_STRIP = /\b(the|a|tv|official|manga|manhwa|manhua|webtoon|comic|comics|anime|series|movie|film|uncensored|dub|dubbed|sub|subbed|english)\b/g;
+const sameTitle = (a, b) => {
+    const x = normTitle(a), y = normTitle(b); if (!x || !y) return false;
+    if (x === y) return true;
+    const strip = (t) => t.replace(SAME_STRIP, ' ').replace(/\s+/g, ' ').trim();
+    const sx = strip(x), sy = strip(y);
+    return sx.length > 2 && sx === sy;
+};
+// alternative names a site prints on the title's own page ("Alternative", "Also known as", "Other names", …)
+const ALT_LABEL = /^(alternative(?: titles?| names?)?|alt(?:ernative)?\.? ?names?|also known as|other names?|synonyms?|associated names?|aka)\s*:?$/i;
+const altNamesOn = async (s, url) => {
+    const doc = htmlDoc((await siteFetch(url)).body, url); const out = [];
+    const split = (t) => String(t || '').split(/[,;/|\n]|\s•\s/).map(x => x.trim()).filter(x => x.length > 1 && x.length < 120);
+    doc.querySelectorAll('.alter, .alternative, .alternate, [class*="alt-name"], [class*="alternative"]').forEach(el => out.push(...split(textOf(el).replace(/^[^:]{0,30}:\s*/, ''))));
+    doc.querySelectorAll('h5, h4, b, strong, span, dt, th, td, div, label').forEach(el => {
+        if (el.children.length > 1 || !ALT_LABEL.test(textOf(el).trim())) return;
+        const next = el.nextElementSibling || el.parentElement?.nextElementSibling;
+        if (next) out.push(...split(textOf(next)));
+    });
+    return [...new Set(out)].slice(0, 30);
+};
+// → { match, results }: match is null when the source doesn't have the title under any of its names
+const findTitleOn = async (s, a, { deep = true } = {}) => {
+    const names = namesOf(a); const tried = new Set(); let first = null;
+    for (const n of names.slice(0, 7)) {
+        const key = normTitle(n); if (key.length < 2 || tried.has(key)) continue;
+        let results;
+        try { results = await sourceApi.search(s, n); }
+        catch (err) { if (!tried.size) throw err; continue; }   // the very first search failing = the site itself doesn't work
+        tried.add(key);
+        if (!first) first = results;
+        const hit = results.find(r => names.some(x => sameTitle(r.title, x)));
+        if (hit) return { match: hit, results };
+    }
+    // not listed under any of its names: the site may use another one, so check the top results' own "Alternative names"
+    if (deep) for (const r of (first || []).slice(0, 3)) {
+        try { const alts = await altNamesOn(s, r.url); if (alts.some(x => names.some(y => sameTitle(x, y)))) return { match: r, results: first }; } catch {}
+    }
+    return { match: null, results: first || [] };
 };
 // posters only ask once they're (nearly) on screen
 const mdSeen = new IntersectionObserver((list) => list.forEach(e => { if (e.isIntersecting) { mdSeen.unobserve(e.target); needMangaInfo(e.target._manga); } }), { rootMargin: '400px 0px' });
@@ -1118,9 +1295,19 @@ const appleChart = async (cc = 'global') => {
     const lists = await Promise.all(GLOBAL_CHART_CC.map(c => appleChartOne(c).catch(() => [])));
     const score = new Map(), item = new Map();
     lists.forEach(l => l.forEach((x, n) => { score.set(x.id, (score.get(x.id) || 0) + (100 - n)); if (!item.has(x.id)) item.set(x.id, x); }));
-    const list = [...item.values()].sort((a, b) => score.get(b.id) - score.get(a.id)).slice(0, 100);
+    const list = [...item.values()].sort((a, b) => score.get(b.id) - score.get(a.id));   // every song of the 10 charts, best first
     if (list.length) globalChartMemo = { at: Date.now(), list };
     return list;
+};
+// one page (100 songs) of a chart. Global goes as deep as the 10 charts reach; a country has its top 200 (Apple's longest list)
+const appleChartPage = async (cc = 'global', page = 1) => {
+    if (!cc || cc === 'global') { const all = await appleChart('global'); return { list: all.slice((page - 1) * 100, page * 100), more: all.length > page * 100 }; }
+    if (page === 1) return { list: await appleChartOne(cc), more: true };
+    try {
+        const d = await siteFetch(`https://rss.marketingtools.apple.com/api/v2/${cc}/music/most-played/200/songs.json`);
+        const all = JSON.parse(d.body || '{}')?.feed?.results || [];
+        return { list: all.slice((page - 1) * 100, page * 100), more: all.length > page * 100 };
+    } catch { return { list: [], more: false }; }
 };
 // the same song is often on a single and an album: keep the first (most relevant) one
 const dedupeSongs = (list) => { const seen = new Set(); return list.filter(s => { const k = `${s.title.romaji.toLowerCase()}|${(s.artists[0] || '').toLowerCase()}`; return !seen.has(k) && seen.add(k); }); };
@@ -1174,8 +1361,9 @@ const songApi = {
             items = items.filter(hasWords);
             return { items: clean(items), hasNextPage: (d.results || []).length === per && offset + per < 200 };
         }
-        // "trending": this week's most played in that country
-        return { items: clean((await appleChart(chartCc)).map(normApple)), hasNextPage: false };
+        // "trending": this week's most played in that country (100 at a time)
+        const chart = await appleChartPage(chartCc, page);
+        return { items: clean(chart.list.map(normApple)), hasNextPage: chart.more && chart.list.length > 0 };
     },
     // the artist a search means, if it clearly names one ("taylor swift" → Taylor Swift, not a song called that)
     async findArtist(q, country = 'us') {
@@ -1299,8 +1487,28 @@ const songApi = {
         s.similarLabel = 'More from this album';
         return s;
     },
-    async random(f = {}) { const r = await appleChart(f.country || 'global'); return r.length ? normApple(r[Math.floor(Math.random() * r.length)]) : null; },
-    async top(country = 'us') { return (await appleChart(country)).map(normApple); },
+    async random(f = {}) { const r = (await appleChart(f.country || 'global')).slice(0, 100); return r.length ? normApple(r[Math.floor(Math.random() * r.length)]) : null; },
+    async top(country = 'us') { return (await appleChart(country)).slice(0, 100).map(normApple); },
+    // past the 100 on Wikipedia: kworb's full list of Spotify's most streamed songs (thousands), read through our server
+    async allTimeMore() {
+        if (kworbMemo) return kworbMemo;
+        const saved = readJSON(KWORB_KEY);
+        if (saved?.list?.length && Date.now() - (saved.at || 0) < 86400000) return (kworbMemo = saved.list);
+        const d = await siteFetch('https://kworb.net/spotify/songs.html');
+        const doc = new DOMParser().parseFromString(d.body || '', 'text/html');
+        const list = [...doc.querySelectorAll('table tr')].map(tr => {
+            const td = tr.querySelectorAll('td'); if (td.length < 2) return null;
+            const text = td[0].textContent.replace(/\s+/g, ' ').trim(); const a = td[0].querySelector('a')?.textContent.trim();
+            // "Artist - Title": the first link is the artist, the rest of the text is the title
+            const artist = a && text.startsWith(a) ? a : text.split(' - ')[0];
+            const title = text.slice(artist.length).replace(/^\s*-\s*/, '').trim();
+            const n = parseInt(td[1].textContent.replace(/[^\d]/g, ''), 10);
+            return title && artist && n ? { title, artist, streams: Math.round(n / 1e7) / 100 } : null;
+        }).filter(Boolean).slice(0, 2000);
+        if (!list.length) throw new Error('Couldn’t load more songs right now — try again in a minute.');
+        try { localStorage.setItem(KWORB_KEY, JSON.stringify({ at: Date.now(), list })); } catch {}
+        return (kworbMemo = list);
+    },
     // The 100 most streamed songs of all time: Spotify's all-time list as kept on Wikipedia (rank, song, artists,
     // billions of streams). The list is re-read once a day; each song's Apple match is remembered for good.
     async allTime() {
@@ -1353,7 +1561,10 @@ const songApi = {
         return normApple(allTimeMatches[k]);
     },
 };
-const ALLTIME_KEY = 'anicoop_alltime_v1', ALLTIME_MATCH_KEY = 'anicoop_alltime_match_v3';
+const ALLTIME_KEY = 'anicoop_alltime_v1', ALLTIME_MATCH_KEY = 'anicoop_alltime_match_v3', KWORB_KEY = 'anicoop_kworb_v1';
+let kworbMemo = null;
+// the same song in two lists ("Shape of You" / "Shape of You (Remastered)", "Ed Sheeran" / "Ed Sheeran, X")
+const songKey = (title, artist) => { const n = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/\s*[([].*?[)\]]/g, '').replace(/[^a-z0-9]/g, ''); return n(title) + '|' + n(String(artist || '').split(/,| & | and | feat/i)[0]); };
 const allTimeKey = (w) => `${w.title}|${w.artist}`.toLowerCase();
 const allTimeMatches = readJSON(ALLTIME_MATCH_KEY) || {};
 const saveAllTime = debounce(() => { try { localStorage.setItem(ALLTIME_MATCH_KEY, JSON.stringify(allTimeMatches)); } catch {} }, 1200);
@@ -3595,6 +3806,7 @@ createApp({
             if (!url) { showToast('No preview for this song', 'error'); player.song = null; return; }
             audio.src = url; audio.volume = player.vol;
             audio.play().catch(() => showToast('Tap play again to start the preview', 'error'));
+            addHistory(player.song, { key: 'play', label: 'Played the preview', sub: (player.song.artists || []).join(', ') });
         };
         const seekPreview = (e) => { const r = e.currentTarget.getBoundingClientRect(); if (audio.duration) audio.currentTime = clamp((e.clientX - r.left) / r.width, 0, 1) * audio.duration; };
         const closePlayer = () => { audio.pause(); audio.removeAttribute('src'); player.song = null; player.playing = false; };
@@ -4526,7 +4738,8 @@ createApp({
             const a = selectedAnime.value; if (!a) return [];
             if (a.type === 'GAME') return a.gameInfo || [];
             if (a.type === 'TV') return a.tvInfo || [];
-            if (a.type === 'SONG') return a.songInfo || [];
+            // songs: the artist and album rows open their pages
+            if (a.type === 'SONG') return (a.songInfo || []).map(r => ({ ...r, go: r.k === 'Artist' ? 'artist' : r.k === 'Album' ? 'album' : null }));
             const manga = a.type === 'MANGA';
             const rows = [
                 a.nextAiringEpisode?.timeUntilAiring && ['Next episode', `Ep ${a.nextAiringEpisode.episode} in ${countdown(a.nextAiringEpisode.timeUntilAiring)}`, true],
@@ -4738,6 +4951,12 @@ createApp({
                 { k: 'upcoming', l: 'Coming soon', sub: 'movies on the way', icon: 'fa-hourglass-half', see: { status: 'NOT_YET_RELEASED', format: 'MOVIE' } },
                 { k: 'best', l: 'Best of all time', sub: 'highest rated movies', icon: 'fa-trophy', see: { tab: 'top' } },
             ],
+            SONG: [
+                { k: 'alltime', l: 'Most streamed ever', sub: 'the all-time record holders', icon: 'fa-crown', see: { tab: 'top' } },
+                { k: 'us', l: 'Top in the USA', sub: 'most played this week', icon: 'fa-fire', see: { country: 'us' } },
+                { k: 'gb', l: 'Top in the UK', sub: 'most played this week', icon: 'fa-music', see: { country: 'gb' } },
+                { k: 'kr', l: 'K-pop & Korea', sub: 'most played in Korea', icon: 'fa-star', see: { country: 'kr' } },
+            ],
         };
         const SHELF_KEY = 'anicoop_shelves_v2:';
         const shelves = reactive({});            // type → { rows, at }
@@ -4767,11 +4986,20 @@ createApp({
             ]);
             return { cinema, series, upcoming: upcoming.filter(x => !x.releaseDate || new Date(x.releaseDate).getTime() > Date.now() - 86400e3), best };
         };
+        // Songs: the all-time list (the songs already matched to Apple) + three countries' charts, at the same time
+        const songShelves = async () => {
+            const chart = (cc) => appleChartOne(cc).then(l => dedupeSongs(l.map(normApple)).slice(0, 18)).catch(() => []);
+            const [alltime, us, gb, kr] = await Promise.all([
+                songApi.allTime().then(l => l.filter(x => x.song).map(x => x.song).slice(0, 18)).catch(() => []),
+                chart('us'), chart('gb'), chart('kr'),
+            ]);
+            return { alltime: alltime.length >= 6 ? alltime : [], us, gb, kr };
+        };
         const loadShelves = async (type, force = false) => {
             if (!SHELF_DEFS[type] || shelvesBusy[type] || (!force && shelves[type] && Date.now() - shelves[type].at < 2 * 3600e3)) return;
             shelvesBusy[type] = true;
             try {
-                const rows = type === 'GAME' ? await gameApi.shelves(gameOpts(false)) : type === 'TV' ? await tvShelves() : await aniShelves(type);
+                const rows = type === 'GAME' ? await gameApi.shelves(gameOpts(false)) : type === 'TV' ? await tvShelves() : type === 'SONG' ? await songShelves() : await aniShelves(type);
                 Object.keys(rows).forEach(k => { rows[k] = rows[k].filter(notHidden); });
                 if (Object.values(rows).some(l => l.length)) {
                     shelves[type] = { rows, at: Date.now() };
@@ -4958,18 +5186,31 @@ createApp({
         };
         // Songs: the 100 most streamed songs of all time (Spotify's all-time list, kept up to date on Wikipedia),
         // each matched to Apple Music for its cover, preview and page. The list shows at once; covers fill in.
+        // "Show 100 more" goes on down kworb's longer list of the most streamed songs.
         const songTopAllTime = async (gen) => {
-            const list = await songApi.allTime();
+            const first = !top.pool.length;
+            let list;
+            if (first) list = await songApi.allTime();
+            else {
+                const have = new Set(top.pool.map(x => x.wkey));
+                list = (await songApi.allTimeMore()).filter(x => !have.has(songKey(x.title, x.artist))).slice(0, 100);
+            }
             if (gen !== top.gen) return;
-            top.page++; top.done = true;
-            top.pool = list.map(x => x.song ? { ...x.song, streams: x.streams, chartPos: x.rank, wScore: null } : { id: 'wk' + x.rank, pending: true, type: 'SONG', title: { romaji: x.title }, artists: [x.artist], coverImage: { large: null }, streams: x.streams, chartPos: x.rank, wScore: null, wiki: x });
-            const todo = top.pool.map((x, n) => n).filter(n => top.pool[n].pending);
+            top.page++; top.done = !first && list.length < 100;
+            const from = top.pool.length;
+            const rows = list.map((x, n) => {
+                const w = { ...x, rank: from + n + 1 }; const song = x.song || (allTimeMatches[allTimeKey(x)] ? normApple(allTimeMatches[allTimeKey(x)]) : null);
+                const base = { streams: x.streams, chartPos: w.rank, wScore: null, wkey: songKey(x.title, x.artist) };
+                return song ? { ...song, ...base } : { id: 'wk' + w.rank, pending: true, type: 'SONG', title: { romaji: x.title }, artists: [x.artist], coverImage: { large: null }, ...base, wiki: w };
+            });
+            top.pool = [...top.pool, ...rows];
+            const todo = top.pool.map((x, n) => n).filter(n => n >= from && top.pool[n].pending);
             const worker = async () => {
                 while (todo.length && gen === top.gen) {
                     const n = todo.shift(); const w = top.pool[n]?.wiki; if (!w) continue;
                     const s = await songApi.matchAllTime(w).catch(() => null);
                     if (gen !== top.gen) return;
-                    if (s) top.pool[n] = { ...s, streams: w.streams, chartPos: w.rank, wScore: null };
+                    if (s) top.pool[n] = { ...s, streams: w.streams, chartPos: w.rank, wScore: null, wkey: top.pool[n].wkey };
                 }
             };
             await Promise.all([worker(), worker(), worker()]);
@@ -4984,7 +5225,9 @@ createApp({
             const type = mediaType.value, gen = top.gen;
             if (!TOP_CFG[type] || top.loading) return;
             top.loading = true; top.error = '';
-            try { while (gen === top.gen && top.type === type && !top.done && top.pool.length < top.shown + 50) await topFetchChunk(type, gen); saveTopCache(); }
+            // songs are in chart order, so they only need what's shown; rated lists keep 50 extra so the order is settled
+            const want = () => type === 'SONG' ? top.shown : top.shown + 50;
+            try { while (gen === top.gen && top.type === type && !top.done && top.pool.length < want()) await topFetchChunk(type, gen); saveTopCache(); }
             catch (err) { if (gen === top.gen) top.error = err.message || 'Could not load the leaderboard'; }
             finally { if (gen === top.gen) top.loading = false; }
         };
@@ -5179,6 +5422,18 @@ createApp({
             finally { artistView.albumLoading = false; }
             nextTick(() => document.getElementById('artist-album')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
         };
+        // a song's album: its artist's page, opened on that album (the album's songs are listed there)
+        const openSongAlbum = (s) => {
+            const id = s?.albumId; if (!id || !/^\d+$/.test(String(id))) { openSongArtist(s); return; }   // older Spotify songs: the artist page
+            const name = s.album || '';
+            const al = { id: Number(id), name: name.replace(/ - (Single|EP)$/, ''), cover: s.coverImage?.large || null, year: s.seasonYear ? String(s.seasonYear) : '', kind: /- Single$/.test(name) ? 'Single' : / - EP$/.test(name) ? 'EP' : 'Album' };
+            openSongArtist(s);
+            let done = false, stop = null;
+            const ready = () => entity.value?.type === 'artist' && !entityLoading.value && !!entityData.value?.isArtist;
+            stop = watch(ready, (ok) => { if (!ok || done) return; done = true; if (stop) stop(); nextTick(() => { if (artistView.album?.id !== al.id) openAlbum(al); }); }, { immediate: true });
+            if (done) stop();
+            setTimeout(() => { if (!done) { done = true; stop(); } }, 20000);
+        };
         // a song's artist: the first one has an Apple id, featured artists only a name
         const openTrackArtist = (s, k = 0) => { if (k === 0 && s?.artistId) openArtist(s.artistId, (s.artists || [])[0]); else openArtistByName((s?.artists || [])[k]); };
 
@@ -5253,9 +5508,9 @@ createApp({
         // Songs browse, organised: a numbered track list (or the old poster grid), grouped the way you pick.
         // "Auto" = an artist search shows Popular + their releases one by one + other matches; anything else is a ranked list.
         const readPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
-        const songView = ref(readPref('anicoop_song_view', 'list'));
+        const songView = ref(readPref('anicoop_song_view_v2', 'grid'));   // covers first, like every other section
         const songGroupBy = ref(readPref('anicoop_song_group', 'auto'));
-        watch(songView, (v) => { try { localStorage.setItem('anicoop_song_view', v); } catch {} });
+        watch(songView, (v) => { try { localStorage.setItem('anicoop_song_view_v2', v); } catch {} });
         watch(songGroupBy, (v) => { try { localStorage.setItem('anicoop_song_group', v); } catch {} });
         const SONG_GROUPS = [{ v: 'auto', l: 'Auto' }, { v: 'none', l: 'Ranked list' }, { v: 'artist', l: 'Artist' }, { v: 'album', l: 'Album' }, { v: 'genre', l: 'Genre' }, { v: 'decade', l: 'Decade' }];
         const songBrowseGroups = computed(() => {
@@ -5489,22 +5744,39 @@ createApp({
         // anicoop itself has no manga. Install an extension to read in the app:
         //  • MangaDex: MangaDex's official API (it allows third-party readers); pages stream from MangaDex's own image servers
         //  • Local files: CBZ / ZIP archives or images from your device, opened in the browser — nothing is uploaded
+        // the Read / Watch window on a title page (sources + chapters / episodes)
+        const wp = reactive({ open: false, season: 1 });
         const EXTENSIONS = [
-            { id: 'mangadex', name: 'MangaDex', icon: 'fa-book-open-reader', color: '#ff6740', lang: 'Multi-language', version: '1.0',
+            { id: 'mangadex', kinds: ['manga'], name: 'MangaDex', icon: 'fa-book-open-reader', color: '#ff6740', lang: 'Multi-language', version: '1.0',
               desc: 'Read MangaDex chapters right here, no ads or trackers. Official releases that MangaDex only links to still open on the publisher’s site.' },
-            { id: 'local', name: 'Local files', icon: 'fa-file-zipper', color: '#3b82f6', lang: 'Any', version: '1.0',
+            { id: 'local', kinds: ['manga'], name: 'Local files', icon: 'fa-file-zipper', color: '#3b82f6', lang: 'Any', version: '1.0',
               desc: 'Open CBZ / ZIP comic archives or a set of images from your device. Stays on your device, nothing is uploaded.' },
+            { id: 'archive', kinds: ['tv'], name: 'Internet Archive', icon: 'fa-building-columns', color: '#71717a', lang: 'Multi-language', version: '1.0',
+              desc: 'Public-domain and freely licensed films and shows (classics, old cartoons, documentaries), played straight from archive.org with no ads.' },
+            { id: 'localvideo', kinds: ['anime', 'tv'], name: 'Local video files', icon: 'fa-file-video', color: '#3b82f6', lang: 'Any', version: '1.0',
+              desc: 'Play an MP4 / WebM file from your device. Stays on your device, nothing is uploaded.' },
         ];
+        // which section the Extensions window is managing, and the title it was opened from ("Find readable sources" checks that title)
         const extOpen = ref(false);
+        const extKind = ref('manga');
+        const extFor = ref(null);
+        const extList = computed(() => EXTENSIONS.filter(x => x.kinds.includes(extKind.value)));
         const extOn = (id) => (PREFS.extensions || []).includes(id);
         const toggleExt = (id) => {
             const on = extOn(id);
             PREFS.extensions = on ? PREFS.extensions.filter(x => x !== id) : [...(PREFS.extensions || []), id];
             showToast(on ? `${EXTENSIONS.find(e => e.id === id)?.name} removed` : `${EXTENSIONS.find(e => e.id === id)?.name} installed`);
+            if (!on && wp.open && readTabs.value.some(t => t.id === id)) readSrc.value = id;
         };
+        // 18+ sources only show (and install) while the 18+ filter is switched on
+        const adultOn = computed(() => adultAllowed.value && !!filters.value.isAdult);
+        const playKind = computed(() => MEDIA_KIND[selectedAnime.value?.type] || null);
         // ---- website sources: add / remove / install from a repository ----
         const siteSources = computed(() => PREFS.sources || []);
-        const srcForm = reactive({ name: '', baseUrl: '', template: 'auto', selectors: '', busy: false, msg: '', repo: '', repoItems: [], repoName: '', repoBusy: false, repoMsg: '', repoQ: '', repoLang: 'all' });
+        const kindOf = (s) => s?.kind || 'manga';
+        const kindSources = (k) => siteSources.value.filter(s => kindOf(s) === k && (!s.nsfw || adultOn.value));
+        const extSources = computed(() => kindSources(extKind.value));
+        const srcForm = reactive({ name: '', baseUrl: '', template: 'auto', selectors: '', busy: false, msg: '', repo: '', repoItems: [], repoName: '', repoBusy: false, repoMsg: '', repoQ: '', repoLang: 'all', repoKind: null });
         const makeSource = (x) => {
             let u; try { u = new URL(String(x.baseUrl || '').trim()); } catch { throw new Error('Enter the site’s full address, e.g. https://example.com'); }
             if (!/^https?:$/.test(u.protocol)) throw new Error('The address must start with http:// or https://');
@@ -5513,25 +5785,26 @@ createApp({
             const template = SOURCE_TEMPLATES[x.template] ? x.template : 'custom';
             if (template === 'custom' && !selectors?.search?.item) throw new Error('A custom source needs at least search.url, search.item, chapters.item and pages.image.');
             return { id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: String(x.name || u.hostname.replace(/^www\./, '')).slice(0, 40),
-                baseUrl: (u.origin + u.pathname).replace(/\/+$/, ''), template, lang: x.lang || 'en', selectors: typeof selectors === 'object' ? selectors : null, repo: x.repo || null };
+                baseUrl: (u.origin + u.pathname).replace(/\/+$/, ''), template, lang: x.lang || 'en', selectors: typeof selectors === 'object' ? selectors : null, repo: x.repo || null,
+                kind: x.kind || extKind.value, nsfw: !!x.nsfw };
         };
         // "Auto-detect": look at the site's homepage to see which template it runs
         const withTemplate = async (x) => {
             if (x.template !== 'auto') return x;
             let base; try { base = new URL(String(x.baseUrl || '').trim()).href; } catch { throw new Error('Enter the site’s full address, e.g. https://example.com'); }
-            const t = await detectTemplate(base);
-            if (!t) throw new Error('Couldn’t tell which template this site uses. It may use its own custom code, so the web reader can’t read it. You can still pick Custom and enter selectors.');
+            const t = await detectTemplate(base, x.kind || extKind.value);
+            if (!t) throw new Error('Couldn’t tell which template this site uses. It may use its own custom code, so it can’t be read here. You can still pick Custom and enter selectors.');
             if (x === srcForm) srcForm.template = t;
             return { ...x, template: t };
         };
         const addSource = async (x = srcForm, { quiet = false } = {}) => {
-            try { x = await withTemplate(x); } catch (err) { srcForm.msg = err.message; return false; }
-            let s; try { s = makeSource(x); } catch (err) { srcForm.msg = err.message; return false; }
-            if (siteSources.value.some(o => o.baseUrl === s.baseUrl)) { srcForm.msg = `${s.name} is already installed.`; return false; }
+            try { x = await withTemplate(x); } catch (err) { srcForm.msg = err.message; return null; }
+            let s; try { s = makeSource(x); } catch (err) { srcForm.msg = err.message; return null; }
+            if (siteSources.value.some(o => o.baseUrl === s.baseUrl && kindOf(o) === s.kind)) { srcForm.msg = `${s.name} is already installed.`; return null; }
             PREFS.sources = [...siteSources.value, s];
             if (!quiet) { showToast(`${s.name} installed`); Object.assign(srcForm, { name: '', baseUrl: '', selectors: '', msg: '', template: 'auto' }); }
-            if (selectedAnime.value?.type === 'MANGA' && !readSrc.value) readSrc.value = s.id;
-            return true;
+            if (playKind.value === s.kind && !readSrc.value) readSrc.value = s.id;
+            return s;
         };
         // quick test before installing: search the site for a common word and count the results
         const testSource = async () => {
@@ -5551,10 +5824,10 @@ createApp({
             if (readSrc.value === id) readSrc.value = readTabs.value[0]?.id || null;
             if (s) showToast(`${s.name} removed`);
         };
-        // Repositories. Understands Mihon / Tachiyomi repos (new index.json, old index.min.json) and anicoop's own format:
+        // Repositories. Understands Mihon / Tachiyomi / Aniyomi repos (new index.json, old index.min.json) and anicoop's own format:
         //   { "name": "...", "sources": [{ "name", "baseUrl", "template", "lang", "selectors"? }] }
-        // Mihon extensions are Android code we can't run, but each one names its website. Many of those sites are built
-        // on the Madara or MangaThemesia themes, which anicoop reads natively — so installing checks the site first.
+        // Their extensions are Android code we can't run, but each one names its website. Many of those sites are built
+        // on a few common WordPress themes, which anicoop reads natively — so installing checks the site first.
         const repoCandidates = (raw) => {
             const u = raw.trim().replace(/[?#].*$/, '');
             const gh = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)/i.exec(u);
@@ -5569,7 +5842,7 @@ createApp({
             let items = [];
             if (j?.extensionList?.extensions) {          // Mihon 0.20+ index.json
                 items = j.extensionList.extensions.flatMap(x => (x.sources || []).map(s => ({ name: s.name, baseUrl: s.homeUrl, lang: s.language, ext: x.name, icon: x.resources?.iconUrl || null, nsfw: /NSFW/i.test(x.contentWarning || '') })));
-            } else if (Array.isArray(j) && j.some(x => x?.pkg)) {   // Tachiyomi index.min.json
+            } else if (Array.isArray(j) && j.some(x => x?.pkg)) {   // Tachiyomi / Aniyomi index.min.json
                 items = j.flatMap(x => (x.sources || []).map(s => ({ name: s.name, baseUrl: s.baseUrl, lang: s.lang, ext: x.name, icon: null, nsfw: x.nsfw === 1 })));
             } else {                                                  // anicoop format
                 items = (Array.isArray(j) ? j : (j?.sources || j?.extensions || [])).map(x => ({ ...x, nsfw: !!x.nsfw }));
@@ -5584,7 +5857,7 @@ createApp({
         };
         const loadRepo = async () => {
             const raw = srcForm.repo.trim(); if (!raw) return;
-            Object.assign(srcForm, { repoBusy: true, repoItems: [], repoName: '', repoMsg: '', repoQ: '' });
+            Object.assign(srcForm, { repoBusy: true, repoItems: [], repoName: '', repoMsg: '', repoQ: '', repoKind: extKind.value });
             try {
                 let found = null;
                 for (const url of repoCandidates(raw)) {
@@ -5595,147 +5868,237 @@ createApp({
                 }
                 if (!found) { srcForm.repoMsg = 'No sources found there. Use the repository’s link (a GitHub repo page, or its index.json / index.min.json file). Some old repos have been taken down.'; return; }
                 srcForm.repoName = found.name; srcForm.repoItems = found.items;
+                // remembered per section, so the list is back next time you open Extensions
+                PREFS.repos = { ...(PREFS.repos || {}), [extKind.value]: raw };
                 const langs = new Set(found.items.map(x => x.lang));
                 srcForm.repoLang = langs.has('en') ? 'en' : 'all';
             } finally { srcForm.repoBusy = false; }
         };
         const repoLangs = computed(() => [...new Set(srcForm.repoItems.map(x => x.lang || 'all'))].sort());
-        const repoShown = computed(() => {
-            const q = normTitle(srcForm.repoQ);
-            const seen = new Set();   // one row per site (a site is often listed for "all" and for one language)
-            const rank = (x) => repoInstalled(x) ? 0 : repoOk(x) ? 1 : repoState[x.baseUrl] ? 3 : 2;   // readable first, failed checks last
-            return srcForm.repoItems.filter(x => (srcForm.repoLang === 'all' || x.lang === srcForm.repoLang || x.lang === 'all') && (!x.nsfw || adultAllowed.value) && (!q || normTitle(x.name).includes(q) || normTitle(x.baseUrl).includes(q)) && !seen.has(x.baseUrl) && seen.add(x.baseUrl))
-                .filter(x => !repoScan.onlyOk || repoInstalled(x) || repoOk(x)).sort((a, b) => rank(a) - rank(b));
-        });
-        // Which template a site runs, from its homepage: Madara / MangaThemesia by their markers, otherwise the
+        // Which template a site runs, from its homepage: known themes by their markers, otherwise the
         // Generic smart fallback if a test search finds real titles.
         // Sites behind Cloudflare's bot check can't be read from a server (Mihon solves that check inside the phone's browser).
         const CF_MSG = 'Protected by Cloudflare’s bot check. Only the Mihon app can pass it, so it can’t be read here.';
-        const SELF_MSG = 'Self-hosted: this source runs on your own computer (e.g. Komga / Kavita), not on the internet.';
+        const SELF_MSG = 'Self-hosted: this source runs on your own computer (e.g. Komga / Jellyfin), not on the internet.';
+        const UNSUP_MSG = (k) => k === 'manga' ? 'Not readable here: this site needs its own Android extension code' : 'Can’t play here: this site needs its own Android extension code';
         const isPrivateHost = (u) => { try { return /^(localhost|127\.|10\.|0\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(new URL(u).hostname); } catch { return true; } };
         const friendlyErr = (err) => /cloudflare|blocked the request/i.test(err?.message || '') ? CF_MSG
             : /answered 5\d\d|could not reach|network/i.test(err?.message || '') ? 'The site is down or unreachable right now.' : (err?.message || 'Could not reach the site');
-        const detectTemplate = async (baseUrl) => {
+        const detectTemplate = async (baseUrl, kind = 'manga') => {
             if (isPrivateHost(baseUrl)) throw new Error(SELF_MSG);
             let h = '';
             try { h = (await siteFetch(baseUrl)).body || ''; }
             catch (err) { throw new Error(friendlyErr(err)); }
             if (/<title>\s*just a moment|cf-chl-|challenge-platform|cf_chl_opt/i.test(h)) throw new Error(CF_MSG);
+            const probe = async (template) => { try { return (await sourceApi.search({ id: 'probe', name: 'probe', baseUrl: baseUrl.replace(/\/+$/, ''), template }, 'the')).length >= 3; } catch { return false; } };
+            if (kind !== 'manga') {
+                if (/themes\/animestream|class="eplister|class="mirror"|animestream|class="bixbox/i.test(h)) return 'animestream';
+                if (/themes\/dooplay|dooplay|doo_player|dtAjax/i.test(h)) return 'dooplay';
+                return (await probe('genericvideo')) ? 'genericvideo' : null;
+            }
             if (/wp-manga|themes\/madara|manga_get_chapters|c-tabs-item|madara/i.test(h)) return 'madara';
             if (/ts_reader|mangathemesia|themes\/mangareader|class="listupd|themesia/i.test(h)) return 'mangathemesia';
-            try { const r = await sourceApi.search({ id: 'probe', name: 'probe', baseUrl: baseUrl.replace(/\/+$/, ''), template: 'generic' }, 'the'); if (r.length >= 3) return 'generic'; } catch {}
-            return null;
+            return (await probe('generic')) ? 'generic' : null;
         };
-        // full check used by "Find readable sources": the template must find titles AND a chapter list
-        const verifySource = async (x) => {
-            const template = await detectTemplate(x.baseUrl);
-            if (!template) return { ok: false, why: 'unsupported' };
+        // does a chapter give page images / an episode give a player?
+        const opensHere = async (s, list) => {
+            for (const c of [list[list.length - 1], list[0], list[Math.floor(list.length / 2)]].filter((c, n, all) => c && all.indexOf(c) === n).slice(0, 2)) {
+                try { if (isVideoSrc(s) ? (await sourceApi.videos(s, c.link)).length : (await sourceApi.pages(s, c.link)).length >= 2) return true; } catch {}
+            }
+            return false;
+        };
+        // general check (no title picked): the template must find titles, a chapter list AND pages
+        const verifySource = async (x, template) => {
             const s = { id: 'probe', name: x.name, baseUrl: x.baseUrl.replace(/\/+$/, ''), template };
             let results = [];
             for (const q of ['the', 'a', 'love']) { results = await sourceApi.search(s, q); if (results.length) break; }
-            if (!results.length) return { ok: false, why: 'unsupported' };
-            // readable = a title's chapter actually gives page images (tries the oldest chapter: newest ones are often locked)
             for (const r of results.slice(0, 2)) {
-                const ch = await sourceApi.chapters(s, r.url); if (!ch.length) continue;
-                for (const c of [ch[ch.length - 1], ch[Math.floor(ch.length / 2)]]) {
-                    try { if ((await sourceApi.pages(s, c.link)).length >= 2) return { ok: true, template }; } catch {}
-                }
+                const ch = await sourceApi.chapters(s, r.url);
+                if (ch.length && await opensHere(s, ch)) return 'ok';
             }
-            return { ok: false, why: 'unsupported' };
+            return 'unsupported';
         };
-        // check results are remembered for a week, so a repository opens with its readable sources already marked
+        // title check ("Find readable sources" from a manga / anime / movie): the site has to have THIS title — under its
+        // own name, one of its "Also known as" names, or the site's alternative names — and it has to open here
+        const pendingMatch = {};   // "titleId|baseUrl" → the match found, saved to the source when you install it
+        const verifyTitle = async (x, template, a) => {
+            const s = { id: 'probe', name: x.name, baseUrl: x.baseUrl.replace(/\/+$/, ''), template };
+            const { match } = await findTitleOn(s, a);
+            if (!match) return 'notfound';
+            const list = await sourceApi.chapters(s, match.url);
+            if (!list.length || !(await opensHere(s, list))) return 'noopen';
+            pendingMatch[`${a.id}|${x.baseUrl}`] = { url: match.url, title: match.title, cover: match.cover || null };
+            return 'ok';
+        };
+        // site checks are remembered for a week (a site that can't be read stays that way); title checks for this visit
         const CHECK_KEY = 'anicoop_srccheck_v1';
         const repoState = reactive(Object.fromEntries(Object.entries(readJSON(CHECK_KEY) || {}).filter(([, v]) => Date.now() - v.at < 7 * 864e5).map(([k, v]) => [k, v.v])));   // baseUrl → 'checking' | 'unsupported' | 'ok:<template>' | message
         watch(repoState, debounce(() => {
             try { localStorage.setItem(CHECK_KEY, JSON.stringify(Object.fromEntries(Object.entries(repoState).filter(([, v]) => v && v !== 'checking').map(([k, v]) => [k, { v, at: Date.now() }])))); } catch {}
         }, 1500), { deep: true });
-        const repoOk = (x) => String(repoState[x.baseUrl] || '').startsWith('ok:');
+        const titleState = reactive({});   // "titleId|baseUrl" → 'checking' | 'ok' | 'notfound' | 'noopen'
+        const titleKey = (x) => `${extFor.value?.id}|${x.baseUrl}`;
+        const tplName = (x) => (SOURCE_TEMPLATES[String(repoState[x.baseUrl] || '').slice(3)] || {}).label?.split(' (')[0] || '';
+        // one status per repository row: { st: 'ok' | 'checking' | 'bad' | 'site' | 'none', text }
+        const srcStatus = (x) => {
+            const site = repoState[x.baseUrl]; const t = extFor.value ? titleState[titleKey(x)] : null;
+            if (t === 'checking' || (!t && site === 'checking')) return { st: 'checking', text: 'Checking…' };
+            if (site && site !== 'checking' && !site.startsWith('ok:')) return { st: 'bad', text: site === 'unsupported' ? UNSUP_MSG(extKind.value) : site };
+            if (extFor.value) {
+                const name = titleOf(extFor.value);
+                if (t === 'ok') return { st: 'ok', text: `✓ Has “${name}” · ${extKind.value === 'manga' ? 'readable' : 'plays'} here` };
+                if (t === 'notfound') return { st: 'bad', text: `Doesn’t have “${name}” (its other names were checked too)` };
+                if (t === 'noopen') return { st: 'bad', text: `Has “${name}”, but its ${extKind.value === 'manga' ? 'chapters don’t open' : 'episodes don’t play'} here` };
+                if (site?.startsWith('ok:')) return { st: 'site', text: `Works here (${tplName(x)}) · not checked for this title yet` };
+                return { st: 'none', text: x.baseUrl };
+            }
+            if (site?.startsWith('ok:')) return { st: 'ok', text: `✓ ${extKind.value === 'manga' ? 'Readable' : 'Plays'} here · ${tplName(x)}` };
+            return { st: 'none', text: x.baseUrl };
+        };
+        const repoOk = (x) => srcStatus(x).st === 'ok';
+        const repoInstalled = (x) => siteSources.value.some(o => o.baseUrl === String(x.baseUrl || '').replace(/\/+$/, '') && kindOf(o) === extKind.value);
+        const repoScan = reactive({ running: false, done: 0, total: 0, found: 0, onlyOk: false });
+        const repoShown = computed(() => {
+            if (srcForm.repoKind !== extKind.value) return [];
+            const q = normTitle(srcForm.repoQ);
+            const seen = new Set();   // one row per site (a site is often listed for "all" and for one language)
+            const rank = (x) => { const st = srcStatus(x).st; return repoInstalled(x) ? 0 : st === 'ok' ? 1 : st === 'bad' ? 3 : 2; };   // readable first, failed checks last
+            return srcForm.repoItems.filter(x => (srcForm.repoLang === 'all' || x.lang === srcForm.repoLang || x.lang === 'all') && (!x.nsfw || adultOn.value) && (!q || normTitle(x.name).includes(q) || normTitle(x.baseUrl).includes(q)) && !seen.has(x.baseUrl) && seen.add(x.baseUrl))
+                .filter(x => !repoScan.onlyOk || repoInstalled(x) || repoOk(x)).sort((a, b) => rank(a) - rank(b));
+        });
         const installRepoItem = async (x) => {
-            if (x.template || x.selectors) { if (await addSource(x, { quiet: true })) showToast(`${x.name || 'Source'} installed`); else if (srcForm.msg) showToast(srcForm.msg, 'error'); return; }
-            const known = repoOk(x) ? String(repoState[x.baseUrl]).slice(3) : null;
+            if (x.nsfw && !adultOn.value) return;
+            const a = extFor.value;
+            const remember = (s) => { const m = a && pendingMatch[`${a.id}|${x.baseUrl}`]; if (s && m) { srcMatches[`${a.id}:${s.id}`] = m; saveMatches(); } };
+            if (x.template || x.selectors) { const s = await addSource({ ...x, kind: extKind.value }, { quiet: true }); if (s) { remember(s); showToast(`${x.name || 'Source'} installed`); } else if (srcForm.msg) showToast(srcForm.msg, 'error'); return; }
+            const known = String(repoState[x.baseUrl] || '').startsWith('ok:') ? String(repoState[x.baseUrl]).slice(3) : null;
             repoState[x.baseUrl] = 'checking';
             try {
-                const template = known || await detectTemplate(x.baseUrl);
+                const template = known || await detectTemplate(x.baseUrl, extKind.value);
                 if (!template) { repoState[x.baseUrl] = 'unsupported'; return; }
-                if (await addSource({ ...x, template }, { quiet: true })) { repoState[x.baseUrl] = 'ok:' + template; showToast(`${x.name} installed (${SOURCE_TEMPLATES[template].label.split(' (')[0]})`); }
-                else repoState[x.baseUrl] = srcForm.msg || 'Could not install';
+                repoState[x.baseUrl] = 'ok:' + template;
+                const s = await addSource({ ...x, template, kind: extKind.value }, { quiet: true });
+                if (s) { remember(s); showToast(`${x.name} installed (${SOURCE_TEMPLATES[template].label.split(' (')[0]})`); if (wp.open && playKind.value === s.kind) readSrc.value = s.id; }
+                else showToast(srcForm.msg || 'Could not install', 'error');
             } catch (err) { repoState[x.baseUrl] = err.message || 'Could not reach the site'; }
         };
-        // check every source in the current list (6 at a time) and pin the readable ones to the top
-        const repoScan = reactive({ running: false, done: 0, total: 0, found: 0, onlyOk: false });
+        // check every source in the current list (6 at a time) and pin the working ones to the top.
+        // Opened from a title → each site is checked for THAT title, so it works again on the next title.
         const scanRepo = async () => {
             if (repoScan.running) { repoScan.running = false; return; }   // second press stops it
-            const list = repoShown.value.filter(x => !repoInstalled(x) && !repoState[x.baseUrl]);
-            Object.assign(repoScan, { running: true, done: 0, total: list.length, found: 0 });
+            const a = extFor.value; const kind = extKind.value;
+            const list = repoShown.value.filter(x => !repoInstalled(x) && ['none', 'site'].includes(srcStatus(x).st));
+            Object.assign(repoScan, { running: true, done: 0, total: list.length, found: 0, onlyOk: false });
             let k = 0;
             const worker = async () => {
                 while (repoScan.running && k < list.length) {
-                    const x = list[k++]; repoState[x.baseUrl] = 'checking';
-                    try { const r = await verifySource(x); repoState[x.baseUrl] = r.ok ? 'ok:' + r.template : r.why; if (r.ok) repoScan.found++; }
-                    catch (err) { repoState[x.baseUrl] = err.message || 'unsupported'; }
-                    repoScan.done++;
+                    const x = list[k++]; const key = a ? `${a.id}|${x.baseUrl}` : null;
+                    try {
+                        let site = String(repoState[x.baseUrl] || '');
+                        if (!site.startsWith('ok:')) {
+                            repoState[x.baseUrl] = 'checking';
+                            const template = await detectTemplate(x.baseUrl, kind);
+                            if (!template) { repoState[x.baseUrl] = 'unsupported'; continue; }
+                            // without a title, "working" means a real chapter / episode opens; with one, the title check proves it
+                            if (!a && (await verifySource(x, template)) !== 'ok') { repoState[x.baseUrl] = 'unsupported'; continue; }
+                            repoState[x.baseUrl] = site = 'ok:' + template;
+                            if (!a) { repoScan.found++; continue; }
+                        } else if (!a) continue;
+                        titleState[key] = 'checking';
+                        titleState[key] = await verifyTitle(x, site.slice(3), a);
+                        if (titleState[key] === 'ok') repoScan.found++;
+                    } catch (err) {
+                        if (key && titleState[key] === 'checking') titleState[key] = 'notfound';
+                        if (repoState[x.baseUrl] === 'checking') repoState[x.baseUrl] = err.message || 'unsupported';
+                    } finally { repoScan.done++; }
                 }
             };
             await Promise.all(Array.from({ length: 6 }, worker));
+            if (!repoScan.running && repoScan.done < repoScan.total) return;   // stopped by hand
             repoScan.running = false;
-            if (repoScan.found) { repoScan.onlyOk = true; showToast(`Found ${repoScan.found} readable source${repoScan.found === 1 ? '' : 's'}`); }
-            else showToast('No readable sources in this list. Try another language or repository.', 'error');
+            const noun = a ? (kind === 'manga' ? 'source with this title' : 'source that plays this title') : 'working source';
+            if (repoScan.found) { repoScan.onlyOk = true; showToast(`Found ${repoScan.found} ${noun}${repoScan.found === 1 ? '' : 's'}`); }
+            else showToast(a ? `No source in this list has “${titleOf(a)}”. Try another language or repository.` : 'No working sources in this list. Try another language or repository.', 'error');
         };
-        const repoInstalled = (x) => siteSources.value.some(o => o.baseUrl === String(x.baseUrl || '').replace(/\/+$/, ''));
+        // open the Extensions window for a section (and the title you're on)
+        const openExtensions = (kind = playKind.value || 'manga', title = playKind.value === kind ? selectedAnime.value : null) => {
+            if (repoScan.running && (kind !== extKind.value || title?.id !== extFor.value?.id)) repoScan.running = false;
+            if (kind !== extKind.value || title?.id !== extFor.value?.id) Object.assign(repoScan, { done: 0, total: 0, found: 0, onlyOk: false });
+            extKind.value = kind; extFor.value = title || null;
+            if (srcForm.repoKind !== kind) {
+                Object.assign(srcForm, { repo: PREFS.repos?.[kind] || '', repoItems: [], repoName: '', repoMsg: '', repoQ: '', repoKind: null, template: 'auto', msg: '' });
+                if (srcForm.repo) loadRepo();
+            }
+            extOpen.value = true;
+        };
 
-        // ---- per-manga: which source you read from, its match for this title, its chapters ----
+        // ---- per title: which source you read / watch from, its match for this title, its chapters / episodes ----
         const MATCH_KEY = 'anicoop_srcmatch_v1';
         const srcMatches = reactive(readJSON(MATCH_KEY) || {});   // "aniListId:sourceId" → { url, title, cover }
         const saveMatches = debounce(() => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(srcMatches)); } catch {} }, 500);
         const readSrc = ref(null);
-        const srcView = reactive({ loading: false, error: '', results: [], chapters: [], picking: false, q: '', match: null });
-        const readTabs = computed(() => [
-            ...(extOn('mangadex') ? [{ id: 'mangadex', name: 'MangaDex', icon: 'fa-book-open-reader' }] : []),
-            ...siteSources.value.map(s => ({ id: s.id, name: s.name, icon: 'fa-globe' })),
-        ]);
-        const currentSite = computed(() => siteSources.value.find(s => s.id === readSrc.value) || null);
+        const srcView = reactive({ loading: false, error: '', results: [], chapters: [], picking: false, q: '', match: null, key: '' });
+        const ARCHIVE_SRC = { id: 'archive', name: 'Internet Archive', baseUrl: IA, template: 'archive', kind: 'tv' };
+        const readTabs = computed(() => {
+            const k = playKind.value; if (!k) return [];
+            return [
+                ...(k === 'manga' && extOn('mangadex') ? [{ id: 'mangadex', name: 'MangaDex', icon: 'fa-book-open-reader' }] : []),
+                ...(k === 'tv' && extOn('archive') ? [{ id: 'archive', name: 'Internet Archive', icon: 'fa-building-columns' }] : []),
+                ...kindSources(k).map(s => ({ id: s.id, name: s.name, icon: 'fa-globe' })),
+            ];
+        });
+        const currentSite = computed(() => readSrc.value === 'archive' ? ARCHIVE_SRC : siteSources.value.find(s => s.id === readSrc.value) || null);
         const chapterList = computed(() => readSrc.value === 'mangadex' ? reader.chapters : srcView.chapters);
         const loadSourceFor = async (q = null) => {
             const a = selectedAnime.value; const s = currentSite.value;
-            if (!a || a.type !== 'MANGA' || !s) return;
+            if (!a || !playKind.value || !s) return;
             const key = `${a.id}:${s.id}`;
-            Object.assign(srcView, { loading: true, error: '', results: [], chapters: [], picking: false, match: q ? null : srcMatches[key] || null });
+            Object.assign(srcView, { loading: true, error: '', results: [], chapters: [], picking: false, match: q ? null : srcMatches[key] || null, key });
+            const stale = () => readSrc.value !== s.id || selectedAnime.value?.id !== a.id;
             try {
                 if (!srcView.match) {
-                    const names = [...new Set([q, a.title?.english, a.title?.romaji, ...(a.synonyms || []).slice(0, 2)].filter(Boolean))];
-                    let results = [];
-                    for (const n of names) { results = await sourceApi.search(s, n); if (results.length || q) break; }
-                    if (readSrc.value !== s.id || selectedAnime.value?.id !== a.id) return;
-                    srcView.results = results; srcView.q = q || a.title?.english || a.title?.romaji || '';
-                    // same title → pick it automatically, otherwise let you choose
-                    const wanted = new Set([a.title?.english, a.title?.romaji, a.title?.native, ...(a.synonyms || [])].filter(Boolean).map(normTitle));
-                    const exact = !q && results.find(r => wanted.has(normTitle(r.title)));
-                    if (!exact) { srcView.picking = true; return; }
-                    srcView.match = exact; srcMatches[key] = exact; saveMatches();
+                    if (q) {   // your own search: show what the site found
+                        const results = await sourceApi.search(s, q); if (stale()) return;
+                        Object.assign(srcView, { results, q, picking: true }); return;
+                    }
+                    // the same title (or one of its "Also known as" names) → picked automatically, otherwise you choose
+                    const { match, results } = await findTitleOn(s, a); if (stale()) return;
+                    srcView.results = results; srcView.q = a.title?.english || a.title?.romaji || titleOf(a);
+                    if (!match) { srcView.picking = true; return; }
+                    srcView.match = match; srcMatches[key] = { url: match.url, title: match.title, cover: match.cover || null }; saveMatches();
                 }
                 const list = await sourceApi.chapters(s, srcView.match.url);
-                if (readSrc.value !== s.id || selectedAnime.value?.id !== a.id) return;
+                if (stale()) return;
                 srcView.chapters = list; reader.shown = 40;
-                if (!list.length) srcView.error = `No chapters found on ${s.name} for this title.`;
-            } catch (err) { srcView.error = friendlyErr(err); }
+                if (!list.length) srcView.error = `No ${playKind.value === 'manga' ? 'chapters' : 'episodes'} found on ${s.name} for this title.`;
+            } catch (err) { if (!stale()) srcView.error = friendlyErr(err); }
             finally { if (readSrc.value === s.id) srcView.loading = false; }
         };
-        const chooseMatch = (r) => { const a = selectedAnime.value; const s = currentSite.value; if (!a || !s) return; srcMatches[`${a.id}:${s.id}`] = { url: r.url, title: r.title, cover: r.cover }; saveMatches(); srcView.match = r; srcView.picking = false; loadSourceFor(); };
+        const chooseMatch = (r) => { const a = selectedAnime.value; const s = currentSite.value; if (!a || !s) return; srcMatches[`${a.id}:${s.id}`] = { url: r.url, title: r.title, cover: r.cover || null }; saveMatches(); srcView.match = r; srcView.picking = false; loadSourceFor(); };
         const changeMatch = () => { srcView.picking = true; srcView.results.length || loadSourceFor(srcView.q || titleOf(selectedAnime.value)); };
-        // new manga page → start on MangaDex if it has the title, otherwise your first website source
-        watch(() => selectedAnime.value?.type === 'MANGA' ? selectedAnime.value.id : null, (id) => {
+        // new title → start on MangaDex if it has the title, otherwise your first source for that section
+        watch(() => playKind.value ? selectedAnime.value.id : null, (id) => {
             if (!id) return;
             readSrc.value = readTabs.value.find(t => t.id === 'mangadex') ? 'mangadex' : readTabs.value[0]?.id || null;
+            Object.assign(srcView, { chapters: [], results: [], match: null, picking: false, error: '', key: '' });
         });
-        watch(() => [readSrc.value, selectedAnime.value?.id], () => { if (currentSite.value) loadSourceFor(); });
+        // sources load when the Read / Watch window opens (not with every page you open)
+        watch(() => [readSrc.value, selectedAnime.value?.id, wp.open], () => {
+            const a = selectedAnime.value; const s = currentSite.value;
+            if (!wp.open || !a || !s) return;
+            if (srcView.key === `${a.id}:${s.id}` && (srcView.chapters.length || srcView.loading || srcView.picking)) return;
+            loadSourceFor();
+        });
         // MangaDex doesn't have it (or it only links out) → switch to a website source by itself
         watch(() => readSrc.value === 'mangadex' && readInfo.value && (!readInfo.value.md || (!reader.loading && reader.chapters.length && reader.chapters.every(c => c.url))), (bad) => {
-            if (bad && siteSources.value.length) readSrc.value = siteSources.value[0].id;
+            const sites = kindSources('manga');
+            if (bad && sites.length) readSrc.value = sites[0].id;
         });
         // a chapter that can't open here: offer your other sources instead of leaving the app
         const cantReadHere = (c) => {
-            if (siteSources.value.length && readSrc.value === 'mangadex') { readSrc.value = siteSources.value[0].id; showToast(`That chapter is only linked on MangaDex — switched to ${siteSources.value[0].name}`); }
-            else { extOpen.value = true; showToast(c?.url ? 'That chapter is only linked on MangaDex. Add a website source to read it here.' : 'Install a source to read in the app'); }
+            const sites = kindSources('manga');
+            if (sites.length && readSrc.value === 'mangadex') { readSrc.value = sites[0].id; showToast(`That chapter is only linked on MangaDex — switched to ${sites[0].name}`); }
+            else { openExtensions('manga'); showToast(c?.url ? 'That chapter is only linked on MangaDex. Add a website source to read it here.' : 'Install a source to read in the app'); }
         };
 
         const canReadInApp = (c) => !!c && (!!c.src || (extOn('mangadex') && !c.url));   // website-source chapter, or a MangaDex-hosted one
@@ -5778,6 +6141,7 @@ createApp({
         };
         const openChapter = async (c, manga = selectedAnime.value) => {
             if (!canReadInApp(c)) { cantReadHere(c); return; }
+            addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
             freeBlobs();
             Object.assign(rd, { open: true, manga, chapter: c, pages: [], i: 0, mode: defaultMode(manga), loading: true, error: '', local: false, marked: false, ui: true, source: c.src || null, referer: null, proxyAll: false });
             pageRetried.clear();   // new chapter: every page may be retried once again
@@ -5897,6 +6261,189 @@ createApp({
             if (chapterRead(c)) setProgressTo(anime, Math.max(0, n - 1), { ask: false });
             else setProgressTo(anime, n);
         };
+
+        // ---------- History: what you read / watched / played, per section (kept on this device) ----------
+        const HIST_KEY = 'anicoop_history_v1';
+        const history = ref((() => { const h = readJSON(HIST_KEY); return Array.isArray(h) ? h : []; })());
+        const saveHistory = debounce(() => { try { localStorage.setItem(HIST_KEY, JSON.stringify(history.value.slice(0, 500))); } catch {} }, 400);
+        // what = { key, label, sub }: the same chapter / episode again moves to the top instead of repeating
+        const addHistory = (a, what) => {
+            if (!a?.id || !what) return;
+            const e = { key: `${a.id}:${what.key}`, id: a.id, type: a.type, title: titleOf(a), cover: a.coverImage?.large || null, label: what.label, sub: what.sub || '', at: Date.now(), media: normMedia(a) };
+            history.value = [e, ...history.value.filter(x => x.key !== e.key)].slice(0, 500); saveHistory();
+        };
+        watch(trailerOf, (a) => { if (a?.trailer?.id) addHistory(a, { key: 'yt' + a.trailer.id, label: 'Watched a trailer' }); });
+        const histOpen = ref(false);
+        const histType = ref('ANIME');
+        const openHistory = (type = mediaType.value) => { histType.value = type; histOpen.value = true; };
+        const histItems = computed(() => history.value.filter(x => x.type === histType.value));
+        const histDay = (t) => {
+            const d = new Date(t); const today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
+            if (d.toDateString() === today.toDateString()) return 'Today';
+            if (d.toDateString() === y.toDateString()) return 'Yesterday';
+            return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }) });
+        };
+        const histGroups = computed(() => {
+            const out = [];
+            histItems.value.forEach(x => { const l = histDay(x.at); const g = out[out.length - 1]; if (g && g.label === l) g.items.push(x); else out.push({ label: l, items: [x] }); });
+            return out;
+        });
+        const removeHistory = (key) => { history.value = history.value.filter(x => x.key !== key); saveHistory(); };
+        const clearHistory = async () => {
+            const name = (SECTION_LIST.find(s => s.type === histType.value)?.label || 'this section');
+            if (!(await askConfirm({ title: `Clear your ${name} history?`, body: 'Only the history list is removed. Your lists and progress stay as they are.', ok: 'Clear history' }))) return;
+            history.value = history.value.filter(x => x.type !== histType.value); saveHistory();
+        };
+        const openHistoryItem = (x) => { histOpen.value = false; fetchAnimeDetails(x.media || { id: x.id, type: x.type }); };
+        const histTime = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+        // ---------- Read / Watch window ----------
+        const isVideoKind = computed(() => playKind.value === 'anime' || playKind.value === 'tv');
+        const isMovie = computed(() => selectedAnime.value?.type === 'TV' && selectedAnime.value.format === 'MOVIE');
+        const seasonsOf = (a) => (a?.seasons || []).filter(x => x.episodes > 0);
+        // TV progress counts every episode of the show, so "S2 E3" is episode (all of season 1) + 3
+        const absOf = (a, season, ep) => { if (!season) return ep; let n = 0; for (const x of seasonsOf(a)) { if (x.n >= season) break; n += x.episodes; } return n + ep; };
+        const seasonForAbs = (a, abs) => { let n = 0; for (const x of seasonsOf(a)) { if (abs <= n + x.episodes) return x.n; n += x.episodes; } return seasonsOf(a).slice(-1)[0]?.n || 1; };
+        const myProgress = (a) => soloEntry(a?.id)?.progress || myEntry(a?.id)?.progress || 0;
+        // TV episode guide from TMDB, one season at a time
+        const tvSeasons = reactive({});   // "titleId:season" → [{ n, name, overview, still, runtime, air }] | 'loading' | 'error'
+        const loadTvSeason = async (n) => {
+            const a = selectedAnime.value; if (!a || a.type !== 'TV' || a.format === 'MOVIE' || !a.extId) return;
+            const key = `${a.id}:${n}`; if (Array.isArray(tvSeasons[key]) || tvSeasons[key] === 'loading') return;
+            tvSeasons[key] = 'loading';
+            try {
+                const d = await tmdbCall(`tv/${a.extId}/season/${n}`);
+                tvSeasons[key] = (d.episodes || []).map(e => ({ n: e.episode_number, name: e.name, overview: e.overview || '', still: TMDB_IMG(e.still_path, 'w300'), runtime: e.runtime || null, air: e.air_date || null }));
+            } catch { tvSeasons[key] = 'error'; }
+        };
+        const openWatch = () => {
+            const a = selectedAnime.value; if (!a || !playKind.value) return;
+            if (!readSrc.value || !readTabs.value.some(t => t.id === readSrc.value)) readSrc.value = readTabs.value[0]?.id || null;
+            if (a.type === 'TV' && !isMovie.value) {
+                const seasons = seasonsOf(a);
+                if (!seasons.some(x => x.n === wp.season) || wp.id !== a.id) wp.season = seasons.length ? seasonForAbs(a, myProgress(a) + 1) : 1;
+                loadTvSeason(wp.season);
+            }
+            wp.id = a.id; wp.open = true;
+        };
+        watch(() => wp.season, (n) => { if (wp.open) loadTvSeason(n); });
+        watch(() => selectedAnime.value?.id, () => { wp.open = false; });
+        const srcEps = computed(() => isVideoKind.value && readSrc.value !== 'mangadex' && !srcView.picking ? srcView.chapters : []);
+        const noSeasons = computed(() => srcEps.value.every(c => !c.season));
+        // the source's episode for a row of the guide
+        const srcEpFor = (season, ep, abs) => {
+            const list = srcEps.value; if (!list.length) return null;
+            return list.find(c => c.season === season && c.ep === ep) || (noSeasons.value ? list.find(c => c.ep === abs) || (season === 1 ? list.find(c => c.ep === ep) : null) : null) || null;
+        };
+        const plainText = (html) => String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        // Netflix-style rows (number, picture, name, length, summary); "item" is the source's episode that plays
+        const wpRows = computed(() => {
+            const a = selectedAnime.value; const k = playKind.value;
+            if (!a || !k || k === 'manga') return [];
+            const prog = myProgress(a); const done = myEntry(a.id)?.status === 'COMPLETED';
+            const row = (r) => ({ ...r, watched: done || (r.abs != null && r.abs > 0 && prog >= r.abs) });
+            if (isMovie.value) return [row({ key: 'movie', n: 1, abs: 1, title: titleOf(a), desc: plainText(a.description).slice(0, 320), thumb: a.bannerImage || a.coverImage?.large, runtime: a.runtime, item: srcEps.value[0] || null })];
+            if (a.type === 'TV') {
+                const eps = tvSeasons[`${a.id}:${wp.season}`];
+                if (Array.isArray(eps) && eps.length) return eps.map(e => { const abs = absOf(a, wp.season, e.n); return row({ key: `s${wp.season}e${e.n}`, n: e.n, abs, title: e.name || `Episode ${e.n}`, desc: e.overview, thumb: e.still, runtime: e.runtime, air: e.air, item: srcEpFor(wp.season, e.n, abs) }); });
+                // no episode guide: the source's own list for this season
+                return srcEps.value.filter(c => noSeasons.value || c.season === wp.season).map(c => row({ key: c.id, n: c.ep, abs: c.season ? absOf(a, c.season, c.ep) : c.ep, title: c.title, desc: '', thumb: null, item: c }));
+            }
+            // anime: the source's episodes, with AniList's episode pictures and names where it has them
+            const thumbs = new Map(detailEpisodes.value.filter(e => e.n).map(e => [e.n, e]));
+            if (srcEps.value.length) return srcEps.value.map(c => {
+                const n = c.ep != null ? Math.floor(c.ep) : null; const t = thumbs.get(n);
+                return row({ key: c.id, n: c.ep ?? '–', abs: n, title: (c.title && !/^Episode [\d.]+$/.test(c.title) ? c.title : '') || t?.name || c.title || 'Episode', desc: '', thumb: t?.thumbnail || null, item: c });
+            });
+            const total = a.episodes || (a.nextAiringEpisode?.episode ? a.nextAiringEpisode.episode - 1 : 0) || detailEpisodes.value.length;
+            return Array.from({ length: Math.min(total, 2000) }, (_, i) => { const t = thumbs.get(i + 1); return row({ key: 'e' + (i + 1), n: i + 1, abs: i + 1, title: t?.name || `Episode ${i + 1}`, desc: '', thumb: t?.thumbnail || null, item: null }); });
+        });
+        const wpShown = ref(40);
+        watch(() => [selectedAnime.value?.id, wp.season, readSrc.value], () => { wpShown.value = 40; });
+        // the big button: the next thing you haven't read / watched yet
+        const wpContinue = computed(() => {
+            if (playKind.value === 'manga') return continueChapter.value ? { label: `ch ${continueChapter.value.ch}`, chapter: continueChapter.value } : null;
+            const prog = myProgress(selectedAnime.value);
+            const r = wpRows.value.find(x => x.item && x.abs > prog) || (prog ? null : wpRows.value.find(x => x.item));
+            return r ? { label: isMovie.value ? '' : selectedAnime.value?.type === 'TV' ? `S${wp.season} E${r.n}` : `ep ${r.n}`, row: r } : null;
+        });
+        const playContinue = () => { const c = wpContinue.value; if (!c) return; if (c.chapter) openChapter(c.chapter); else playRow(c.row); };
+        const wpStarted = computed(() => myProgress(selectedAnime.value) > 0);
+        const playRow = (r) => {
+            if (r.item) return openEpisode(r.item, selectedAnime.value, r);
+            if (!readTabs.value.length) { openExtensions(); return; }
+            if (srcView.loading) { showToast(`Still looking on ${currentSite.value?.name || 'the source'}…`); return; }
+            showToast(srcView.picking ? 'Pick the right title first' : `${currentSite.value?.name || 'This source'} doesn’t have this one. Try another source.`, 'error');
+        };
+        const toggleRowWatched = (r) => { const a = selectedAnime.value; if (!a || r.abs == null) return; setProgressTo(a, r.watched ? Math.max(0, r.abs - 1) : r.abs, { ask: false }); };
+
+        // ---------- video player (anime, movies & TV) ----------
+        // A site's player is shown in a sandboxed frame: it plays, but can't open pop-ups or send you to other websites.
+        const vp = reactive({ open: false, anime: null, ep: null, abs: null, label: '', servers: [], i: 0, loading: false, error: '', safe: true, marked: false, local: false });
+        let hls = null, localUrl = null;
+        const vpLabel = (a, c, r) => c?.movie || a?.format === 'MOVIE' ? 'Movie' : c?.season ? `S${c.season} E${c.ep}` : a?.type === 'TV' && r ? `S${wp.season} E${r.n}` : `Episode ${c?.ep ?? r?.n ?? '?'}`;
+        const stopVideo = () => { if (hls) { try { hls.destroy(); } catch {} hls = null; } };
+        const openEpisode = async (c, anime = selectedAnime.value, r = null) => {
+            const s = c.src === 'archive' ? ARCHIVE_SRC : siteSources.value.find(x => x.id === c.src);
+            stopVideo();
+            const abs = r?.abs ?? (c.movie ? 1 : anime?.type === 'TV' && c.season ? absOf(anime, c.season, c.ep) : Math.floor(c.ep || 0) || null);
+            Object.assign(vp, { open: true, anime, ep: c, abs, label: vpLabel(anime, c, r), servers: [], i: 0, loading: true, error: '', marked: false, local: false });
+            addHistory(anime, { key: 'ep:' + vp.label, label: vp.label, sub: s?.name || '' });
+            try {
+                if (!s) throw new Error('That source was removed.');
+                const list = await sourceApi.videos(s, c.link);
+                if (vp.ep?.id !== c.id) return;
+                if (!list.length) throw new Error(`No player found on ${s.name} for this episode. Try another source.`);
+                vp.servers = list.sort((x, y) => (x.kind === 'embed') - (y.kind === 'embed'));   // plain video files first: they play with nothing around them
+            } catch (err) { if (vp.ep?.id === c.id) vp.error = friendlyErr(err); }
+            finally { if (vp.ep?.id === c.id) vp.loading = false; }
+        };
+        const loadHls = () => window.Hls ? Promise.resolve(window.Hls) : new Promise((ok, bad) => {
+            const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+            sc.onload = () => ok(window.Hls); sc.onerror = () => bad(new Error('Couldn’t load the stream player. Try another server.')); document.head.appendChild(sc);
+        });
+        const vpServer = computed(() => vp.servers[vp.i] || null);
+        watch(() => vp.open && vpServer.value?.url, async () => {
+            stopVideo();
+            const sv = vpServer.value; if (!vp.open || !sv || sv.kind === 'embed') return;
+            await nextTick();
+            const el = document.getElementById('vp-video'); if (!el) return;
+            if (sv.kind === 'hls' && !el.canPlayType('application/vnd.apple.mpegurl')) {
+                try {
+                    const Hls = await loadHls(); if (vpServer.value?.url !== sv.url) return;
+                    if (!Hls.isSupported()) throw new Error('This browser can’t play this stream. Try another server.');
+                    hls = new Hls(); hls.loadSource(sv.url); hls.attachMedia(el);
+                    hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) vp.error = 'This stream didn’t load (the site may only allow its own player). Try another server.'; });
+                } catch (err) { vp.error = err.message; }
+            } else el.src = sv.url;
+        });
+        const pickServer = (n) => { vp.i = n; vp.error = ''; };
+        const markEpisodeWatched = async () => {
+            const a = vp.anime; const n = vp.abs; if (!a || !n || vp.local) return;
+            vp.marked = true;
+            if (myProgress(a) < n) await setProgressTo(a, n, { ask: false });
+        };
+        const onVideoTime = (e) => { const v = e.target; if (!vp.marked && v.duration && v.currentTime / v.duration > 0.9) markEpisodeWatched(); };
+        const onVideoError = () => { if (vpServer.value && vpServer.value.kind !== 'embed' && !hls) vp.error = 'This video didn’t load. Try another server.'; };
+        const vpList = () => srcView.chapters.filter(c => c.src === vp.ep?.src);
+        const vpNeighbour = (d) => { const list = vpList(); const k = list.findIndex(c => c.id === vp.ep?.id); return k === -1 ? null : list[k + d] || null; };
+        const vpGo = async (d) => {
+            const c = vpNeighbour(d); if (!c) return;
+            if (d > 0 && !vp.marked) markEpisodeWatched();   // moving on = you watched this one
+            if (c.season && selectedAnime.value?.type === 'TV') wp.season = c.season;
+            openEpisode(c, vp.anime, wpRows.value.find(r => r.item?.id === c.id) || null);
+        };
+        const closeVideo = () => { stopVideo(); vp.open = false; vp.servers = []; if (localUrl) { URL.revokeObjectURL(localUrl); localUrl = null; } };
+        const openLocalVideo = (e) => {
+            const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+            closeVideo(); localUrl = URL.createObjectURL(f);
+            Object.assign(vp, { open: true, anime: selectedAnime.value, ep: { id: 'local', title: f.name }, abs: null, label: f.name, servers: [{ name: 'This device', url: localUrl, kind: 'file' }], i: 0, loading: false, error: '', marked: false, local: true });
+        };
+        window.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (vp.open) closeVideo();
+            else if (wp.open && !extOpen.value && !rd.open) wp.open = false;
+        });
 
         // ---------- OWNER: who may see 18+ content ----------
         const adultAllowed = ref(false);
@@ -7177,7 +7724,10 @@ createApp({
         });
 
         return {
-            repoScan, scanRepo, repoOk,
+            repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
+            vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
+            history, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
             siteSources, srcForm, SOURCE_TEMPLATES, installRepoItem, repoLangs, repoShown, repoState, addSource, testSource, removeSource, loadRepo, repoInstalled, readSrc, srcView, readTabs, currentSite, chapterList, loadSourceFor, chooseMatch, changeMatch, onPageError,
             EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
             moreWatch, reader, readInfo, readLangs, readSources, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, fmtClock, seriesLimit, seriesVisible,
@@ -7235,7 +7785,7 @@ createApp({
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, TOP_MODES, setTopMode, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, closePlayer, openArtist, openArtistByName, openSongArtist, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, TOP_MODES, setTopMode, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, closePlayer, openArtist, openArtistByName, openSongArtist, openSongAlbum, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
             picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,

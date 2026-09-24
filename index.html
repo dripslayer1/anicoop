@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=8.5">
+    <link rel="stylesheet" href="app.css?v=8.6">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=8.5" defer></script>
+    <script src="app.js?v=8.6" defer></script>
 </head>
 <body>
 
@@ -210,7 +210,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v8.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v8.6</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -453,6 +453,7 @@
                         <div class="absolute inset-0 bg-gradient-to-r from-base/80 to-transparent"></div>
                     </div>
                     <div class="max-w-[1200px] mx-auto px-4 md:px-8 -mt-40 md:-mt-52 relative flex flex-col md:flex-row gap-8 md:gap-12">
+                        <button v-if="playKind" @click="openWatch" class="banner-play" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : isMovie ? 'sources' : 'episodes & sources' }}</small></span></button>
                         <div class="w-full md:w-72 shrink-0 flex flex-col gap-5">
                             <div class="relative w-44 md:w-full mx-auto">
                                 <img :src="selectedAnime.coverImage?.large" class="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" alt="">
@@ -522,7 +523,7 @@
                                 <dl class="space-y-3">
                                     <div v-for="row in detailInfo" :key="row.k">
                                         <dt class="text-[11px] font-semibold text-mute">{{ row.k }}</dt>
-                                        <dd class="text-sm mt-0.5 break-words" :class="row.hot ? 'text-volt font-semibold' : 'text-ink'">{{ row.v }}</dd>
+                                        <dd class="text-sm mt-0.5 break-words" :class="row.hot ? 'text-volt font-semibold' : 'text-ink'"><button v-if="row.go" @click="row.go === 'artist' ? openSongArtist(selectedAnime) : openSongAlbum(selectedAnime)" class="info-link" :title="row.go === 'artist' ? 'Open the artist page' : 'Open the album'">{{ row.v }}<i class="fa-solid fa-arrow-right"></i></button><template v-else>{{ row.v }}</template></dd>
                                     </div>
                                 </dl>
                             </div>
@@ -534,11 +535,11 @@
                             <p v-if="altTitleOf(selectedAnime)" class="mt-2 text-sub">{{ altTitleOf(selectedAnime) }}</p>
 
                             <div class="flex flex-wrap gap-2 mt-6">
+                                <!-- Read / Watch: opens the window with your sources and every chapter / episode -->
+                                <button v-if="playKind" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
                                 <button v-if="selectedAnime.trailer?.id" @click="playTrailer(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-volt text-onvolt text-xs font-bold active:scale-95 transition-transform"><i class="fa-solid fa-play text-[10px]"></i> Watch trailer</button>
                                 <button @click="sendAnimeTo(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-paper-plane text-[10px] text-lilac"></i> Send to a friend</button>
                                 <button v-if="isAniListType(selectedAnime.type)" @click="toggleFollow(selectedAnime)" :class="isFollowing(selectedAnime.id) ? 'bg-volt text-onvolt border-volt' : 'bg-raised text-ink border-line2'" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold border" :title="isFollowing(selectedAnime.id) ? 'Turn off alerts' : 'Get notified about new episodes, seasons and updates'"><i class="fa-solid text-[11px]" :class="isFollowing(selectedAnime.id) ? 'fa-bell' : 'fa-bell-slash'"></i> {{ isFollowing(selectedAnime.id) ? 'Alerts on' : 'Get alerts' }}</button>
-                                <a v-if="selectedAnime.type === 'ANIME' && detailEpisodes.length" href="#watch" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#F47521] text-white text-xs font-bold"><i class="fa-solid fa-tv text-[10px]"></i> Episodes</a>
-                                <a v-if="selectedAnime.type === 'MANGA'" href="#read" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#ff6740] text-white text-xs font-bold"><i class="fa-solid fa-book-open text-[10px]"></i> Read chapters</a>
                                 <a href="#comments" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-comments text-[11px] text-lilac"></i> Comments <span v-if="comments.length" class="text-mute">{{ comments.length }}</span></a>
                                 <span v-if="selectedAnime.averageScore" class="rating !text-sm !px-3 !py-1.5"><i class="fa-solid fa-star star"></i> {{ formatAvg(selectedAnime.averageScore) }}</span>
                                 <span v-if="epBadge(selectedAnime) && selectedAnime.status === 'RELEASING'" class="rating !text-sm !px-3 !py-1.5 !font-normal">{{ epBadge(selectedAnime) }} out</span>
@@ -644,84 +645,6 @@
                                         </span>
                                     </button>
                                 </div>
-                            </section>
-
-                            <!-- ===== READ (manga & manhwa): sources + chapter list, opens on the source's website ===== -->
-                            <section v-if="selectedAnime.type === 'MANGA'" id="read" class="mt-12 scroll-mt-24">
-                                <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
-                                    <div>
-                                        <p class="kicker">// read here with your sources · or on the official sites</p>
-                                        <h3 class="mt-1 font-display font-semibold text-ink text-xl">Read</h3>
-                                    </div>
-                                    <div class="flex items-center gap-2 text-xs">
-                                        <span v-if="mangaStatusOf(selectedAnime)" class="mstat" :style="{ '--c': mangaStatusOf(selectedAnime).color }"><i></i>{{ mangaStatusOf(selectedAnime).label }}</span>
-                                        <span v-if="lastChapterOf(selectedAnime)" class="rating !font-normal">Latest: ch {{ fmtChapter(lastChapterOf(selectedAnime)) }}</span>
-                                    </div>
-                                </div>
-                                <!-- read in the app (extensions) -->
-                                <div class="panel !rounded-2xl p-3.5 mb-4 flex flex-wrap items-center gap-2.5">
-                                    <template v-if="readTabs.length || extOn('local')">
-                                        <button v-if="continueChapter" @click="openChapter(continueChapter)" class="btn-primary !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-book-open-reader"></i> {{ (soloEntry(selectedAnime.id)?.progress || 0) ? 'Continue' : 'Start' }} · ch {{ continueChapter.ch }}</button>
-                                        <label v-if="extOn('local')" class="btn-ghost !py-2.5 !px-4 !text-xs cursor-pointer"><i class="fa-solid fa-file-zipper"></i> Open CBZ / ZIP / images<input type="file" accept=".cbz,.zip,image/*" multiple class="hidden" @change="openLocalFiles"></label>
-                                        <span class="text-xs text-sub flex-grow">{{ readTabs.length ? 'Tap any chapter with the book icon to read it here.' : '' }}</span>
-                                    </template>
-                                    <span v-else class="text-xs text-sub flex-grow"><i class="fa-solid fa-puzzle-piece text-volt mr-1.5"></i>Want to read inside anicoop? Install a reading extension.</span>
-                                    <button @click="extOpen = true" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-puzzle-piece"></i> Extensions <span v-if="(PREFS.extensions || []).length + siteSources.length" class="opacity-60">· {{ (PREFS.extensions || []).length + siteSources.length }}</span></button>
-                                </div>
-
-                                <!-- chapters from the source you pick (MangaDex or any website source you installed) -->
-                                <div v-if="readTabs.length" class="panel overflow-hidden mt-5">
-                                    <div class="flex items-center gap-1.5 px-3 pt-3 overflow-x-auto no-scrollbar">
-                                        <button v-for="t in readTabs" :key="t.id" @click="readSrc = t.id" class="src-tab" :class="{ on: readSrc === t.id }"><i class="fa-solid text-[10px]" :class="t.icon"></i>{{ t.name }}</button>
-                                        <button @click="extOpen = true" class="src-tab !border-dashed" title="Add a source"><i class="fa-solid fa-plus text-[10px]"></i></button>
-                                    </div>
-                                    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-line">
-                                        <p class="label !text-ink min-w-0 truncate">
-                                            Chapters <span class="text-mute">· {{ chapterList.length }}{{ readSrc === 'mangadex' && reader.total > chapterList.length ? ' of ' + reader.total : '' }}</span>
-                                            <span v-if="currentSite && srcView.match" class="text-mute normal-case tracking-normal font-normal"> · “{{ srcView.match.title }}” <button @click="changeMatch" class="text-sub hover:text-ink underline ml-1">wrong title?</button></span>
-                                        </p>
-                                        <div v-if="readSrc === 'mangadex'" class="chip-wrap"><select v-model="reader.lang" class="chip !h-9 !text-xs"><option v-for="l in readLangs" :key="l.v" :value="l.v">{{ l.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
-                                    </div>
-
-                                    <!-- website source: pick the right title when it wasn't found automatically -->
-                                    <div v-if="currentSite && srcView.picking" class="p-4">
-                                        <form @submit.prevent="loadSourceFor(srcView.q)" class="flex gap-2 mb-3">
-                                            <input v-model="srcView.q" :placeholder="'Search ' + currentSite.name + '…'" class="field !py-2 !rounded-xl !text-sm">
-                                            <button type="submit" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid fa-magnifying-glass"></i></button>
-                                        </form>
-                                        <p v-if="srcView.loading" class="text-sm text-mute"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Searching {{ currentSite.name }}…</p>
-                                        <p v-else-if="srcView.error" class="text-sm text-sub">{{ srcView.error }}</p>
-                                        <p v-else-if="!srcView.results.length" class="text-sm text-mute">Nothing found on {{ currentSite.name }}. Try another spelling.</p>
-                                        <p v-else class="text-xs text-sub mb-2">Which one is it?</p>
-                                        <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                                            <button v-for="r in srcView.results" :key="r.url" @click="chooseMatch(r)" class="text-left group">
-                                                <span class="block aspect-[2/3] rounded-xl overflow-hidden bg-raised ring-1 ring-line group-hover:ring-volt transition-shadow"><img v-if="r.cover" :src="r.cover" referrerpolicy="no-referrer" class="w-full h-full object-cover" loading="lazy" decoding="async" alt=""></span>
-                                                <span class="block text-xs text-ink font-semibold line-clamp-2 mt-1.5">{{ r.title }}</span>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <template v-else>
-                                        <div v-if="(readSrc === 'mangadex' ? reader.loading : srcView.loading) && !chapterList.length" class="p-4 space-y-2"><div v-for="n in 5" :key="n" class="h-11 rounded-xl skeleton"></div></div>
-                                        <p v-else-if="readSrc === 'mangadex' && !readInfo?.md" class="p-5 text-sm text-mute">{{ readInfo ? 'MangaDex doesn’t have this title. Pick another source above.' : 'Looking for it on MangaDex…' }}</p>
-                                        <p v-else-if="readSrc === 'mangadex' ? reader.error : srcView.error" class="p-5 text-sm text-sub">{{ readSrc === 'mangadex' ? reader.error : srcView.error }}</p>
-                                        <p v-else-if="!chapterList.length" class="p-5 text-sm text-mute">No chapters here. Try another language or source.</p>
-                                        <div v-for="c in shownChapters" :key="c.id" class="chap-row" :class="{ read: chapterRead(c) }">
-                                            <button @click="openChapter(c)" class="min-w-0 flex-grow flex items-center gap-3 text-left">
-                                                <span class="font-mono text-xs font-bold text-ink w-16 shrink-0">Ch {{ c.ch || '–' }}</span>
-                                                <span class="min-w-0">
-                                                    <span class="block text-sm text-ink truncate">{{ c.title || (c.vol ? 'Volume ' + c.vol : 'Chapter ' + (c.ch || '')) }}</span>
-                                                    <span class="block text-[11px] text-mute truncate">{{ [c.group, c.at && !isNaN(Date.parse(c.at)) ? timeAgo(c.at) : c.at, c.url ? 'official release — only linked' : ''].filter(Boolean).join(' · ') }}</span>
-                                                </span>
-                                            </button>
-                                            <i v-if="canReadInApp(c)" class="fa-solid fa-book-open-reader text-[11px] text-volt shrink-0" title="Reads in the app"></i>
-                                            <a v-else :href="chapterUrl(c)" target="_blank" rel="noopener" class="text-mute hover:text-ink shrink-0" title="Open the publisher’s website instead"><i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
-                                            <button v-if="c.ch && !Number.isNaN(parseFloat(c.ch))" @click="toggleChapterRead(selectedAnime, c)" class="ep-check" :class="{ on: chapterRead(c) }" :title="chapterRead(c) ? 'Mark chapter ' + c.ch + ' unread' : 'Mark read up to chapter ' + c.ch"><i class="fa-solid fa-check"></i></button>
-                                        </div>
-                                        <button v-if="chapterList.length > reader.shown || (readSrc === 'mangadex' && reader.chapters.length < reader.total)" @click="showMoreChapters" :disabled="reader.loading" class="w-full py-3 text-xs font-bold text-sub hover:text-ink hover:bg-raised transition-colors border-t border-line"><i class="fa-solid mr-1.5" :class="reader.loading ? 'fa-circle-notch fa-spin' : 'fa-chevron-down'"></i>Show more chapters</button>
-                                    </template>
-                                </div>
-                                <p class="mt-3 text-[11px] text-mute">Chapters come from the source you pick. Website sources are read without their ads or trackers.</p>
                             </section>
 
                             <section v-if="selectedAnime.type === 'ANIME'" id="watch" class="mt-12 scroll-mt-24">
@@ -1319,7 +1242,7 @@
 
                         <template v-else>
                             <section v-if="viewedRankings.some(c => c.items.length)">
-                              <div class="max-w-3xl mx-auto">
+                              <div class="w-full">
                                 <h2 class="font-display font-semibold text-ink text-2xl mb-5">Their rankings</h2>
                                 <div class="seg seg-wrap max-w-full w-fit mb-4">
                                     <button v-for="c in viewedRankings" :key="c.id" @click="rankTab.them = c.id" :class="{ 'is-on': rankTab.them === c.id }" class="seg-btn !px-3 whitespace-nowrap"><i class="fa-solid mr-1.5" :class="c.icon"></i>{{ c.label }} <span class="opacity-60">{{ c.items.length }}</span></button>
@@ -1332,6 +1255,8 @@
                                         <span class="font-display font-black text-lg w-10 text-center shrink-0" :class="idx < 3 ? 'text-volt' : 'text-mute'">#{{ idx + 1 }}</span>
                                         <img :src="item.anime.coverImage?.large" class="w-10 h-14 object-cover rounded-lg shrink-0" loading="lazy" decoding="async" alt="" draggable="false">
                                         <span class="flex-grow min-w-0 text-ink font-semibold text-sm truncate">{{ titleOf(item.anime) }}</span>
+                                        <span v-if="(item.anime.genres || []).length" class="rank-genres">{{ item.anime.genres.slice(0, 3).join(' · ') }}</span>
+                                        <span v-if="item.anime.seasonYear" class="rank-year">{{ item.anime.seasonYear }}</span>
                                         <span class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}</span>
                                     </div>
                                     <button v-if="cat.items.length > shownOf('them:' + cat.id)" @click="showMoreRank('them:' + cat.id)" class="w-full py-3 text-xs font-bold text-sub hover:text-ink hover:bg-raised transition-colors border-t border-line"><i class="fa-solid fa-chevron-down mr-1.5"></i>Show 10 more · {{ cat.items.length - shownOf('them:' + cat.id) }} left</button>
@@ -1442,8 +1367,16 @@
                         </div>
                         <div v-for="(a, idx) in topItems" :key="a.id" class="rank-row" :class="{ 'rank-song': mediaType === 'SONG' }" role="button" tabindex="0" @click="openTopItem(a)" @keydown.enter.self="openTopItem(a)">
                             <span class="font-display font-black w-12 text-center shrink-0" :class="[idx < 3 ? 'text-volt text-xl' : 'text-mute text-lg', idx >= 99 ? '!text-base' : '']">#{{ idx + 1 }}</span>
-                            <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="object-cover rounded-lg shrink-0" :class="mediaType === 'SONG' ? 'w-12 h-12' : 'w-10 h-14'" loading="lazy" decoding="async" alt="">
-                            <span v-else class="rounded-lg shrink-0 skeleton" :class="mediaType === 'SONG' ? 'w-12 h-12' : 'w-10 h-14'"></span>
+                            <span v-if="mediaType === 'SONG'" class="top-cover">
+                                <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-12 h-12 object-cover rounded-lg" loading="lazy" decoding="async" alt="">
+                                <span v-else class="block w-12 h-12 rounded-lg skeleton"></span>
+                                <!-- play the preview without leaving the list -->
+                                <button @click.stop="playPreview(a)" class="top-play" :class="{ on: player.song?.id === a.id || (a.wiki && player.song?.title?.romaji === a.title?.romaji) }" :title="isPlaying(a) ? 'Pause' : 'Play preview'" :aria-label="isPlaying(a) ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="player.loading && player.song?.id === a.id ? 'fa-circle-notch fa-spin' : isPlaying(a) ? 'fa-pause' : 'fa-play'"></i></button>
+                            </span>
+                            <template v-else>
+                                <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-10 h-14 object-cover rounded-lg shrink-0" loading="lazy" decoding="async" alt="">
+                                <span v-else class="w-10 h-14 rounded-lg shrink-0 skeleton"></span>
+                            </template>
                             <span class="flex-grow min-w-0">
                                 <span class="block text-ink font-semibold text-sm truncate">{{ titleOf(a) }}</span>
                                 <span class="block text-[11px] text-mute truncate mt-0.5">{{ mediaType === 'SONG' ? [(a.artists || []).join(', '), a.seasonYear].filter(Boolean).join(' · ') : [a.seasonYear, (a.genres || []).slice(0, 3).join(', ')].filter(Boolean).join(' · ') }}</span>
@@ -1527,7 +1460,7 @@
                             <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ listTitle }}</h1>
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <button v-if="section === 'manga'" @click="extOpen = true" class="btn-ghost"><i class="fa-solid fa-puzzle-piece text-volt"></i> Extensions<span v-if="(PREFS.extensions || []).length" class="opacity-60">· {{ PREFS.extensions.length }}</span></button>
+                            <button @click="openHistory(mediaType)" class="btn-ghost"><i class="fa-solid fa-clock-rotate-left text-volt"></i> History<span v-if="history.some(h => h.type === mediaType)" class="opacity-60">· {{ history.filter(h => h.type === mediaType).length }}</span></button>
                         </div>
                     </div>
 
@@ -1700,7 +1633,13 @@
                                     @open="fetchAnimeDetails(anime)" @trailer="playTrailer(anime)" @action="quickSolo(anime, $event)" @edit="openEditor(anime)" @toggle="onPlusClick(anime)"></poster-card>
                             </div>
                             <!-- infinite scroll: loads the next page as you get close to the bottom -->
-                            <div v-if="!isLoading && !browseError && visibleResults.length" v-infinite="loadMoreBrowse" class="mt-10 min-h-[60px] flex items-center justify-center">
+                            <!-- Songs: a button for the next 100 instead of loading by itself -->
+                            <div v-if="!isLoading && !browseError && visibleResults.length && section === 'songs'" class="mt-10 flex flex-col items-center gap-3">
+                                <p v-if="moreError" class="text-sm text-sub">{{ moreError }}</p>
+                                <button v-if="hasNextPage || moreError" @click="moreError ? (moreError = '', fetchMainList(true)) : loadMoreBrowse()" :disabled="isLoadingMore" class="btn-ghost !py-3 !px-6"><i class="fa-solid" :class="isLoadingMore ? 'fa-circle-notch fa-spin' : moreError ? 'fa-rotate-right' : 'fa-chevron-down'"></i> {{ moreError ? 'Try again' : filters.search.trim() || filters.genre || filters.tag ? 'Show more songs' : 'Show 100 more songs' }}</button>
+                                <p v-else class="label">{{ filters.search.trim() ? 'That’s everything found' : 'That’s the whole chart' }} · {{ visibleResults.length }} songs</p>
+                            </div>
+                            <div v-if="!isLoading && !browseError && visibleResults.length && section !== 'songs'" v-infinite="loadMoreBrowse" class="mt-10 min-h-[60px] flex items-center justify-center">
                                 <div v-if="moreError" class="text-center">
                                     <p class="text-sm text-sub">{{ moreError }}</p>
                                     <button @click="moreError = ''; fetchMainList(true)" class="btn-ghost mt-3 !py-2.5"><i class="fa-solid fa-rotate-right text-xs"></i> Try again</button>
@@ -1766,11 +1705,11 @@
                         <div class="flex items-center gap-3">
                             <user-avatar :user="currentProfile" :size="36"></user-avatar>
                             <button v-if="!composer.open" @click="openComposer('post')" class="flex-grow text-left px-4 py-2.5 rounded-full bg-raised text-sm text-mute hover:text-sub transition-colors">Share something, start a poll, ask a question…</button>
-                            <div v-else class="seg">
+                            <div v-else class="seg seg-wrap max-w-full">
                                 <button v-for="k in COMPOSER_KINDS" :key="k.v" @click="composer.kind = k.v; picker.target = null" :class="{ 'is-on': composer.kind === k.v }" class="seg-btn !px-3"><i class="fa-solid mr-1.5" :class="k.icon"></i>{{ k.l }}</button>
                             </div>
                         </div>
-                        <div v-if="!composer.open" class="flex gap-2 mt-3 pl-12">
+                        <div v-if="!composer.open" class="flex flex-wrap gap-2 mt-3 pl-12">
                             <button v-for="k in COMPOSER_KINDS" :key="k.v" @click="openComposer(k.v)" class="squad-leave !text-sub"><i class="fa-solid" :class="k.icon"></i>{{ k.l }}</button>
                         </div>
 
@@ -3715,21 +3654,214 @@
     </transition>
 
     <!-- ============ TRAILER PLAYER ============ -->
-    <!-- ============ EXTENSIONS (manga reading sources, Mihon-style) ============ -->
+    <!-- ============ READ / WATCH (sources + every chapter / episode of the title you're on) ============ -->
+    <transition name="fade">
+        <div v-if="wp.open && selectedAnime && playKind" class="modal-back wp-back !z-[85]" @click.self="wp.open = false">
+            <transition name="pop" appear>
+                <div class="modal-card wp-card">
+                    <div class="wp-hero">
+                        <img v-if="selectedAnime.bannerImage || selectedAnime.coverImage?.large" :src="selectedAnime.bannerImage || selectedAnime.coverImage?.large" class="wp-hero-img" alt="">
+                        <div class="wp-hero-fade"></div>
+                        <button @click="wp.open = false" class="icon-btn wp-close" aria-label="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
+                        <div class="wp-hero-body">
+                            <p class="kicker">// {{ playKind === 'manga' ? 'read' : 'watch' }} · {{ KIND_LABEL[playKind].toLowerCase() }}</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-2xl md:text-3xl leading-tight line-clamp-2">{{ titleOf(selectedAnime) }}</h3>
+                            <div class="flex flex-wrap items-center gap-2 mt-3">
+                                <button v-if="wpContinue" @click="playContinue" class="btn-primary !py-2.5 !px-5 !text-sm"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open-reader' : 'fa-play'"></i> {{ wpStarted ? 'Continue' : playKind === 'manga' ? 'Start reading' : 'Play' }}<span v-if="wpContinue.label" class="opacity-70">· {{ wpContinue.label }}</span></button>
+                                <label v-if="playKind === 'manga' && extOn('local')" class="btn-ghost !py-2.5 !px-4 !text-xs cursor-pointer"><i class="fa-solid fa-file-zipper"></i> Open CBZ / ZIP / images<input type="file" accept=".cbz,.zip,image/*" multiple class="hidden" @change="openLocalFiles"></label>
+                                <label v-if="playKind !== 'manga' && extOn('localvideo')" class="btn-ghost !py-2.5 !px-4 !text-xs cursor-pointer"><i class="fa-solid fa-file-video"></i> Play a file<input type="file" accept="video/*" class="hidden" @change="openLocalVideo"></label>
+                                <button @click="openExtensions()" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-puzzle-piece"></i> Extensions<span v-if="readTabs.length" class="opacity-60">· {{ readTabs.length }}</span></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="wp-body">
+                        <!-- sources -->
+                        <div v-if="readTabs.length" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                            <button v-for="t in readTabs" :key="t.id" @click="readSrc = t.id" class="src-tab" :class="{ on: readSrc === t.id }"><i class="fa-solid text-[10px]" :class="t.icon"></i>{{ t.name }}</button>
+                            <button @click="openExtensions()" class="src-tab !border-dashed" title="Add a source"><i class="fa-solid fa-plus text-[10px]"></i></button>
+                        </div>
+                        <div v-else class="wp-empty">
+                            <i class="fa-solid fa-puzzle-piece text-volt text-lg"></i>
+                            <div class="min-w-0 flex-grow">
+                                <p class="text-ink font-semibold text-sm">No {{ playKind === 'manga' ? 'reading' : 'watching' }} sources yet</p>
+                                <p class="text-xs text-sub mt-0.5">anicoop doesn’t host anything itself. Install an extension to {{ playKind === 'manga' ? 'read' : 'watch' }} right here.</p>
+                            </div>
+                            <button @click="openExtensions()" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid fa-download"></i> Install</button>
+                        </div>
+
+                        <!-- list header -->
+                        <div class="flex flex-wrap items-center justify-between gap-3 mt-5 mb-3">
+                            <h4 class="font-display font-semibold text-ink text-xl">{{ playKind === 'manga' ? 'Chapters' : isMovie ? 'Movie' : 'Episodes' }}
+                                <span class="font-mono text-xs text-mute">{{ playKind === 'manga' ? chapterList.length + (readSrc === 'mangadex' && reader.total > chapterList.length ? ' of ' + reader.total : '') : isMovie ? '' : wpRows.length }}</span></h4>
+                            <div class="flex items-center gap-2 min-w-0">
+                                <div v-if="playKind === 'manga' && readSrc === 'mangadex'" class="chip-wrap"><select v-model="reader.lang" class="chip !h-9 !text-xs"><option v-for="l in readLangs" :key="l.v" :value="l.v">{{ l.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                                <div v-if="selectedAnime.type === 'TV' && !isMovie && seasonsOf(selectedAnime).length" class="chip-wrap"><select v-model.number="wp.season" class="chip !h-9 !text-xs"><option v-for="x in seasonsOf(selectedAnime)" :key="x.n" :value="x.n">{{ x.name || 'Season ' + x.n }} ({{ x.episodes }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                            </div>
+                        </div>
+                        <p v-if="currentSite && srcView.match && !srcView.picking" class="text-[11px] text-mute -mt-1 mb-3 truncate">On {{ currentSite.name }} as “{{ srcView.match.title }}” · <button @click="changeMatch" class="text-sub hover:text-ink underline">wrong title?</button></p>
+
+                        <!-- website source: pick the right title when it wasn't found automatically -->
+                        <div v-if="currentSite && srcView.picking" class="panel !rounded-2xl p-4">
+                            <form @submit.prevent="loadSourceFor(srcView.q)" class="flex gap-2 mb-3">
+                                <input v-model="srcView.q" :placeholder="'Search ' + currentSite.name + '…'" class="field !py-2 !rounded-xl !text-sm">
+                                <button type="submit" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid fa-magnifying-glass"></i></button>
+                            </form>
+                            <p v-if="srcView.loading" class="text-sm text-mute"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Searching {{ currentSite.name }}…</p>
+                            <p v-else-if="srcView.error" class="text-sm text-sub">{{ srcView.error }}</p>
+                            <p v-else-if="!srcView.results.length" class="text-sm text-mute">Nothing found on {{ currentSite.name }}, under this title or its other names. Try another spelling.</p>
+                            <p v-else class="text-xs text-sub mb-2">Not found under the same name. Which one is it?</p>
+                            <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                                <button v-for="r in srcView.results" :key="r.url" @click="chooseMatch(r)" class="text-left group">
+                                    <span class="block aspect-[2/3] rounded-xl overflow-hidden bg-raised ring-1 ring-line group-hover:ring-volt transition-shadow"><img v-if="r.cover" :src="r.cover" referrerpolicy="no-referrer" class="w-full h-full object-cover" loading="lazy" decoding="async" alt=""></span>
+                                    <span class="block text-xs text-ink font-semibold line-clamp-2 mt-1.5">{{ r.title }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- manga: chapters -->
+                        <div v-else-if="playKind === 'manga'" class="panel overflow-hidden">
+                            <div v-if="(readSrc === 'mangadex' ? reader.loading : srcView.loading) && !chapterList.length" class="p-4 space-y-2"><div v-for="n in 5" :key="n" class="h-11 rounded-xl skeleton"></div></div>
+                            <p v-else-if="!readTabs.length" class="p-5 text-sm text-mute">Chapters show up here once you install a source.</p>
+                            <p v-else-if="readSrc === 'mangadex' && !readInfo?.md" class="p-5 text-sm text-mute">{{ readInfo ? 'MangaDex doesn’t have this title. Pick another source above.' : 'Looking for it on MangaDex…' }}</p>
+                            <p v-else-if="readSrc === 'mangadex' ? reader.error : srcView.error" class="p-5 text-sm text-sub">{{ readSrc === 'mangadex' ? reader.error : srcView.error }}</p>
+                            <p v-else-if="!chapterList.length" class="p-5 text-sm text-mute">No chapters here. Try another language or source.</p>
+                            <div v-for="c in shownChapters" :key="c.id" class="chap-row" :class="{ read: chapterRead(c) }">
+                                <button @click="openChapter(c)" class="min-w-0 flex-grow flex items-center gap-3 text-left">
+                                    <span class="font-mono text-xs font-bold text-ink w-16 shrink-0">Ch {{ c.ch || '–' }}</span>
+                                    <span class="min-w-0">
+                                        <span class="block text-sm text-ink truncate">{{ c.title || (c.vol ? 'Volume ' + c.vol : 'Chapter ' + (c.ch || '')) }}</span>
+                                        <span class="block text-[11px] text-mute truncate">{{ [c.group, c.at && !isNaN(Date.parse(c.at)) ? timeAgo(c.at) : c.at, c.url ? 'official release — only linked' : ''].filter(Boolean).join(' · ') }}</span>
+                                    </span>
+                                </button>
+                                <i v-if="canReadInApp(c)" class="fa-solid fa-book-open-reader text-[11px] text-volt shrink-0" title="Reads in the app"></i>
+                                <i v-else class="fa-solid fa-lock text-[10px] text-mute shrink-0" title="Official release: only MangaDex’s link"></i>
+                                <button v-if="c.ch && !Number.isNaN(parseFloat(c.ch))" @click="toggleChapterRead(selectedAnime, c)" class="ep-check" :class="{ on: chapterRead(c) }" :title="chapterRead(c) ? 'Mark chapter ' + c.ch + ' unread' : 'Mark read up to chapter ' + c.ch"><i class="fa-solid fa-check"></i></button>
+                            </div>
+                            <button v-if="chapterList.length > reader.shown || (readSrc === 'mangadex' && reader.chapters.length < reader.total)" @click="showMoreChapters" :disabled="reader.loading" class="w-full py-3 text-xs font-bold text-sub hover:text-ink hover:bg-raised transition-colors border-t border-line"><i class="fa-solid mr-1.5" :class="reader.loading ? 'fa-circle-notch fa-spin' : 'fa-chevron-down'"></i>Show more chapters</button>
+                        </div>
+
+                        <!-- anime, movies & TV: episodes (Netflix-style) -->
+                        <div v-else>
+                            <p v-if="currentSite && srcView.loading" class="wp-note"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Looking for it on {{ currentSite.name }}…</p>
+                            <p v-else-if="currentSite && srcView.error" class="wp-note">{{ srcView.error }}</p>
+                            <div v-if="selectedAnime.type === 'TV' && !isMovie && tvSeasons[selectedAnime.id + ':' + wp.season] === 'loading'" class="space-y-2"><div v-for="n in 4" :key="n" class="h-24 rounded-xl skeleton"></div></div>
+                            <p v-else-if="!wpRows.length" class="wp-note">{{ readTabs.length ? 'No episodes found on this source.' : 'Episodes show up here once you install a source.' }}</p>
+                            <div class="ep-list">
+                                <div v-for="r in wpRows.slice(0, wpShown)" :key="r.key" class="ep-row" :class="{ watched: r.watched, off: !r.item }" role="button" tabindex="0" @click="playRow(r)" @keydown.enter.self="playRow(r)">
+                                    <span class="ep-row-n">{{ isMovie ? '' : r.n }}</span>
+                                    <span class="ep-row-thumb">
+                                        <img v-if="r.thumb" :src="r.thumb" loading="lazy" decoding="async" alt="">
+                                        <i v-else class="fa-solid" :class="isMovie ? 'fa-film' : 'fa-tv'"></i>
+                                        <span class="ep-row-play"><i class="fa-solid" :class="r.item ? 'fa-play' : 'fa-lock'"></i></span>
+                                        <span v-if="r.watched" class="ep-row-bar"></span>
+                                    </span>
+                                    <span class="ep-row-body">
+                                        <span class="ep-row-top"><b>{{ r.title }}</b><span v-if="r.runtime" class="ep-row-len">{{ r.runtime }}m</span></span>
+                                        <span v-if="r.desc" class="ep-row-desc">{{ r.desc }}</span>
+                                        <span v-if="!r.item" class="ep-row-miss">{{ !readTabs.length ? 'Install a source to watch' : srcView.loading ? 'Checking the source…' : srcView.picking ? 'Pick the right title above' : 'Not on this source' }}</span>
+                                    </span>
+                                    <button v-if="r.abs" @click.stop="toggleRowWatched(r)" class="ep-check" :class="{ on: r.watched }" :title="r.watched ? 'Mark unwatched' : 'Mark watched up to here'"><i class="fa-solid fa-check"></i></button>
+                                </div>
+                            </div>
+                            <button v-if="wpRows.length > wpShown" @click="wpShown += 40" class="btn-ghost w-full mt-3 !py-2.5 !text-xs"><i class="fa-solid fa-chevron-down mr-1.5"></i>Show more · {{ wpRows.length - wpShown }} left</button>
+                        </div>
+                        <p class="mt-4 text-[11px] text-mute">{{ playKind === 'manga' ? 'Chapters come from the source you pick. Website sources are read without their ads or trackers.' : 'Episodes come from the source you pick. Players open in a locked frame here, so they can’t open pop-ups or send you to other sites.' }}</p>
+                    </div>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
+    <!-- ============ VIDEO PLAYER (anime, movies & TV) ============ -->
+    <transition name="fade">
+        <div v-if="vp.open" class="vplayer force-dark">
+            <div class="vp-top">
+                <button @click="closeVideo" class="yt-btn" aria-label="Close (Esc)"><i class="fa-solid fa-arrow-left"></i></button>
+                <div class="min-w-0 flex-grow">
+                    <p class="text-white font-semibold text-sm truncate">{{ vp.anime ? titleOf(vp.anime) : '' }}</p>
+                    <p class="text-white/60 text-xs truncate">{{ vp.label }}<span v-if="vp.ep?.title && vp.ep.title !== vp.label && !vp.local"> · {{ vp.ep.title }}</span></p>
+                </div>
+                <button v-if="vp.abs && !vp.local" @click="markEpisodeWatched" :disabled="vp.marked" class="vp-btn" :class="{ on: vp.marked }"><i class="fa-solid fa-check"></i><span class="hidden sm:inline">{{ vp.marked ? 'Watched' : 'Mark watched' }}</span></button>
+            </div>
+            <div class="vp-stage">
+                <div v-if="vp.loading" class="vp-msg"><i class="fa-solid fa-circle-notch fa-spin text-2xl"></i><span>Finding the players…</span></div>
+                <div v-else-if="vp.error && !vpServer" class="vp-msg"><i class="fa-solid fa-triangle-exclamation text-2xl text-amber-400"></i><span>{{ vp.error }}</span></div>
+                <template v-else-if="vpServer">
+                    <iframe v-if="vpServer.kind === 'embed'" :key="vpServer.url + (vp.safe ? ':safe' : '')" :src="vpServer.url" :sandbox="vp.safe ? 'allow-scripts allow-same-origin allow-forms allow-presentation' : null"
+                        allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin" class="vp-frame" title="Video player"></iframe>
+                    <video v-else id="vp-video" :key="vpServer.url" controls autoplay playsinline class="vp-frame" @timeupdate="onVideoTime" @error="onVideoError"></video>
+                    <div v-if="vp.error" class="vp-toast">{{ vp.error }}</div>
+                </template>
+            </div>
+            <div class="vp-bottom">
+                <button @click="vpGo(-1)" :disabled="!vpNeighbour(-1)" class="vp-btn"><i class="fa-solid fa-backward-step"></i><span class="hidden sm:inline">Previous</span></button>
+                <div v-if="vp.servers.length > 1" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0 flex-grow justify-center">
+                    <span class="text-white/50 text-[11px] font-bold uppercase tracking-wider shrink-0">Server</span>
+                    <button v-for="(sv, n) in vp.servers" :key="sv.url" @click="pickServer(n)" class="vp-server" :class="{ on: vp.i === n }">{{ sv.name }}<span v-if="sv.kind !== 'embed'" class="opacity-60"> · {{ sv.kind === 'hls' ? 'stream' : 'file' }}</span></button>
+                </div>
+                <span v-else class="flex-grow"></span>
+                <button v-if="vpServer?.kind === 'embed'" @click="vp.safe = !vp.safe" class="vp-btn" :title="vp.safe ? 'The player can’t open pop-ups or other sites. Turn off only if it refuses to load.' : 'Pop-ups and redirects are allowed right now'"><i class="fa-solid" :class="vp.safe ? 'fa-shield-halved' : 'fa-shield'"></i><span class="hidden sm:inline">{{ vp.safe ? 'Pop-up blocker on' : 'Pop-up blocker off' }}</span></button>
+                <button @click="vpGo(1)" :disabled="!vpNeighbour(1)" class="vp-btn"><span class="hidden sm:inline">Next</span><i class="fa-solid fa-forward-step"></i></button>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ============ HISTORY (per section) ============ -->
+    <transition name="fade">
+        <div v-if="histOpen" class="modal-back !z-[80]" @click.self="histOpen = false">
+            <transition name="pop" appear>
+                <div class="modal-card max-w-lg w-full p-6 flex flex-col" style="max-height: 88dvh">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="kicker">// {{ (sectionList.find(s => s.type === histType) || {}).label?.toLowerCase() }}</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-2xl">History</h3>
+                            <p class="text-sm text-sub mt-1.5">What you {{ histType === 'MANGA' ? 'read' : histType === 'SONG' ? 'played' : 'watched' }} here, newest first. Only kept on this device.</p>
+                        </div>
+                        <button @click="histOpen = false" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="flex gap-1.5 mt-4 overflow-x-auto no-scrollbar">
+                        <button v-for="s in sectionList.filter(s => s.live)" :key="s.type" @click="histType = s.type" class="src-tab" :class="{ on: histType === s.type }"><i class="fa-solid text-[10px]" :class="s.icon"></i>{{ s.short }}</button>
+                    </div>
+                    <div class="mt-4 -mx-2 px-2 overflow-y-auto overscroll-contain flex-grow min-h-0">
+                        <p v-if="!histItems.length" class="py-12 text-center text-sm text-mute"><i class="fa-solid fa-clock-rotate-left text-2xl block mb-3 opacity-50"></i>Nothing yet. {{ histType === 'MANGA' ? 'Chapters you read' : histType === 'SONG' ? 'Songs you play' : histType === 'GAME' ? 'Trailers you watch' : 'Episodes and trailers you watch' }} show up here.</p>
+                        <div v-for="g in histGroups" :key="g.label" class="mb-4">
+                            <p class="label mb-2">{{ g.label }}</p>
+                            <div class="space-y-1.5">
+                                <div v-for="x in g.items" :key="x.key" class="hist-row" role="button" tabindex="0" @click="openHistoryItem(x)" @keydown.enter.self="openHistoryItem(x)">
+                                    <img v-if="x.cover" :src="x.cover" class="w-10 h-14 rounded-lg object-cover shrink-0" :class="{ '!h-10': x.type === 'SONG' }" loading="lazy" alt="">
+                                    <span class="min-w-0 flex-grow">
+                                        <span class="block text-sm text-ink font-semibold truncate">{{ x.title }}</span>
+                                        <span class="block text-xs text-sub truncate">{{ x.label }}<span v-if="x.sub" class="text-mute"> · {{ x.sub }}</span></span>
+                                    </span>
+                                    <span class="text-[11px] text-mute shrink-0 font-mono">{{ histTime(x.at) }}</span>
+                                    <button @click.stop="removeHistory(x.key)" class="hist-del" title="Remove from history" aria-label="Remove from history"><i class="fa-solid fa-xmark"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button v-if="histItems.length" @click="clearHistory" class="remove-btn mt-4"><i class="fa-solid fa-trash-can"></i> Clear {{ (sectionList.find(s => s.type === histType) || {}).short }} history</button>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
+    <!-- ============ EXTENSIONS (reading / watching sources per section, Mihon / Aniyomi-style) ============ -->
     <transition name="fade">
         <div v-if="extOpen" class="modal-back !z-[90]" @click.self="extOpen = false">
             <transition name="pop" appear>
-                <div class="modal-card max-w-lg w-full p-6 overflow-y-auto" style="max-height: 92dvh">
+                <div class="modal-card max-w-lg w-full p-6 overflow-y-auto overscroll-contain" style="max-height: 92dvh">
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <p class="kicker">// manga & manhwa</p>
+                            <p class="kicker">// {{ KIND_LABEL[extKind].toLowerCase() }}</p>
                             <h3 class="mt-1 font-display font-bold text-ink text-2xl">Extensions</h3>
-                            <p class="text-sm text-sub mt-1.5">anicoop doesn’t host any manga. Install a source to read inside the app. Your progress still saves to your lists.</p>
+                            <p class="text-sm text-sub mt-1.5">anicoop doesn’t host any {{ extKind === 'manga' ? 'manga' : extKind === 'anime' ? 'anime' : 'movies or shows' }}. Install a source to {{ extKind === 'manga' ? 'read' : 'watch' }} inside the app. Your progress still saves to your lists.</p>
                         </div>
                         <button @click="extOpen = false" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
                     </div>
-                    <div class="mt-5 space-y-2.5">
-                        <div v-for="x in EXTENSIONS" :key="x.id" class="ext-card">
+                    <p v-if="extFor" class="mt-3 text-xs text-sub flex items-center gap-2 min-w-0"><img v-if="extFor.coverImage?.large" :src="extFor.coverImage.large" class="w-6 h-8 rounded object-cover shrink-0" alt=""><span class="truncate">Checking sources for <b class="text-ink">{{ titleOf(extFor) }}</b></span></p>
+                    <div v-if="extList.length" class="mt-5 space-y-2.5">
+                        <div v-for="x in extList" :key="x.id" class="ext-card">
                             <span class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0" :style="{ background: x.color }"><i class="fa-solid" :class="x.icon"></i></span>
                             <div class="min-w-0 flex-grow">
                                 <p class="text-ink font-semibold text-sm">{{ x.name }} <span class="font-mono text-[10px] text-mute ml-1">v{{ x.version }} · {{ x.lang }}</span></p>
@@ -3741,29 +3873,29 @@
 
                     <!-- website sources (settings-only extensions) -->
                     <div class="mt-6">
-                        <p class="label mb-2.5">Website sources <span class="text-mute">· {{ siteSources.length }}</span></p>
-                        <div v-if="siteSources.length" class="space-y-2">
-                            <div v-for="s in siteSources" :key="s.id" class="ext-card !py-2.5">
+                        <p class="label mb-2.5">Website sources <span class="text-mute">· {{ extSources.length }}</span></p>
+                        <div v-if="extSources.length" class="ext-installed space-y-2">
+                            <div v-for="s in extSources" :key="s.id" class="ext-card !py-2.5">
                                 <span class="w-9 h-9 rounded-lg bg-raised text-sub flex items-center justify-center shrink-0"><i class="fa-solid fa-globe"></i></span>
                                 <div class="min-w-0 flex-grow">
-                                    <p class="text-ink font-semibold text-sm truncate">{{ s.name }} <span class="font-mono text-[10px] text-mute ml-1">{{ (s.lang || 'en').toUpperCase() }}</span></p>
+                                    <p class="text-ink font-semibold text-sm truncate">{{ s.name }} <span class="font-mono text-[10px] text-mute ml-1">{{ (s.lang || 'en').toUpperCase() }}</span><span v-if="s.nsfw" class="ml-1 font-mono text-[9px] font-bold text-rose-400">18+</span></p>
                                     <p class="text-[11px] text-mute truncate">{{ s.baseUrl }} · {{ (SOURCE_TEMPLATES[s.template] || {}).label || 'Custom' }}</p>
                                 </div>
                                 <button @click="removeSource(s.id)" class="btn-ghost !py-2 !px-3 !text-xs shrink-0">Remove</button>
                             </div>
                         </div>
-                        <p v-else class="text-xs text-sub">No website sources yet. Add one below, or install a repository.</p>
+                        <p v-else class="text-xs text-sub">No website sources yet. Add one below, or install from a repository.</p>
 
-                        <details class="ext-add mt-3" :open="!siteSources.length">
+                        <details class="ext-add mt-3">
                             <summary><i class="fa-solid fa-plus mr-2"></i>Add a website</summary>
                             <div class="space-y-2.5 mt-3">
                                 <input v-model="srcForm.baseUrl" placeholder="Site address, e.g. https://example.com" class="field !py-2.5 !text-sm">
                                 <div class="flex gap-2">
                                     <input v-model="srcForm.name" maxlength="40" placeholder="Name (optional)" class="field !py-2.5 !text-sm">
-                                    <div class="chip-wrap shrink-0"><select v-model="srcForm.template" class="chip !h-[42px] !text-xs"><option value="auto">Auto-detect</option><option v-for="(t, k) in SOURCE_TEMPLATES" :key="k" :value="k">{{ t.label }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                                    <div class="chip-wrap shrink-0"><select v-model="srcForm.template" class="chip !h-[42px] !text-xs"><option value="auto">Auto-detect</option><option v-for="(t, k) in templatesFor(extKind)" :key="k" :value="k">{{ t.label }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                                 </div>
                                 <textarea v-if="srcForm.template === 'custom'" v-model="srcForm.selectors" rows="5" class="field !py-2.5 !text-xs font-mono" placeholder='{"search":{"url":"{base}/search?q={q}","item":".card","title":".name","link":"a@href","cover":"img@src"},"chapters":{"item":".chapter","name":"a","link":"a@href"},"pages":{"image":".page img@data-src|src"}}'></textarea>
-                                <p class="text-[11px] text-mute leading-relaxed">Leave it on Auto-detect: anicoop checks whether the site runs Madara or MangaThemesia, the two themes most manga sites use. Sites behind Cloudflare’s “checking your browser” page won’t work.</p>
+                                <p class="text-[11px] text-mute leading-relaxed">{{ extKind === 'manga' ? 'Leave it on Auto-detect: anicoop checks whether the site runs Madara or MangaThemesia, the two themes most manga sites use.' : 'Leave it on Auto-detect: anicoop checks whether the site runs AnimeStream or DooPlay, the themes many anime and movie sites use, and otherwise looks for the players on its episode pages.' }} Sites behind Cloudflare’s “checking your browser” page won’t work.</p>
                                 <p v-if="srcForm.msg" class="text-xs" :class="srcForm.msg.startsWith('✓') ? 'text-[#22c55e]' : 'text-sub'">{{ srcForm.msg }}</p>
                                 <div class="flex gap-2">
                                     <button @click="testSource" :disabled="srcForm.busy || !srcForm.baseUrl.trim()" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid" :class="srcForm.busy ? 'fa-circle-notch fa-spin' : 'fa-vial'"></i> Test</button>
@@ -3772,16 +3904,16 @@
                             </div>
                         </details>
 
-                        <details class="ext-add mt-2">
+                        <details class="ext-add mt-2" :open="!extSources.length || !!srcForm.repoItems.length">
                             <summary><i class="fa-solid fa-box-archive mr-2"></i>Install from a repository</summary>
                             <div class="mt-3 space-y-2.5">
                                 <form @submit.prevent="loadRepo" class="flex gap-2">
-                                    <input v-model="srcForm.repo" placeholder="Repository link, e.g. https://github.com/keiyoushi/extensions" class="field !py-2.5 !text-sm">
+                                    <input v-model="srcForm.repo" :placeholder="'Repository link, e.g. ' + (extKind === 'manga' ? 'https://github.com/keiyoushi/extensions' : 'https://github.com/yuzono/anime-repo')" class="field !py-2.5 !text-sm">
                                     <button type="submit" :disabled="srcForm.repoBusy || !srcForm.repo.trim()" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid" :class="srcForm.repoBusy ? 'fa-circle-notch fa-spin' : 'fa-arrow-right'"></i></button>
                                 </form>
-                                <p class="text-[11px] text-mute leading-relaxed">Works with Mihon / Tachiyomi repositories (paste the GitHub page or its <span class="font-mono">index.json</span>) and anicoop’s own <span class="font-mono">{"sources": [{"name", "baseUrl", "template"}]}</span> files.</p>
+                                <p class="text-[11px] text-mute leading-relaxed">Works with {{ extKind === 'manga' ? 'Mihon / Tachiyomi' : 'Aniyomi' }} repositories (paste the GitHub page or its <span class="font-mono">index.min.json</span>) and anicoop’s own <span class="font-mono">{"sources": [{"name", "baseUrl", "template"}]}</span> files.</p>
                                 <p v-if="srcForm.repoMsg" class="text-xs text-sub">{{ srcForm.repoMsg }}</p>
-                                <div v-if="srcForm.repoItems.length" class="space-y-2">
+                                <div v-if="srcForm.repoItems.length && srcForm.repoKind === extKind" class="space-y-2">
                                     <p class="text-xs text-ink font-semibold">{{ srcForm.repoName }} <span class="text-mute font-normal">· {{ repoShown.length }} of {{ srcForm.repoItems.length }} sources</span></p>
                                     <div class="flex gap-2">
                                         <input v-model="srcForm.repoQ" placeholder="Search sources…" class="field !py-2 !text-xs">
@@ -3789,14 +3921,14 @@
                                     </div>
                                     <div class="panel !rounded-xl p-3 space-y-2">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <button @click="scanRepo" :disabled="!repoShown.length && !repoScan.running" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid" :class="repoScan.running ? 'fa-stop' : 'fa-wand-magic-sparkles'"></i> {{ repoScan.running ? 'Stop checking' : 'Find readable sources' }}</button>
-                                            <button @click="repoScan.onlyOk = !repoScan.onlyOk" :class="{ 'is-on': repoScan.onlyOk }" class="toggle !h-9"><span class="knob"></span>Only readable</button>
+                                            <button @click="scanRepo" :disabled="!repoShown.length && !repoScan.running" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid" :class="repoScan.running ? 'fa-stop' : 'fa-wand-magic-sparkles'"></i> {{ repoScan.running ? 'Stop checking' : extFor ? 'Find sources with this title' : extKind === 'manga' ? 'Find readable sources' : 'Find working sources' }}</button>
+                                            <button @click="repoScan.onlyOk = !repoScan.onlyOk" :class="{ 'is-on': repoScan.onlyOk }" class="toggle !h-9"><span class="knob"></span>{{ extFor ? 'Only ones that have it' : 'Only working' }}</button>
                                         </div>
                                         <div v-if="repoScan.total" class="text-[11px] text-sub">
                                             <div class="h-1.5 rounded-full bg-raised overflow-hidden mb-1.5"><div class="h-full bg-volt transition-[width] duration-300" :style="{ width: (repoScan.done / repoScan.total * 100) + '%' }"></div></div>
-                                            Checked {{ repoScan.done }} of {{ repoScan.total }} · <b class="text-[#22c55e]">{{ repoScan.found }} readable</b>{{ repoScan.running ? ' · keep this open…' : '' }}
+                                            Checked {{ repoScan.done }} of {{ repoScan.total }} · <b class="text-[#22c55e]">{{ repoScan.found }} {{ extFor ? 'have it' : 'work' }}</b>{{ repoScan.running ? ' · keep this open…' : '' }}
                                         </div>
-                                        <p v-else class="text-[11px] text-mute leading-relaxed">Checks every source in this list (language + search filter) and pins the ones that work here to the top. Most Mihon sources need their own Android code or sit behind Cloudflare, so expect a small share.</p>
+                                        <p v-else class="text-[11px] text-mute leading-relaxed">{{ extFor ? 'Searches every source in this list (language + search filter) for “' + titleOf(extFor) + '”, under its own name and its “Also known as” names, and only marks the ones that have it and open here.' : 'Checks every source in this list (language + search filter) and pins the ones that work here to the top.' }} Most sources need their own Android code or sit behind Cloudflare, so expect a small share.</p>
                                     </div>
                                     <div class="repo-list">
                                         <div v-for="x in repoShown.slice(0, 80)" :key="x.baseUrl + x.lang" class="flex items-center gap-2.5 py-1.5">
@@ -3804,20 +3936,20 @@
                                             <span v-else class="w-7 h-7 rounded-md bg-raised flex items-center justify-center text-mute shrink-0"><i class="fa-solid fa-globe text-[11px]"></i></span>
                                             <span class="min-w-0 flex-grow">
                                                 <span class="block text-sm text-ink truncate">{{ x.name }} <span class="font-mono text-[10px] text-mute">{{ x.lang }}</span><span v-if="x.nsfw" class="ml-1 font-mono text-[9px] font-bold text-rose-400">18+</span></span>
-                                                <span class="block text-[11px] truncate" :class="repoOk(x) ? 'text-[#22c55e]' : repoState[x.baseUrl] && repoState[x.baseUrl] !== 'checking' ? 'text-rose-300' : 'text-mute'">{{ repoOk(x) ? '✓ Readable here · ' + (SOURCE_TEMPLATES[String(repoState[x.baseUrl]).slice(3)] || {}).label?.split(' (')[0] : repoState[x.baseUrl] === 'checking' ? 'Checking…' : repoState[x.baseUrl] === 'unsupported' ? 'Not readable here: this site needs its own Android extension code' : repoState[x.baseUrl] || x.baseUrl }}</span>
+                                                <span class="block text-[11px] truncate" :class="{ 'text-[#22c55e]': srcStatus(x).st === 'ok', 'text-rose-300': srcStatus(x).st === 'bad', 'text-mute': ['none', 'checking', 'site'].includes(srcStatus(x).st) }" :title="srcStatus(x).text">{{ srcStatus(x).text }}</span>
                                             </span>
                                             <button v-if="repoInstalled(x)" disabled class="btn-ghost !py-1.5 !px-3 !text-[11px] shrink-0"><i class="fa-solid fa-check"></i> Installed</button>
-                                            <button v-else-if="repoState[x.baseUrl] && repoState[x.baseUrl] !== 'checking' && !repoOk(x)" disabled class="btn-ghost !py-1.5 !px-3 !text-[11px] shrink-0 opacity-50">Can’t read</button>
-                                            <button v-else @click="installRepoItem(x)" :disabled="repoState[x.baseUrl] === 'checking'" class="btn-primary !py-1.5 !px-3 !text-[11px] shrink-0"><i v-if="repoState[x.baseUrl] === 'checking'" class="fa-solid fa-circle-notch fa-spin"></i>{{ repoState[x.baseUrl] === 'checking' ? '' : 'Install' }}</button>
+                                            <button v-else-if="srcStatus(x).st === 'bad'" disabled class="btn-ghost !py-1.5 !px-3 !text-[11px] shrink-0 opacity-50">{{ extKind === 'manga' ? 'Can’t read' : 'Can’t play' }}</button>
+                                            <button v-else @click="installRepoItem(x)" :disabled="srcStatus(x).st === 'checking'" class="btn-primary !py-1.5 !px-3 !text-[11px] shrink-0"><i v-if="srcStatus(x).st === 'checking'" class="fa-solid fa-circle-notch fa-spin"></i>{{ srcStatus(x).st === 'checking' ? '' : 'Install' }}</button>
                                         </div>
                                         <p v-if="repoShown.length > 80" class="text-[11px] text-mute py-2">Showing 80. Search to find others.</p>
-                                        <p v-if="!repoShown.length" class="text-xs text-mute py-2">No sources match.</p>
+                                        <p v-if="!repoShown.length" class="text-xs text-mute py-2">{{ repoScan.onlyOk ? 'None found yet. Turn off the filter above to see every source.' : 'No sources match.' }}</p>
                                     </div>
                                 </div>
                             </div>
                         </details>
                     </div>
-                    <div class="mt-5 pt-4 border-t border-line space-y-3">
+                    <div v-if="extKind === 'manga'" class="mt-5 pt-4 border-t border-line space-y-3">
                         <label class="flex items-center justify-between gap-3 text-sm text-ink">Mark a chapter read when I finish it
                             <button @click="PREFS.reader = { ...PREFS.reader, autoMark: !PREFS.reader.autoMark }" :class="{ 'is-on': PREFS.reader.autoMark }" class="toggle !h-9"><span class="knob"></span></button></label>
                         <label class="flex items-center justify-between gap-3 text-sm text-ink">Data saver (smaller images)
