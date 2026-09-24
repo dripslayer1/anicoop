@@ -1687,10 +1687,19 @@ const notHidden = (m) => { const h = hiddenNames(m?.type || 'ANIME'); return !h.
    One song as a row (Songs browse list + artist pages): number, cover, title, artists, album, year, length,
    your status, and a quick "like" / edit button
    ------------------------------------------------------------------ */
+// ---------- "Add to playlist": one picker for the whole site ----------
+// Any song, from anywhere (a card's + menu, a song row, the player bar, a song page) opens the same small picker
+// next to what you clicked. Your playlists are listed there with a tick on the ones that already have the song.
+const plPicker = reactive({ open: false, song: null, anchor: null, x: 0, y: 0, ready: false });
+const openPlPicker = (song, e) => {
+    if (!song) return;
+    const r = (e?.currentTarget || e?.target)?.getBoundingClientRect?.();
+    Object.assign(plPicker, { song, anchor: r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null, ready: false, open: true });
+};
 const TrackRow = {
     props: { song: Object, n: [Number, String], entry: Object, album: { type: Boolean, default: true }, cover: { type: Boolean, default: true }, selectable: Boolean, selected: Boolean, playing: Boolean },
     emits: ['open', 'artist', 'action', 'edit', 'select', 'play'],
-    setup() { return { STATUS_COLORS, LABEL_SETS, fmtDuration }; },
+    setup() { return { STATUS_COLORS, LABEL_SETS, fmtDuration, openPlPicker }; },
     template: `
     <div class="track-row group" :class="{ mine: entry, sel: selected }" role="button" tabindex="0" @click="selectable ? $emit('select') : $emit('open')" @keydown.enter="selectable ? $emit('select') : $emit('open')">
         <span class="tr-n" :class="{ playing }"><i v-if="selectable" class="fa-solid" :class="selected ? 'fa-square-check text-volt' : 'fa-square text-mute'"></i><template v-else><span class="tr-num">{{ n }}</span><button @click.stop="$emit('play')" class="tr-play" :title="playing ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="playing ? 'fa-pause' : 'fa-play'"></i></button></template></span>
@@ -1703,44 +1712,55 @@ const TrackRow = {
         <span class="tr-year">{{ song.seasonYear || '' }}</span>
         <span class="tr-len">{{ song.durationMs ? fmtDuration(song.durationMs) : '' }}</span>
         <span v-if="entry" class="tr-status" :style="{ '--dot': STATUS_COLORS[entry.status] }"><span class="qa-dot"></span><span class="tr-status-l">{{ LABEL_SETS.SONG.short[entry.status] || entry.status }}</span></span>
-        <button v-if="!selectable" @click.stop="entry ? $emit('edit') : $emit('action', 'COMPLETED')" class="tr-add" :title="entry ? 'Edit' : 'Like'"><i class="fa-solid" :class="entry ? 'fa-pen' : 'fa-heart'"></i></button>
+        <span v-if="!selectable" class="tr-acts">
+            <button @click.stop="openPlPicker(song, $event)" class="tr-add" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i></button>
+            <button @click.stop="entry ? $emit('edit') : $emit('action', 'COMPLETED')" class="tr-add" :title="entry ? 'Edit' : 'Like'"><i class="fa-solid" :class="entry ? 'fa-pen' : 'fa-heart'"></i></button>
+        </span>
     </div>`,
 };
 const QuickAdd = {
     props: { anime: Object, entry: Object, open: Boolean, onList: Boolean },
     emits: ['action', 'edit', 'toggle'],
     // The menu is drawn on top of the page (not inside the poster), so a small card never cuts it off.
-    // It opens above the + (or below it when there's no room above) and stays inside the screen.
+    // It opens beside the card (right, or left when there's no room), so it never covers the card's own play button;
+    // on a narrow screen it falls back to above the +. It waits a moment first, so passing over the + doesn't open it.
     setup() {
         const btn = ref(null), menu = ref(null);
-        const pos = reactive({ show: false, ready: false, x: 0, y: 0, below: false });
+        const pos = reactive({ show: false, ready: false, x: 0, y: 0, side: 'up' });
         const canHover = typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches;
-        let hideT = null;
+        let hideT = null, openT = null;
         const place = () => {
             const b = btn.value?.getBoundingClientRect(), m = menu.value; if (!b || !m) return;
-            const mh = m.offsetHeight, mw = m.offsetWidth, gap = 8;
-            const below = b.top - mh - gap < 8 && b.bottom + mh + gap < innerHeight;
-            pos.x = clamp(b.right - mw, 8, innerWidth - mw - 8);
-            pos.y = below ? b.bottom + gap : Math.max(8, b.top - mh - gap);
-            pos.below = below; pos.ready = true;
+            const card = (btn.value.closest('.poster-hit') || btn.value.closest('.poster') || btn.value.parentElement)?.getBoundingClientRect() || b;
+            const mh = m.offsetHeight, mw = m.offsetWidth, gap = 10;
+            const y = clamp(b.bottom - mh, 8, innerHeight - mh - 8);
+            if (card.right + gap + mw <= innerWidth - 8) Object.assign(pos, { side: 'right', x: card.right + gap, y });
+            else if (card.left - gap - mw >= 8) Object.assign(pos, { side: 'left', x: card.left - gap - mw, y });
+            else {
+                const below = b.top - mh - gap < 8 && b.bottom + mh + gap < innerHeight;
+                Object.assign(pos, { side: below ? 'down' : 'up', x: clamp(b.right - mw, 8, innerWidth - mw - 8), y: below ? b.bottom + gap : Math.max(8, b.top - mh - gap) });
+            }
+            pos.ready = true;
         };
-        const shut = () => { clearTimeout(hideT); pos.show = false; pos.ready = false; window.removeEventListener('scroll', shut, true); };
+        const shut = () => { clearTimeout(hideT); clearTimeout(openT); pos.show = false; pos.ready = false; window.removeEventListener('scroll', shut, true); };
         const enter = () => {
             if (!canHover) return;
             clearTimeout(hideT);
-            if (!pos.show) { pos.show = true; pos.ready = false; window.addEventListener('scroll', shut, true); nextTick(place); }
+            if (pos.show) return;
+            clearTimeout(openT);
+            openT = setTimeout(() => { pos.show = true; pos.ready = false; window.addEventListener('scroll', shut, true); nextTick(place); }, 200);
         };
-        const leave = () => { clearTimeout(hideT); hideT = setTimeout(shut, 140); };
-        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, btn, menu, pos, enter, leave, shut };
+        const leave = () => { clearTimeout(openT); clearTimeout(hideT); hideT = setTimeout(shut, 220); };
+        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, btn, menu, pos, enter, leave, shut, openPlPicker };
     },
     unmounted() { this.shut(); },
     template: `
     <div class="absolute bottom-3 right-3 z-20 group/qa flex flex-col items-end pointer-events-none" @click.stop @mouseenter="enter" @mouseleave="leave">
         <teleport to="body">
-            <div v-if="pos.show" ref="menu" class="qa-float" :class="{ ready: pos.ready, below: pos.below }" :style="{ left: pos.x + 'px', top: pos.y + 'px' }" @mouseenter="enter" @mouseleave="leave" @click.stop>
+            <div v-if="pos.show" ref="menu" class="qa-float" :class="['side-' + pos.side, { ready: pos.ready }]" :style="{ left: pos.x + 'px', top: pos.y + 'px' }" @mouseenter="enter" @mouseleave="leave" @click.stop>
                 <div class="qa-menu" @click="shut">
                     <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">SOLO LIST</p>
-                    <button @click="$emit('action', 'EP')" class="qa-row" title="Add one">
+                    <button v-if="anime.type !== 'SONG'" @click="$emit('action', 'EP')" class="qa-row" title="Add one">
                         <span class="font-mono text-[11px] font-bold text-volt w-2.5">+1</span> {{ UNIT.ep }}
                         <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
                     </button>
@@ -1753,6 +1773,7 @@ const QuickAdd = {
                         <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
                     </button>
                     <div class="h-px bg-line my-1 mx-1"></div>
+                    <button v-if="anime.type === 'SONG'" @click="openPlPicker(anime, $event)" class="qa-row"><i class="fa-solid fa-circle-plus text-[11px] w-2.5 text-volt"></i> Add to playlist…</button>
                     <button @click="$emit('edit')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-group text-[11px] w-2.5"></i> Squads & more…</button>
                     <button v-if="onList" @click="$emit('action', 'REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
                 </div>
@@ -3893,6 +3914,28 @@ createApp({
             const songs = has ? p.songs.filter(s => s.id !== song.id) : [...(p.songs || []), slimAnime(song)];
             if (await savePlaylist(p, { songs })) showToast(has ? `Removed from “${p.name}”` : `Added to “${p.name}”`);
         };
+        // the site-wide "Add to playlist" picker (see plPicker): placed next to what you clicked, inside the screen
+        const placePlPicker = () => {
+            const el = document.getElementById('pl-picker'); if (!el || !plPicker.open) return;
+            const a = plPicker.anchor, w = el.offsetWidth, h = el.offsetHeight;
+            let x, y;
+            if (!a) { x = (innerWidth - w) / 2; y = (innerHeight - h) / 2; }
+            else {
+                x = clamp(a.right - w, 8, innerWidth - w - 8);
+                y = a.bottom + 8; if (y + h > innerHeight - 8) y = Math.max(8, a.top - h - 8);
+            }
+            Object.assign(plPicker, { x, y, ready: true });
+        };
+        const closePlPicker = () => { plPicker.open = false; plPicker.song = null; };
+        watch(() => plPicker.open && plPicker.song?.id, async (on) => {
+            if (!on) return;
+            if (!playlists.value.length && !plMissing.value) fetchPlaylists();
+            await nextTick(); placePlPicker();
+        });
+        watch(() => playlists.value.length, () => nextTick(placePlPicker));
+        const plPickerNew = async () => { const s = plPicker.song; closePlPicker(); await createPlaylist(s); };
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && plPicker.open) closePlPicker(); });
+        window.addEventListener('resize', () => plPicker.open && closePlPicker());
         const addPickToPlaylist = (p) => { const e = soloList.value.find(i => String(i.anime.id) === String(plAddPick.value)); plAddPick.value = ''; if (e) togglePlaylistSong(p, e.anime); };
         const renamePlaylist = async (p) => { const name = await askText({ title: 'Rename playlist', value: p.name, ok: 'Rename', max: 60 }); if (name) savePlaylist(p, { name }); };
         const deletePlaylist = async (p) => {
@@ -5043,7 +5086,8 @@ createApp({
         const randomSpinKey = ref(0);
         const randomScope = computed(() => (selectedAnime.value || viewUserId.value || currentAppView.value !== 'tracker') ? 'all' : (activeTab.value === 'coop' ? 'coop' : activeTab.value === 'solo' ? 'solo' : 'all'));
         const randomSourceLabel = computed(() => ({ coop: 'squad lists', solo: 'solo list', all: 'all your lists' })[randomScope.value]);
-        const randomSource = computed(() => (randomScope.value === 'coop' ? secCoop.value : randomScope.value === 'solo' ? secSolo.value : uniqueItems.value).filter(i => i.anime?.id));
+        // only this section's titles (on Browse it used to mix every section, so songs got anime and game genres)
+        const randomSource = computed(() => (randomScope.value === 'coop' ? secCoop.value : randomScope.value === 'solo' ? secSolo.value : uniqueItems.value).filter(i => i.anime?.id && typeOf(i) === (mediaType.value || 'ANIME')));
         const randomGenres = computed(() => [...new Set(randomSource.value.flatMap(i => i.anime.genres || []))].sort());
         const randomPool = computed(() => {
             const f = randomFilter.value;
@@ -8282,7 +8326,7 @@ createApp({
 
         return {
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
-            regionPrices, openRegionPrices, fmtUsd,
+            regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew,
             plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,

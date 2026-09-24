@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.0">
+    <link rel="stylesheet" href="app.css?v=9.1">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.0" defer></script>
+    <script src="app.js?v=9.1" defer></script>
 </head>
 <body>
 
@@ -209,7 +209,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.0</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -601,9 +601,10 @@
                                     <img v-if="selectedAnime.coverImage?.large" :src="selectedAnime.coverImage.large" class="w-14 h-14 rounded-lg object-cover shrink-0" alt="">
                                     <button @click="playPreview(selectedAnime)" class="sp-play" :title="isPlaying(selectedAnime) ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="player.loading && player.song?.id === selectedAnime.id ? 'fa-circle-notch fa-spin' : isPlaying(selectedAnime) ? 'fa-pause' : 'fa-play'"></i></button>
                                     <div class="min-w-0 flex-grow">
-                                        <p class="label">30-second preview</p>
+                                        <p class="label">{{ player.full ? 'Listen' : '30-second preview' }}</p>
                                         <div class="sp-bar mt-2" @click="player.song?.id === selectedAnime.id && seekPreview($event)"><div :style="{ width: (player.song?.id === selectedAnime.id ? Math.min(100, player.t / (player.dur || 30) * 100) : 0) + '%' }"></div></div>
                                     </div>
+                                    <button @click="openPlPicker(selectedAnime, $event)" class="pl-add-btn" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i><span class="hidden sm:inline">Playlist</span></button>
                                     <div class="vol">
                                         <button @click="toggleMute" class="vol-btn" title="Mute"><i class="fa-solid" :class="player.muted || !player.vol ? 'fa-volume-xmark' : player.vol < 0.5 ? 'fa-volume-low' : 'fa-volume-high'"></i></button>
                                         <input type="range" min="0" max="1" step="0.01" :value="player.muted ? 0 : player.vol" @input="setVolume($event.target.value)" class="vol-range" :style="{ '--v': (player.muted ? 0 : player.vol) * 100 + '%' }" aria-label="Volume">
@@ -2703,6 +2704,7 @@
             </div>
             <div class="pbar-side">
                 <button @click="srcBadge" class="pbar-src" :class="{ on: player.mode === 'yt', warn: player.full && player.mode === 'preview' }" :title="player.mode === 'yt' ? 'Full song from YouTube Music (click for 30-second previews only)' : player.full && player.mode === 'preview' ? '30-second preview: ' + (player.why || 'the full song didn’t play') + '. Click to try the full song again.' : 'Previews only (click for full songs)'">{{ player.mode === 'yt' ? 'Full' : player.mode === 'preview' ? '0:30' : player.full ? 'Full' : '0:30' }}</button>
+                <button @click="openPlPicker(player.song, $event)" class="pbar-btn pbar-opt pbar-q-btn" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i></button>
                 <button v-if="player.mode === 'yt'" @click="player.video = !player.video" class="pbar-btn pbar-opt" :class="{ on: player.video }" :title="player.video ? 'Hide the video' : 'Show the video'"><i class="fa-solid fa-film"></i></button>
                 <div class="relative">
                     <button @click="player.queueOpen = !player.queueOpen" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: player.queueOpen }" title="Queue"><i class="fa-solid fa-list-ul"></i></button>
@@ -2725,6 +2727,28 @@
                 <button @click="hidePlayer" class="pbar-btn" title="Hide the player (the music keeps playing)"><i class="fa-solid fa-chevron-down"></i></button>
             </div>
         </div></transition>
+        <!-- "Add to playlist": one picker for any song, opened from cards, song rows, the player bar or a song page -->
+        <template v-if="plPicker.open && plPicker.song && currentUser">
+            <div class="pl-pick-back" @click="closePlPicker"></div>
+            <div id="pl-picker" class="pl-pick" :class="{ ready: plPicker.ready }" :style="{ left: plPicker.x + 'px', top: plPicker.y + 'px' }" role="dialog" aria-label="Add to playlist">
+                <div class="flex items-center gap-2.5 px-3 pt-3 pb-2">
+                    <img v-if="plPicker.song.coverImage?.large" :src="plPicker.song.coverImage.large" class="w-9 h-9 rounded-md object-cover shrink-0" alt="">
+                    <div class="min-w-0"><p class="font-mono text-[9px] font-bold tracking-[.16em] text-mute">ADD TO PLAYLIST</p><p class="text-[13px] font-semibold text-ink truncate">{{ plPicker.song.title?.romaji }}</p></div>
+                </div>
+                <p v-if="plMissing" class="px-3 pb-2 text-xs text-sub">Playlists need the latest database update: run the whole supabase_setup.sql in Supabase again.</p>
+                <div v-else class="pl-pick-list">
+                    <button v-for="p in playlists" :key="p.id" @click="togglePlaylistSong(p, plPicker.song)" class="qa-row" :class="{ 'bg-overlay': inPlaylist(p, plPicker.song) }">
+                        <span class="pl-pick-art"><img v-if="plCovers(p)[0]" :src="plCovers(p)[0]" alt=""><i v-else class="fa-solid fa-music"></i></span>
+                        <span class="min-w-0 flex-grow truncate text-left">{{ p.name }}</span>
+                        <span class="font-mono text-[10px] text-mute shrink-0">{{ (p.songs || []).length }}</span>
+                        <i class="fa-solid shrink-0 text-[12px]" :class="inPlaylist(p, plPicker.song) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
+                    </button>
+                    <p v-if="!playlists.length" class="px-3 py-1.5 text-xs text-mute">No playlists yet.</p>
+                </div>
+                <div class="h-px bg-line mx-2 my-1"></div>
+                <button @click="plPickerNew" class="qa-row mx-1.5 mb-1.5 !w-auto text-volt"><i class="fa-solid fa-plus text-[11px] w-4 text-center"></i> New playlist</button>
+            </div>
+        </template>
         <!-- the player, hidden: a small button in the bottom-left corner brings it back -->
         <transition name="to-top"><button v-if="player.song && currentUser && player.hidden" @click="showPlayer" class="pbar-peek" :class="{ 'above-nav': currentAppView === 'tracker', on: player.playing }" :title="'Show the player · ' + player.song.title?.romaji" aria-label="Show the song player">
             <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt=""><i v-else class="fa-solid fa-music"></i>
