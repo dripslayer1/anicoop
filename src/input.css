@@ -95,8 +95,8 @@
   .poster img.art { @apply absolute inset-0 w-full h-full object-cover; transition: transform .6s var(--ease); }
   .poster .scrim { @apply absolute inset-0 pointer-events-none; background: linear-gradient(180deg, rgba(5,5,7,0) 38%, rgba(5,5,7,.55) 62%, rgba(5,5,7,.97) 96%); }
   @media (hover: hover) {
-    .poster:hover, .poster:focus-visible, .poster:focus-within { transform: translateY(-6px) scale(1.03); box-shadow: 0 0 0 1.5px rgb(var(--c-lilac)), 0 24px 50px -18px rgba(0,0,0,.6), 0 0 40px -10px rgb(var(--c-lilac) / .45); z-index: 5; }
-    .poster:hover img.art { transform: scale(1.06); }
+    .poster-hit:hover > .poster, .poster:focus-visible, .poster:focus-within { transform: translateY(-6px) scale(1.03); box-shadow: 0 0 0 1.5px rgb(var(--c-lilac)), 0 24px 50px -18px rgba(0,0,0,.6), 0 0 40px -10px rgb(var(--c-lilac) / .45); z-index: 5; }
+    .poster-hit:hover > .poster img.art { transform: scale(1.06); }
   }
   .poster-in { animation: card-in .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 28ms); }
   @keyframes card-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -229,7 +229,7 @@
 
 /* ---------- trailers ---------- */
 .trailer-btn { @apply absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full flex items-center justify-center text-onvolt bg-volt opacity-0 scale-75; box-shadow: 0 0 0 6px rgb(var(--c-volt) / .18), 0 10px 30px -6px rgba(0,0,0,.8); transition: opacity .2s, transform .25s var(--ease); }
-@media (hover: hover) { .poster:hover .trailer-btn { opacity: 1; transform: translate(-50%, -50%) scale(1); } .trailer-btn:hover { transform: translate(-50%, -50%) scale(1.1) !important; } }
+@media (hover: hover) { .poster-hit:hover .trailer-btn { opacity: 1; transform: translate(-50%, -50%) scale(1); } .trailer-btn:hover { transform: translate(-50%, -50%) scale(1.1) !important; } }
 @media (hover: none) { .trailer-btn { opacity: .92; transform: translate(-50%, -50%) scale(.8); } }
 .trailer-card { @apply relative block w-full max-w-3xl aspect-video rounded-2xl overflow-hidden ring-1 ring-line2 bg-raised; }
 .play-circle { @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-volt text-onvolt text-2xl flex items-center justify-center; box-shadow: 0 0 0 10px rgb(var(--c-volt) / .15), 0 0 60px -6px rgb(var(--c-volt) / .6); transition: transform .3s var(--ease); }
@@ -1267,3 +1267,15 @@ select.chip.dd-open { border-color: rgb(var(--c-volt)); box-shadow: 0 0 0 3px rg
   html, body { overflow-x: clip; }
   .modal-card:not(.wp-card) { max-width: calc(100vw - 16px); }
 }
+
+/* v8.7 the Read / Watch button on the title's line (tablets and up), same right edge as before */
+.banner-play.banner-play-inline { position: static; flex-shrink: 0; }
+/* v8.7 Home's top buttons follow the theme colour */
+.home-nav { border-color: rgb(var(--c-volt) / .35); }
+.home-nav .seg-btn { color: rgb(var(--c-volt)); }
+.home-nav .seg-btn.is-on { background: rgb(var(--c-volt)); color: rgb(var(--c-onvolt)); }
+.home-nav .seg-btn:not(.is-on):hover { background: rgb(var(--c-volt) / .14); color: rgb(var(--c-volt)); }
+
+/* v8.7 posters: the hover belongs to a box that doesn't move, so the lift never slides the card out from under the mouse */
+.poster-hit { position: relative; display: block; }
+.poster-hit:hover { z-index: 5; }

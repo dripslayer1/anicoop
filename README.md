@@ -281,3 +281,23 @@ achievements and the admin rules), then re-upload the folder. No Edge Function c
 * **Fixes:** the Home picks no longer flicker when you hover their edge; a friend's rankings are as wide as yours;
   the header fits on tablets and small or zoomed laptops (settings + feedback move into the section menu there), and
   the Feed's buttons wrap on phones. Nothing changes at 1100 px and wider.
+
+## v8.7 — back button, album pages, one Top 100 ranking, fixes
+
+**Update:** just re-upload the folder (no database change, no Edge Function change).
+
+* **Back button works again** (v8.6's History list had taken the browser's `history` name, which broke Back and
+  "stay on this page after a refresh").
+* **Album pages:** the Album row in a song's Info (and "Album page" on an artist's release) opens the album's own page:
+  cover, artist, release date, genre, label, length and every song.
+* **Top 100:** one ranking — rating weighted by how many people rated it. Titles are compared on the score you see,
+  so when two show the same score, the one more people rated is higher.
+* **Read / Watch:** the button sits on the title's line (tablets and up); sources wrap onto a second line instead of
+  running off the side; anime / movie sites never call episodes "chapters".
+* **Anime sources:** installing one now checks that an episode really plays first; pages behind Cloudflare's check are
+  recognised; titles on AnimeStream sites are read correctly (they used to include the latest episode's name).
+  Sites like Anikoto / AniWave / AnimeKai / AnimeSogo / WCO lock their players behind code of their own, so they
+  can't play here.
+* **Songs:** Browse shows full rows only before "Show 100 more songs".
+* **Smaller things:** posters no longer flicker when hovered at their edge; Home's top buttons use the theme colour;
+  the Actors tab is gone from People in profiles; History is lighter (smaller entries, saved when the page is idle).
