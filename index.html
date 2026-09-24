@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=8.9">
+    <link rel="stylesheet" href="app.css?v=9.0">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=8.9" defer></script>
+    <script src="app.js?v=9.0" defer></script>
 </head>
 <body>
 
@@ -209,7 +209,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v8.9</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.0</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -2683,7 +2683,8 @@
                 </button>
                 <div class="min-w-0">
                     <p class="pbar-title" @click="fetchAnimeDetails(player.song)">{{ player.song.title?.romaji }}</p>
-                    <p class="pbar-artist"><template v-for="(ar, k) in (player.song.artists || [])" :key="k"><span v-if="k">, </span><button @click="openTrackArtist(player.song, k)">{{ ar }}</button></template></p>
+                    <p v-if="player.loading && player.status" class="pbar-artist pbar-status"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>{{ player.status }}</p>
+                    <p v-else class="pbar-artist"><template v-for="(ar, k) in (player.song.artists || [])" :key="k"><span v-if="k">, </span><button @click="openTrackArtist(player.song, k)">{{ ar }}</button></template></p>
                 </div>
             </div>
             <div class="pbar-mid">
@@ -2701,7 +2702,7 @@
                 </div>
             </div>
             <div class="pbar-side">
-                <button @click="toggleFullSongs" class="pbar-src" :class="{ on: player.mode === 'yt' }" :title="player.full ? 'Full songs from YouTube (click for 30-second previews only)' : 'Previews only (click for full songs)'">{{ player.mode === 'yt' ? 'Full' : player.mode === 'preview' ? '0:30' : player.full ? 'Full' : '0:30' }}</button>
+                <button @click="srcBadge" class="pbar-src" :class="{ on: player.mode === 'yt', warn: player.full && player.mode === 'preview' }" :title="player.mode === 'yt' ? 'Full song from YouTube Music (click for 30-second previews only)' : player.full && player.mode === 'preview' ? '30-second preview: ' + (player.why || 'the full song didn’t play') + '. Click to try the full song again.' : 'Previews only (click for full songs)'">{{ player.mode === 'yt' ? 'Full' : player.mode === 'preview' ? '0:30' : player.full ? 'Full' : '0:30' }}</button>
                 <button v-if="player.mode === 'yt'" @click="player.video = !player.video" class="pbar-btn pbar-opt" :class="{ on: player.video }" :title="player.video ? 'Hide the video' : 'Show the video'"><i class="fa-solid fa-film"></i></button>
                 <div class="relative">
                     <button @click="player.queueOpen = !player.queueOpen" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: player.queueOpen }" title="Queue"><i class="fa-solid fa-list-ul"></i></button>

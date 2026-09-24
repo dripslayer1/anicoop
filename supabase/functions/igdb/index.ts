@@ -339,6 +339,52 @@ const ytSearch = async (body: Record<string, any>) => {
     return json(text);
 };
 
+// ---------- YouTube Music search (the song player) ----------
+// YouTube Music's own search, "Songs" only: the official audio tracks (the same ones music.youtube.com plays),
+// trimmed to [{ id, title, channel (artists), album, secs, atv }]. The app plays them in YouTube's player; nothing is downloaded.
+const ytmText = (c: any) => (c?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || []) as any[];
+const ytmWalk = (o: any, out: any[]) => {
+    if (!o || typeof o !== 'object' || out.length >= 25) return;
+    if (Array.isArray(o)) { for (const x of o) ytmWalk(x, out); return; }
+    const r = o.musicResponsiveListItemRenderer;
+    if (r) {
+        const watch = r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint;
+        const id = r.playlistItemData?.videoId || watch?.videoId;
+        if (id) {
+            const cols = r.flexColumns || [];
+            const runs = cols.slice(1).flatMap(ytmText);
+            const page = (x: any) => x.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType || '';
+            const artists = runs.filter((x: any) => page(x) === 'MUSIC_PAGE_TYPE_ARTIST').map((x: any) => x.text);
+            const album = runs.find((x: any) => page(x) === 'MUSIC_PAGE_TYPE_ALBUM')?.text || '';
+            const dur = runs.map((x: any) => x.text).find((t: string) => /^\d{1,2}:\d{2}(:\d{2})?$/.test(t || '')) || '';
+            const type = watch?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType || '';
+            out.push({ id, title: ytmText(cols[0]).map((x: any) => x.text).join(''), channel: artists.join(', '), album, secs: ytTime(dur), atv: type === 'MUSIC_VIDEO_TYPE_ATV' || !type });
+        }
+        return;
+    }
+    for (const k in o) ytmWalk(o[k], out);
+};
+const ytmSearch = async (body: Record<string, any>) => {
+    const q = String(body.q || '').trim().slice(0, 200);
+    if (!q) return json({ error: 'Nothing to search' }, 400);
+    const key = 'ytm\n' + q;
+    const hit = cache.get(key); if (hit && Date.now() - hit.at < CACHE_MS * 36) return json(hit.body);
+    let r: Response;
+    try {
+        r = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': BROWSER_UA, Origin: 'https://music.youtube.com', Referer: 'https://music.youtube.com/' },
+            // params = the "Songs" filter
+            body: JSON.stringify({ context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20250101.01.00', hl: 'en', gl: 'US' } }, query: q, params: 'EgWKAQIIAWoMEA4QChADEAQQCRAF' }),
+        });
+    } catch (err) { return json({ error: 'Could not reach YouTube Music: ' + ((err as Error).message || 'network error') }, 502); }
+    if (!r.ok) return json({ error: `YouTube Music search failed (${r.status})` }, 502);
+    const out: any[] = []; ytmWalk(await r.json(), out);
+    const text = JSON.stringify({ items: out });
+    if (cache.size > 800) cache.clear();
+    cache.set(key, { at: Date.now(), body: text });
+    return json(text);
+};
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
     if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -349,6 +395,7 @@ Deno.serve(async (req) => {
 
     if (endpoint === 'fetch') return siteFetch(body);
     if (endpoint === 'yt') return ytSearch(body);
+    if (endpoint === 'ytm') return ytmSearch(body);
     if (endpoint === 'tmdb') return tmdb(body);
     if (endpoint === 'spotify') return spotify(body);
 

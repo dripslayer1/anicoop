@@ -1417,3 +1417,5 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 .region-off { padding: 1px 5px; border-radius: 4px; background: #4c6b22; color: #beee11; font-size: 10px; font-weight: 700; flex-shrink: 0; }
 .region-local { font-size: 13px; font-weight: 700; color: rgb(var(--c-ink)); white-space: nowrap; flex-shrink: 0; }
 .region-usd { font-family: "Geist Mono", monospace; font-size: 11px; color: rgb(var(--c-sub)); white-space: nowrap; width: 58px; text-align: right; flex-shrink: 0; }
+.pbar-status { color: rgb(var(--c-volt)); }
+.pbar-src.warn { border-color: rgb(251 191 36 / .6); color: #fbbf24; }

@@ -574,25 +574,71 @@ const ytWalk = (o, out) => {
     }
     for (const k in o) ytWalk(o[k], out);
 };
-const ytCache = new Map();
-const ytSearch = async (q) => {
-    q = String(q || '').trim(); if (!q) return [];
-    if (ytCache.has(q)) return ytCache.get(q);
-    let items = null;
-    try {
-        const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'yt', q } });
-        if (!error) { const d = typeof data === 'string' ? JSON.parse(data) : data; if (Array.isArray(d?.items)) items = d.items; }
-    } catch {}
-    if (!items) {
-        const html = (await siteFetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=EgIQAQ%253D%253D&hl=en&gl=US`)).body || '';
-        const m = /var ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s.exec(html);
-        if (!m) throw new Error('YouTube search didn’t answer. Try again in a moment.');
-        items = []; ytWalk(JSON.parse(m[1]), items);
+// Asks the Edge Function for a search. An Edge Function older than the song player answers "Not allowed":
+// that's remembered (fnOutdated) so the app can say what to do instead of just failing.
+let fnOutdated = false;
+const searchVia = async (endpoint, q) => {
+    const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint, q } });
+    if (error) {
+        let msg = ''; try { msg = (await error.context.json())?.error || ''; } catch {}
+        if (error.context?.status === 400 && /not allowed/i.test(msg)) { fnOutdated = true; throw new Error('outdated function'); }
+        throw new Error(msg || error.message || 'search failed');
     }
-    if (ytCache.size > 200) ytCache.clear();
-    ytCache.set(q, items);
-    return items;
+    const d = typeof data === 'string' ? JSON.parse(data) : data;
+    return Array.isArray(d?.items) ? d.items : [];
 };
+const ytCache = new Map();
+const cachedSearch = async (key, run) => {
+    if (ytCache.has(key)) return ytCache.get(key);
+    const items = await run();
+    if (ytCache.size > 200) ytCache.clear();
+    ytCache.set(key, items); return items;
+};
+const ytSearch = (q) => { q = String(q || '').trim(); return q ? cachedSearch('yt:' + q, async () => {
+    try { return await searchVia('yt', q); } catch {}
+    const html = (await siteFetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=EgIQAQ%253D%253D&hl=en&gl=US`)).body || '';
+    const m = /var ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s.exec(html);
+    if (!m) throw new Error('YouTube search didn’t answer');
+    const items = []; ytWalk(JSON.parse(m[1]), items); return items;
+}) : Promise.resolve([]); };
+// YouTube Music: its "Songs" search = the official audio tracks (no video intros, no live or cover versions)
+const ytmCol = (c) => c?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+const ytmWalk = (o, out) => {
+    if (!o || typeof o !== 'object' || out.length >= 25) return;
+    if (Array.isArray(o)) { for (const x of o) ytmWalk(x, out); return; }
+    const r = o.musicResponsiveListItemRenderer;
+    if (r) {
+        const watch = r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint;
+        const id = r.playlistItemData?.videoId || watch?.videoId;
+        if (id) {
+            const cols = r.flexColumns || []; const runs = cols.slice(1).flatMap(ytmCol);
+            const page = (x) => x.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType || '';
+            const type = watch?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType || '';
+            out.push({ id, title: ytmCol(cols[0]).map(x => x.text).join(''), channel: runs.filter(x => page(x) === 'MUSIC_PAGE_TYPE_ARTIST').map(x => x.text).join(', '),
+                album: runs.find(x => page(x) === 'MUSIC_PAGE_TYPE_ALBUM')?.text || '', secs: ytTime(runs.map(x => x.text).find(t => /^\d{1,2}:\d{2}(:\d{2})?$/.test(t || ''))), atv: type === 'MUSIC_VIDEO_TYPE_ATV' || !type });
+        }
+        return;
+    }
+    for (const k in o) ytmWalk(o[k], out);
+};
+// music.youtube.com's search page keeps its results in JavaScript strings (initialData.push({ … data: '\x7b…' }))
+const ytmFromPage = (html) => {
+    const out = [];
+    for (const m of String(html || '').matchAll(/initialData\.push\(\{path:\s*'\\\/search'[\s\S]*?data:\s*'((?:[^'\\]|\\.)*)'\s*\}\)/g)) {
+        try {
+            const str = JSON.parse('"' + m[1].replace(/\\x([0-9a-fA-F]{2})/g, '\\u00$1').replace(/\\'/g, "'") + '"');
+            ytmWalk(JSON.parse(str), out);
+        } catch {}
+    }
+    return out;
+};
+const ytmSearch = (q) => { q = String(q || '').trim(); return q ? cachedSearch('ytm:' + q, async () => {
+    try { return await searchVia('ytm', q); } catch (err) { if (!fnOutdated) throw err; }
+    // older Edge Function: read YouTube Music's search page instead
+    const items = ytmFromPage((await siteFetch(`https://music.youtube.com/search?q=${encodeURIComponent(q)}`)).body);
+    if (!items.length) throw new Error('YouTube Music search didn’t answer');
+    return items;
+}) : Promise.resolve([]); };
 const htmlDoc = (html, base) => { const d = new DOMParser().parseFromString(html || '', 'text/html'); const b = d.createElement('base'); b.href = base; d.head.prepend(b); return d; };
 const absUrl = (v, base) => { try { return new URL(v.trim().split(/\s+/)[0], base).href; } catch { return null; } };
 // read one value from an element with a spec (or a list of specs, first hit wins)
@@ -3873,11 +3919,11 @@ createApp({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
             vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
             queue: [], qi: -1, shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
-            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false,
+            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '',
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
         const saveVol = () => { try { localStorage.setItem(VOL_KEY, String(player.vol)); } catch {} };
-        let playTok = 0, backStack = [], loadStart = 0;
+        let playTok = 0, backStack = [], loadStart = 0, lastNote = '';
         // --- engine 1: Apple previews (a plain <audio>) ---
         const audio = new Audio(); audio.preload = 'none'; audio.volume = player.vol;
         audio.addEventListener('timeupdate', () => { if (player.mode !== 'preview') return; player.t = audio.currentTime; if (audio.duration) player.dur = audio.duration; });
@@ -3900,7 +3946,7 @@ createApp({
             return box;
         };
         // every step gives up after a while, so a song never keeps loading forever (the preview plays instead)
-        const withTimeout = (p, ms) => Promise.race([p, new Promise((_, bad) => setTimeout(() => bad(new Error('timeout')), ms))]);
+        const withTimeout = (p, ms, msg = 'timeout') => Promise.race([p, new Promise((_, bad) => setTimeout(() => bad(new Error(msg)), ms))]);
         // (youtube.com, not youtube-nocookie.com: with the no-cookie host the player's "ready" message can go missing)
         const ytPlayer = () => ytReady || (ytReady = withTimeout(loadYtApi().then(YT => new Promise((ok) => {
             ytHolder();
@@ -3913,32 +3959,43 @@ createApp({
                     onStateChange: (e) => {
                         if (player.mode !== 'yt') return;
                         ytState = e.data;
-                        if (e.data === 1) { player.playing = true; player.loading = false; clearTimeout(ytStartCheck); }
+                        if (e.data === 1) { player.playing = true; player.loading = false; player.status = ''; clearTimeout(ytStartCheck); ytWaiter?.('ok'); }
                         else if (e.data === 2) player.playing = false;
                         else if (e.data === 0) { player.playing = false; songEnded(); }
                     },
                     // 100 removed · 101/150 the owner only allows it on YouTube → the preview plays instead
-                    onError: () => { if (player.mode === 'yt' && player.song) { const s = player.song; forgetYt(s); startPreview(s, playTok, 'YouTube won’t play this one here. Playing the 30-second preview.'); } },
+                    // (while a song is starting, the next upload is tried instead: see startSong)
+                    onError: () => { if (ytWaiter) { ytWaiter('error'); return; } if (player.mode === 'yt' && player.song) { const s = player.song; forgetYt(s); startPreview(s, playTok, 'YouTube stopped playing this one. Playing the 30-second preview.'); } },
                 },
             });
-        })), 15000).catch(err => { ytReady = null; throw err; }));
-        let ytState = -1;
-        const stopEngines = () => { audio.pause(); try { ytP?.pauseVideo?.(); } catch {} clearTimeout(ytStartCheck); };
+        })), 12000, 'YouTube’s player didn’t load').catch(err => { ytReady = null; throw err; }));
+        let ytState = -1, ytWaiter = null;
+        // load one upload and wait for what happens: 'ok' (playing), 'error' (removed / the label blocks it outside YouTube),
+        // 'tap' (the browser wants a tap before sound starts) or 'timeout'
+        const ytTry = (yp, id, ms = 8000) => new Promise((done) => {
+            let t = null; const finish = (r) => { clearTimeout(t); if (ytWaiter === finish) ytWaiter = null; done(r); };
+            ytWaiter = finish; ytState = -1;
+            const check = () => { t = setTimeout(() => ytState === 3 ? check() : finish(ytState === -1 || ytState === 5 ? 'tap' : 'timeout'), ms); };
+            check();
+            try { yp.loadVideoById(id); } catch { finish('error'); }
+        });
+        const stopEngines = () => { ytWaiter?.('stop'); audio.pause(); try { ytP?.pauseVideo?.(); } catch {} clearTimeout(ytStartCheck); };
         // --- finding the song on YouTube: the artist's own upload ("Artist - Topic" = the official audio) scores highest ---
         const ytSongs = reactive(readJSON(YT_SONGS_KEY) || {});
         const saveYtSongs = debounce(() => { const k = Object.keys(ytSongs); if (k.length > 1500) k.slice(0, k.length - 1500).forEach(x => delete ytSongs[x]); try { localStorage.setItem(YT_SONGS_KEY, JSON.stringify(ytSongs)); } catch {} }, 800);
         const songYtKey = (s) => songKey(s?.title?.romaji, (s?.artists || [])[0]);
         const forgetYt = (s) => { delete ytSongs[songYtKey(s)]; saveYtSongs(); };
         const BAD_TAKE = /\b(live|cover|karaoke|instrumental|remix|sped ?up|slowed|reverb|nightcore|8d|mashup|reaction|tutorial|lesson|piano|acoustic|extended|1 ?hour|loop)\b/i;
-        const pickSongVideo = (list, s) => {
+        // score every result; YouTube Music's official audio tracks ("atv") score highest
+        const rankSongVideos = (list, s) => {
             const title = normTitle(String(s.title?.romaji || '').replace(/\s*[([].*?[)\]]/g, '')); const artist = normTitle((s.artists || [])[0] || '');
             const want = s.durationMs ? s.durationMs / 1000 : null; const songText = normTitle(s.title?.romaji);
-            let best = null, bestScore = -1e9;
-            for (const v of list) {
-                if (!v.secs || v.secs > 20 * 60) continue;
+            return (list || []).map(v => {
+                if (!v.secs || v.secs > 20 * 60) return null;
                 const vt = normTitle(v.title), ch = normTitle(v.channel);
                 let sc = 0;
                 if (title && vt.includes(title)) sc += 30; else if (title && title.split(' ').filter(w => w.length > 2).every(w => vt.includes(w))) sc += 15; else sc -= 40;
+                if (v.atv) sc += 45;
                 if (/ topic$/.test(ch) && artist && ch.startsWith(artist)) sc += 45;
                 else if (artist && (ch.includes(artist) || ch.replace(/ /g, '').includes(artist.replace(/ /g, '')))) sc += 25;
                 else if (artist && vt.includes(artist)) sc += 10;
@@ -3946,18 +4003,27 @@ createApp({
                 if (/\bofficial audio\b/i.test(v.title)) sc += 8;
                 const bad = BAD_TAKE.exec(v.title); if (bad && !songText.includes(normTitle(bad[0]))) sc -= 45;
                 if (want) { const d = Math.abs(v.secs - want); sc += d <= 3 ? 25 : d <= 10 ? 12 : d <= 30 ? 0 : -25; }
-                if (sc > bestScore) { best = v; bestScore = sc; }
-            }
-            return bestScore >= 20 ? best : null;
+                return sc >= 20 ? { id: v.id, sc } : null;
+            }).filter(Boolean).sort((x, y) => y.sc - x.sc);
         };
-        const ytForSong = async (s) => {
-            const k = songYtKey(s); if (ytSongs[k]) return ytSongs[k];
-            const artist = (s.artists || [])[0] || '';
-            let v = pickSongVideo(await ytSearch(`${artist} - ${s.title?.romaji || ''}`), s);
-            if (!v) v = pickSongVideo(await ytSearch(`${s.title?.romaji || ''} ${artist} official audio`), s);
-            if (!v) return null;
-            ytSongs[k] = v.id; saveYtSongs(); return v.id;
+        // the uploads to try, best first: YouTube Music's songs, then YouTube's videos. Several are kept because
+        // record labels often block their songs from playing outside YouTube; the next one may be allowed.
+        const ytCandidates = async (s) => {
+            const artist = (s.artists || [])[0] || '', title = s.title?.romaji || '';
+            let found = [], err = null;
+            try { found = rankSongVideos(await ytmSearch(`${artist} ${title}`), s); } catch (e) { err = e; }
+            if (found.length < 3) { try { found = [...found, ...rankSongVideos(await ytSearch(`${artist} - ${title}`), s)]; } catch (e) { err = err || e; } }
+            const known = ytSongs[songYtKey(s)];
+            const ids = [...new Set([...(known ? [known] : []), ...found.map(x => x.id)])];
+            if (!ids.length && err) throw err;   // the searches failed (not "nothing found")
+            return ids.slice(0, 5);
         };
+        // when full songs can't work at all here (old Edge Function, YouTube blocked), songs go straight to the preview
+        // for 10 minutes instead of waiting on YouTube every time
+        let fullDown = null;
+        const whyFull = (err) => fnOutdated ? 'Full songs need the updated Edge Function in Supabase (see README, v8.8)'
+            : /player didn’t load/i.test(err?.message || '') ? 'YouTube’s player didn’t load here (an ad blocker or network filter may be blocking youtube.com)'
+            : 'YouTube Music search isn’t answering right now';
         const previewUrlOf = async (s) => {
             let url = s.previewUrl;
             if (!url && s.appleId) url = (await itunes('lookup', { id: s.appleId }))?.results?.[0]?.previewUrl;   // charts don't include the preview link
@@ -3970,7 +4036,8 @@ createApp({
             if (tok !== playTok) return;
             player.loading = false;
             if (!url) { player.mode = null; player.playing = false; showToast(note ? 'This song can’t play here' : 'No way to play this song', 'error'); if (player.queue.length > 1) setTimeout(() => tok === playTok && nextSong(true), 1200); return; }
-            if (note) showToast(note);
+            if (note && note !== lastNote) showToast(note);   // the same reason isn't repeated song after song
+            lastNote = note || lastNote; player.status = '';
             player.mode = 'preview'; player.dur = 30; audio.src = url; audio.volume = player.vol; audio.muted = player.muted;
             audio.play().catch(() => showToast('Tap play to start', 'error'));
         };
@@ -3978,26 +4045,39 @@ createApp({
         const startSong = async (s) => {
             const tok = ++playTok; loadStart = Date.now();
             stopEngines();
-            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null });
+            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null, status: '', why: '' });
             let song = s;
             if (s.pending && s.wiki) { try { const m = await songApi.matchAllTime(s.wiki); if (m) song = { ...m }; } catch {} if (tok !== playTok) return; player.song = song; }
             addHistory(song, { key: 'play', label: player.full ? 'Played' : 'Played the preview', sub: (song.artists || []).join(', ') });
             setMediaSession(song);
+            if (player.full && fullDown && Date.now() < fullDown.until) { player.why = fullDown.why; startPreview(song, tok, ''); return; }
+            let why = '';
             if (player.full) {
                 try {
-                    const [id, yp] = await Promise.all([withTimeout(ytForSong(song), 15000), ytPlayer()]);
+                    player.status = 'Finding it on YouTube Music…';
+                    const [ids, yp] = await Promise.all([withTimeout(ytCandidates(song), 12000, 'search took too long'), ytPlayer()]);
                     if (tok !== playTok) return;
-                    if (id) {
-                        player.mode = 'yt'; audio.pause(); ytState = -1;
+                    player.status = ids.length ? 'Starting…' : '';
+                    for (const id of ids) {
+                        player.mode = 'yt'; audio.pause();
                         yp.setVolume(Math.round(player.vol * 100)); if (player.muted) yp.mute(); else yp.unMute();
-                        yp.loadVideoById(id); ytTick();
-                        ytWatch(tok, song, 7000);
-                        return;
+                        ytTick();
+                        const r = await ytTry(yp, id);
+                        if (tok !== playTok) return;
+                        if (r === 'ok') { ytSongs[songYtKey(song)] = id; saveYtSongs(); fullDown = null; player.why = ''; return; }
+                        if (r === 'tap') { player.loading = false; player.status = ''; ytSongs[songYtKey(song)] = id; showToast('Tap play to start the song'); return; }
+                        if (ytSongs[songYtKey(song)] === id) forgetYt(song);
                     }
-                } catch (err) { console.warn('Full song unavailable:', err?.message || err); }
+                    why = ids.length ? 'The record label only allows this song on YouTube itself' : 'Not found on YouTube Music';
+                } catch (err) {
+                    console.warn('Full song unavailable:', err?.message || err);
+                    why = whyFull(err);
+                    if (fnOutdated || /player didn’t load/i.test(err?.message || '')) fullDown = { why, until: Date.now() + 10 * 60e3 };
+                }
                 if (tok !== playTok) return;
             }
-            startPreview(song, tok, player.full ? 'Couldn’t find the full song. Playing the 30-second preview.' : '');
+            player.why = why;
+            startPreview(song, tok, why ? why + '. Playing the 30-second preview.' : '');
         };
         // YouTube didn't start: blocked autoplay (it's "cued" / "unstarted") → the play button starts it;
         // nothing at all happened → the preview plays instead
@@ -4059,7 +4139,9 @@ createApp({
         const songEnded = () => nextSong(true);
         const toggleShuffle = () => { player.shuffle = !player.shuffle; backStack = []; savePlayerPrefs(); };
         const cycleRepeat = () => { player.repeat = player.repeat === 'off' ? 'all' : player.repeat === 'all' ? 'one' : 'off'; savePlayerPrefs(); };
-        const toggleFullSongs = () => { player.full = !player.full; savePlayerPrefs(); showToast(player.full ? 'Full songs on (from YouTube)' : '30-second previews only'); if (player.song) startSong(player.song); };
+        // the Full / 0:30 badge: on a preview that should have been the full song, it tries the full song again
+        const srcBadge = () => { if (player.full && player.mode === 'preview' && player.song) { fullDown = null; lastNote = ''; startSong(player.song); } else toggleFullSongs(); };
+        const toggleFullSongs = () => { player.full = !player.full; fullDown = null; lastNote = ''; savePlayerPrefs(); showToast(player.full ? 'Full songs on (from YouTube)' : '30-second previews only'); if (player.song) startSong(player.song); };
         const seekTo = (t) => {
             t = clamp(t, 0, player.dur || 0); player.t = t;
             if (player.mode === 'yt') ytP?.seekTo?.(t, true); else if (player.mode === 'preview' && audio.duration) audio.currentTime = t;
@@ -8262,7 +8344,7 @@ createApp({
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
             picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,

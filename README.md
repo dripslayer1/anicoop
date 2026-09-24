@@ -340,3 +340,20 @@ to search YouTube reliably. No database change.
   cheapest first, with a rough US-dollar value (exchange rates from open.er-api.com).
 * **Poster quick menu** (the + on a card) is drawn on top of the page, so small cards (songs) no longer cut it off.
 * **Header:** the small divider lines between the icons are gone.
+
+## v9.0 — full songs from YouTube Music
+
+**Update (both steps are needed for full songs):**
+1. Re-upload the folder.
+2. Supabase → Edge Functions → `igdb` → paste the new `supabase/functions/igdb/index.ts` → Deploy.
+   Without this, songs play the 30-second preview and the player says why.
+
+* **Songs are found on YouTube Music** ("Songs" search = the official audio tracks: no video intros, live or
+  cover versions), then regular YouTube if needed. They play in YouTube's player, sound only. Nothing is downloaded
+  or converted.
+* **Blocked songs:** record labels often block their songs from playing outside YouTube. The player now tries the
+  next few official uploads before falling back to the preview.
+* **Fast previews when full songs can't work:** if the Edge Function is outdated or YouTube's player can't load,
+  the preview starts within a few seconds, and for the next 10 minutes songs go straight to the preview.
+* **The player tells you why:** "Finding it on YouTube Music…" while it looks; if the preview plays instead, the
+  amber "0:30" badge explains why (hover it) and clicking it tries the full song again.
