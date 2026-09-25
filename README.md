@@ -658,3 +658,47 @@ on says so when tapped — ask to have it removed from the page):
    * **Twitch:** dev.twitch.tv/console → Register Your Application (a new one, not the IGDB one) → OAuth Redirect URL =
      the Callback URL → copy the Client ID and a new Client Secret.
 3. Paste the ID and secret into Supabase and **Save**. Keys stay in Supabase only — never put them in the repo.
+
+> **v10:** the Google / Discord / Facebook / Twitch buttons were taken off the login page again (email sign-in only).
+> If you switched any of them on in Supabase, you can switch them off there too (Authentication → Providers); accounts
+> already made with them keep working either way.
+
+## v10.0 — more GIFs, tier lists for every section, "Wanna Rewatch", 18+ kept private, header search
+
+**Update:** merge the PR (GitHub Pages updates by itself). **No SQL.** For item 1 (more GIFs when scrolling), **deploy
+the Edge Function again** (Supabase → Edge Functions → `igdb` → replace the code with `supabase/functions/igdb/index.ts`
+→ Deploy). Until then, the GIF picker simply shows the first 30 like before.
+
+1. **GIFs:** scrolling down in the GIF picker loads 30 more each time.
+2. **Tier lists in every section:** a switch at the top picks what you rank: **Characters** (Artists for Songs) or the
+   titles themselves (Anime, Manga, Games, Movies & TV, Songs). Characters come from a title's whole cast, one by one, by
+   tag/genre (anime & manga) or **from your list** (the main characters of your best-rated titles). Movies & TV
+   characters use the actor's photo; Songs ranks artists (with their Deezer photos).
+3. **Music with the screen off:** full songs come from YouTube's player, and phone browsers stop it when the screen
+   locks or you switch apps (YouTube keeps background play for its Premium app, so no website can switch that off).
+   Now: the lock-screen play button always resumes it, the song carries on by itself when you come back, and the lock
+   screen shows the song's progress. The 30-second previews keep playing in the background.
+4. **Login:** the Google / Discord / Facebook / Twitch buttons are gone (email only).
+5. **Home:** "P1" is now on the left of its dot.
+6. **Scrollbar:** the page's scrollbar is wider and easier to grab, like YouTube's.
+7. **Select several:** a **Hide** button shrinks the selection bar into a small "3 selected" pill (tap it to open it again).
+8. **Select several:** the selection bar no longer shows on top of Settings, a title's page, a profile or any window.
+9. **Search button** (🔍) next to Settings on every page: it opens Browse of the section you're in with the search box
+   ready to type in.
+10. **Random pick:** add the pick to your list right there (Plan / Watching / Completed / Wanna rewatch).
+11. **Random pick:** the dice buttons **1 2 3 4** in the corner roll that many picks at once, each with its own add buttons.
+12. **"Series" count** (seasons of the same show count once) is more accurate: seasons are now joined through the
+    seasons in between even when those aren't on your list (e.g. season 1 + The Final Season = 1 series), a failed
+    lookup is asked again instead of being remembered as "no seasons", and the saved data refreshes every 2 weeks.
+13. **Recommendations, related titles and franchise lists** have the same add buttons (Plan / Watching / Completed /
+    Wanna rewatch) on every title.
+14. **Select several:** after adding the selected titles to a list, they're unselected (they stay on the page), ready for
+    the next ones.
+15. **18+ stays private:** someone without 18+ access no longer sees 18+ titles anywhere: not on the owner's or a
+    friend's list, rankings, stats (numbers are counted without them), squad lists, the feed or profile activity. New
+    saves remember that a title is 18+; older saves are checked with AniList once (the answer is kept in the browser).
+16. **Profile decorations:** 8 new effects (Autumn leaves, Confetti, Bubbles, Fireflies, Music notes, Matrix code,
+    Lightning, Butterflies) and 8 new name styles (Ocean, Sunset, Toxic, Chrome, Vaporwave, Galaxy, Pulse, Retro 3D).
+17. **Wanna Rewatch** (anime, movies & TV): a button on a title's page (and in the add buttons above) puts it on its own
+    **Wanna Rewatch** list (a filter in Lists, and its own row there). The title keeps its status (Completed…); a title
+    that isn't on your list yet goes in as Completed. Starting a rewatch takes it off the list.

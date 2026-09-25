@@ -408,23 +408,30 @@ const gifSearch = async (body: Record<string, any>) => {
     const q = String(body.q || '').trim().slice(0, 100);
     const giphy = Deno.env.get('GIPHY_API_KEY') || '', tenor = Deno.env.get('TENOR_API_KEY') || '';
     if (!giphy && !tenor) return json({ error: 'No GIF key: add GIPHY_API_KEY to the Edge Function secrets' }, 500);
-    const ck = 'gif\n' + q;
+    // v10 more GIFs when scrolling: "next" is where the following page starts (GIPHY: a number, Tenor: its "pos" token)
+    const next = String(body.next || '').slice(0, 200);
+    const ck = 'gif\n' + q + '\n' + next;
     const hit = cache.get(ck); if (hit && Date.now() - hit.at < CACHE_MS * 3) return json(hit.body);
-    let items: any[] = [];
+    let items: any[] = [], after = '';
     try {
         if (giphy) {
-            const u = q ? `https://api.giphy.com/v1/gifs/search?api_key=${giphy}&q=${encodeURIComponent(q)}&limit=30&rating=pg-13&lang=en`
-                : `https://api.giphy.com/v1/gifs/trending?api_key=${giphy}&limit=30&rating=pg-13`;
+            const off = Math.min(4950, Math.max(0, Number(next) || 0));
+            const u = q ? `https://api.giphy.com/v1/gifs/search?api_key=${giphy}&q=${encodeURIComponent(q)}&limit=30&offset=${off}&rating=pg-13&lang=en`
+                : `https://api.giphy.com/v1/gifs/trending?api_key=${giphy}&limit=30&offset=${off}&rating=pg-13`;
             const d = await (await fetch(u)).json();
             items = (d?.data || []).map((g: any) => ({ id: g.id, preview: g.images?.fixed_width_small?.url || g.images?.fixed_width?.url, url: g.images?.downsized?.url || g.images?.original?.url, title: g.title || '' }));
+            const total = Number(d?.pagination?.total_count) || 0;
+            if (items.length && (!total || off + 30 < total)) after = String(off + 30);
         } else {
-            const u = q ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif`
-                : `https://tenor.googleapis.com/v2/featured?key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif`;
+            const pos = next ? `&pos=${encodeURIComponent(next)}` : '';
+            const u = q ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif${pos}`
+                : `https://tenor.googleapis.com/v2/featured?key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif${pos}`;
             const d = await (await fetch(u)).json();
             items = (d?.results || []).map((g: any) => ({ id: g.id, preview: g.media_formats?.tinygif?.url, url: g.media_formats?.gif?.url || g.media_formats?.tinygif?.url, title: g.content_description || '' }));
+            if (items.length && d?.next) after = String(d.next);
         }
     } catch (err) { return json({ error: 'GIF search failed: ' + ((err as Error).message || 'network error') }, 502); }
-    const text = JSON.stringify({ items: items.filter(x => x.url && x.preview), by: giphy ? 'GIPHY' : 'Tenor' });
+    const text = JSON.stringify({ items: items.filter(x => x.url && x.preview), by: giphy ? 'GIPHY' : 'Tenor', next: after });
     if (cache.size > 800) cache.clear();
     cache.set(ck, { at: Date.now(), body: text });
     return json(text);

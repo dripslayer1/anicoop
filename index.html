@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.9">
+    <link rel="stylesheet" href="app.css?v=10.0">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.9" defer></script>
+    <script src="app.js?v=10.0" defer></script>
 </head>
 <body>
 
@@ -93,13 +93,6 @@
                         {{ isSignUp ? 'Create account' : 'Sign in' }} <i v-if="!authLoading" class="fa-solid fa-arrow-right text-xs"></i>
                     </button>
                 </form>
-                <!-- v9.9 sign in with another account (Google, Discord…) -->
-                <div class="oauth-or"><span>or {{ isSignUp ? 'sign up' : 'continue' }} with</span></div>
-                <div class="oauth-grid">
-                    <button v-for="p in OAUTH_PROVIDERS" :key="p.id" type="button" @click="signInWith(p)" :disabled="!!oauthBusy" class="oauth-btn" :style="{ '--c': p.color }" :title="(isSignUp ? 'Sign up' : 'Sign in') + ' with ' + p.name">
-                        <i :class="oauthBusy === p.id ? 'fa-solid fa-circle-notch fa-spin' : p.icon"></i><span>{{ p.name }}</span>
-                    </button>
-                </div>
                 <button @click="isSignUp = !isSignUp" class="w-full text-center mt-6 text-xs text-sub hover:text-ink transition-colors font-semibold">
                     {{ isSignUp ? 'Already have an account? Sign in' : "New here? Create an account" }}
                 </button>
@@ -128,6 +121,7 @@
                     </button>
                 </nav>
                 <div class="home-icons flex items-center gap-2">
+                    <button @click.stop="openSearch()" class="icon-btn !w-9 !h-9" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
                     <button @click.stop="openSettings()" class="icon-btn !w-9 !h-9" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                     <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                     <span class="hdr-space" aria-hidden="true"></span>
@@ -202,9 +196,9 @@
                         </div>
                     </div>
                     </div>
-                    <div class="intro-el i-p1 absolute left-[14px] top-[14px] flex items-center gap-3 z-30 pointer-events-none">
-                        <span class="relative w-[52px] h-[52px] flex items-center justify-center" :style="{ '--c': heroColors.c1 }"><span class="absolute inset-0 rounded-full orb-ring"></span><span class="w-5 h-5 rounded-full orb-core"></span></span>
+                    <div class="intro-el i-p1 absolute left-[-16px] top-[14px] flex items-center gap-3 z-30 pointer-events-none">
                         <span class="font-pixel text-lg" :style="{ color: heroColors.c1 }">P1</span>
+                        <span class="relative w-[52px] h-[52px] flex items-center justify-center" :style="{ '--c': heroColors.c1 }"><span class="absolute inset-0 rounded-full orb-ring"></span><span class="w-5 h-5 rounded-full orb-core"></span></span>
                     </div>
                     <div class="intro-el i-trail absolute left-[-240px] top-[-70px] w-[280px] h-[2px] rotate-[33deg] origin-right pointer-events-none" :style="{ background: 'linear-gradient(90deg,transparent,' + heroColors.c1 + ')' }"></div>
                     <div class="intro-el i-p2 absolute right-[6px] bottom-[6px] flex items-center gap-3 z-30 pointer-events-none">
@@ -218,7 +212,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.9</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.0</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -264,6 +258,7 @@
                         </button>
                     </nav>
                     <div class="hdr-side flex items-center justify-end gap-2">
+                        <button @click.stop="openSearch()" class="icon-btn !w-9 !h-9 hdr-search" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                         <span class="hdr-space hdr-extra" aria-hidden="true"></span>
@@ -526,6 +521,10 @@
                                         <span class="text-[10px] font-semibold leading-none">{{ STATUS_SHORT[s] }}</span>
                                     </button>
                                 </div>
+                                <!-- v10 "Wanna rewatch": its own list, the title keeps its status -->
+                                <button v-if="REWISH_TYPES.includes(selectedAnime.type || 'ANIME')" @click="toggleRewish(selectedAnime)" class="rewish-btn" :class="{ on: isRewish(selectedAnime.id) }" :title="isRewish(selectedAnime.id) ? 'Take it off Wanna Rewatch' : 'Put it on your Wanna Rewatch list'">
+                                    <i class="fa-solid fa-rotate-right"></i><span>{{ isRewish(selectedAnime.id) ? 'On Wanna Rewatch' : 'Wanna rewatch' }}</span><i class="fa-solid ml-auto text-[10px]" :class="isRewish(selectedAnime.id) ? 'fa-check' : 'fa-plus'"></i>
+                                </button>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div v-if="inlineForm.status === 'REPEATING'">
                                         <label class="label block mb-2 rep-label">Rewatch #{{ inlineForm.repeats.length || 1 }} <span class="normal-case tracking-normal">/ {{ selectedAnime.episodes || '?' }}</span></label>
@@ -812,6 +811,10 @@
                                             <span class="flex-grow min-w-0">
                                                 <span class="block text-ink font-semibold text-sm truncate">{{ titleOf(g) }}</span>
                                                 <span class="block text-[11px] text-mute truncate mt-0.5">{{ g.type === 'TV' ? [g.seasonYear || 'Coming soon', g.averageScore ? '★ ' + (g.averageScore / 10).toFixed(1) : '', myEntry(g.id) ? statusLabelFor('TV', myEntry(g.id).status) : ''].filter(Boolean).join(' · ') : [g.seasonYear || 'TBA', g.kind, platformFamilies(g.platforms).join(', ')].filter(Boolean).join(' · ') }}</span>
+                                                <!-- v10 add it to your list from here -->
+                                                <span v-if="!storyEdit" class="qadd qadd-row mt-1.5" @click.stop @pointerdown.stop>
+                                                    <button v-for="st in addStatuses(g)" :key="st" @click.stop="quickAdd(g, st)" class="qadd-btn" :class="{ on: addOn(g, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(g.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
+                                                </span>
                                             </span>
                                             <span v-if="g.type === 'TV'" class="shrink-0 font-mono text-[11px] text-ink" title="Length">{{ fmtMins(g.runtime) }}</span>
                                             <span v-else class="hidden sm:grid grid-cols-4 gap-3 shrink-0 text-right font-mono text-[11px]" title="Main story · Story + sides · 100% · 100% + DLC">
@@ -894,6 +897,9 @@
                                         <p class="text-xs text-ink font-semibold line-clamp-2 mt-2.5">{{ titleOf(g) }}</p>
                                         <p v-if="g.type === 'SONG' && (g.artists || []).length" class="text-[11px] text-sub truncate mt-0.5">{{ g.artists.join(', ') }}</p>
                                         <p v-else-if="g.seasonYear" class="font-mono text-[10px] text-mute mt-0.5">{{ g.seasonYear }}</p>
+                                        <div class="qadd mt-2" @click.stop>
+                                            <button v-for="st in addStatuses(g)" :key="st" @click.stop="quickAdd(g, st)" class="qadd-btn" :class="{ on: addOn(g, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(g.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -988,11 +994,14 @@
                             <section v-if="detailRelations.length" class="mt-12">
                                 <h3 class="font-display font-semibold text-ink text-xl mb-4">{{ selectedAnime.type === 'GAME' ? 'DLC, expansions &amp; versions' : selectedAnime.type === 'TV' ? (selectedAnime.collectionName || 'Collection') : 'Franchise' }}</h3>
                                 <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
-                                    <button v-for="rel in detailRelations" :key="rel.id" @click="fetchAnimeDetails(rel.id)" class="w-32 shrink-0 text-left group">
+                                    <div v-for="rel in detailRelations" :key="rel.id" @click="fetchAnimeDetails(rel.id)" @keydown.enter.self="fetchAnimeDetails(rel.id)" role="button" tabindex="0" class="w-32 shrink-0 text-left group cursor-pointer">
                                         <div class="poster"><img :src="rel.coverImage?.large" class="art" loading="lazy" decoding="async" alt=""></div>
                                         <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ rel.relationType.replace('_', ' ') }}<span v-if="rel.type !== selectedAnime.type" class="text-mute"> · {{ rel.type }}</span></p>
                                         <p class="text-xs text-ink font-semibold line-clamp-2 mt-0.5">{{ titleOf(rel) }}</p>
-                                    </button>
+                                        <div class="qadd mt-2" @click.stop>
+                                            <button v-for="st in addStatuses(rel)" :key="st" @click.stop="quickAdd(rel, st)" class="qadd-btn" :class="{ on: addOn(rel, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(rel.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
+                                        </div>
+                                    </div>
                                 </div>
                             </section>
 
@@ -1555,7 +1564,7 @@
                         <div class="flex items-center gap-2.5 flex-grow min-w-[220px] basis-full xl:basis-auto">
                             <div class="relative flex-grow min-w-0">
                                 <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-sub text-sm"></i>
-                                <input v-model="filters.search" @input="debouncedSearch" type="search" :placeholder="'Search ' + currentSection.label.toLowerCase() + '…'" class="field !rounded-full !pl-11 h-11 !py-0">
+                                <input id="browse-search" v-model="filters.search" @input="debouncedSearch" type="search" enterkeyhint="search" :placeholder="'Search ' + currentSection.label.toLowerCase() + '…'" class="field !rounded-full !pl-11 h-11 !py-0">
                             </div>
                             <!-- always at hand while you scroll -->
                             <button @click="toggleSelectMode" :class="selectMode ? 'btn-primary' : 'btn-ghost'" class="dock-btn" :title="selectMode ? 'Done selecting' : 'Select several'"><i class="fa-solid fa-list-check"></i><span class="dock-label">{{ selectMode ? 'Done' : 'Select' }}</span></button>
@@ -1942,7 +1951,7 @@
 
                     <div class="mt-5 space-y-3">
                         <template v-if="feedLoading && !feed.length"><div v-for="n in 3" :key="'sk' + n" class="h-28 rounded-2xl skeleton"></div></template>
-                        <article v-for="a in feed" :key="a.id" :id="'act-' + a.id" class="activity-card" :class="{ 'is-hl': highlightActivity === a.id }">
+                        <article v-for="a in feedShown" :key="a.id" :id="'act-' + a.id" class="activity-card" :class="{ 'is-hl': highlightActivity === a.id }">
                             <!-- list update -->
                             <div v-if="!a.kind || a.kind === 'list'" class="flex gap-3.5">
                                 <button @click="fetchAnimeDetails(a.media_id)" class="shrink-0"><img :src="a.media_cover" class="w-14 h-20 rounded-xl object-cover ring-1 ring-line" loading="lazy" decoding="async" alt=""></button>
@@ -2025,7 +2034,7 @@
                                             <div v-for="t in a.extra.tiers" :key="t.label" class="flex border-b border-line last:border-0">
                                                 <div class="w-11 sm:w-14 shrink-0 flex items-center justify-center font-display font-black text-[16px] text-[#111]" :style="{ background: t.color }">{{ t.label }}</div>
                                                 <div class="flex flex-wrap gap-1 p-1.5 flex-grow min-h-[52px] bg-base/40">
-                                                    <button v-for="x in t.items" :key="x.kind + x.id" @click="x.kind === 'CHARACTER' ? (x.gameId ? fetchAnimeDetails(x.gameId) : openCharacter(x.id)) : fetchAnimeDetails(x.id)" :title="x.name"><img :src="picOf(x.image, x.name)" class="tier-mini" loading="lazy" decoding="async" :alt="x.name"></button>
+                                                    <button v-for="x in t.items" :key="x.kind + x.id" @click="x.kind === 'ARTIST' ? openArtistByName(x.name) : x.kind === 'CHARACTER' ? (x.gameId ? fetchAnimeDetails(x.gameId) : openCharacter(x.id)) : fetchAnimeDetails(x.id)" :title="x.name"><img :src="picOf(x.image, x.name)" class="tier-mini" loading="lazy" decoding="async" :alt="x.name"></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -2238,8 +2247,9 @@
                                         <template v-else>
                                         <p v-if="gifState.loading && !gifState.results.length" class="text-xs text-mute mt-2"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Loading GIFs…</p>
                                         <p v-else-if="gifState.error" class="text-xs text-sub mt-2">{{ gifState.error }}</p>
-                                        <div v-if="gifState.results.length" class="gif-grid mt-2">
+                                        <div v-if="gifState.results.length" class="gif-grid mt-2" @scroll.passive="gifMore">
                                             <div v-for="g in gifState.results" :key="g.id" class="gif-tile"><button @click="sendGif(g.url)" class="block w-full rounded-lg overflow-hidden bg-raised"><img :src="g.preview" class="w-full h-24 object-cover" loading="lazy" decoding="async" alt=""></button><button @click.stop="toggleSaveGif(g)" class="gif-star" :class="{ on: isGifSaved(g.url) }" :title="isGifSaved(g.url) ? 'Remove from saved' : 'Save this GIF'"><i :class="isGifSaved(g.url) ? 'fa-solid' : 'fa-regular'" class="fa-star"></i></button></div>
+                                            <p v-if="gifState.more" class="gif-more"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> More GIFs…</p>
                                         </div>
                                         <p v-if="gifState.results.length && gifState.by" class="text-[10px] text-mute mt-1 text-right">Powered by {{ gifState.by }}</p>
                                         </template>
@@ -2362,8 +2372,9 @@
                                         <template v-else>
                                         <p v-if="gifState.loading && !gifState.results.length" class="text-xs text-mute mt-2"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Loading GIFs…</p>
                                         <p v-else-if="gifState.error" class="text-xs text-sub mt-2">{{ gifState.error }}</p>
-                                        <div v-if="gifState.results.length" class="gif-grid mt-2">
+                                        <div v-if="gifState.results.length" class="gif-grid mt-2" @scroll.passive="gifMore">
                                             <div v-for="g in gifState.results" :key="g.id" class="gif-tile"><button @click="sendGif(g.url)" class="block w-full rounded-lg overflow-hidden bg-raised"><img :src="g.preview" class="w-full h-24 object-cover" loading="lazy" decoding="async" alt=""></button><button @click.stop="toggleSaveGif(g)" class="gif-star" :class="{ on: isGifSaved(g.url) }" :title="isGifSaved(g.url) ? 'Remove from saved' : 'Save this GIF'"><i :class="isGifSaved(g.url) ? 'fa-solid' : 'fa-regular'" class="fa-star"></i></button></div>
+                                            <p v-if="gifState.more" class="gif-more"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> More GIFs…</p>
                                         </div>
                                         <p v-if="gifState.results.length && gifState.by" class="text-[10px] text-mute mt-1 text-right">Powered by {{ gifState.by }}</p>
                                         </template>
@@ -2431,7 +2442,7 @@
                             <div class="la-status">
                                 <p class="label mb-2 px-1">Status</p>
                                 <div class="flex xl:flex-col flex-wrap gap-1 la-chips">
-                                    <button v-for="opt in ['ALL', ...statusPick()]" :key="opt" @click="listFilterStatus = opt" :class="listFilterStatus === opt ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors">
+                                    <button v-for="opt in listStatusOpts" :key="opt" @click="listFilterStatus = opt" :class="listFilterStatus === opt ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors">
                                         <span class="flex items-center gap-2.5"><span class="qa-dot" :style="{ '--dot': opt === 'ALL' ? 'rgb(var(--c-ink))' : STATUS_COLORS[opt] }"></span>{{ opt === 'ALL' ? 'All' : STATUS_LABELS[opt] }}</span>
                                         <span class="font-mono text-xs text-mute">{{ statusCounts[opt] || 0 }}</span>
                                     </button>
@@ -2566,7 +2577,8 @@
                             </div>
                             <section v-for="(group, status) in filteredGroupedList" :key="status" class="mb-12">
                                 <h3 class="flex items-center gap-3 mb-5">
-                                    <span class="qa-dot !w-3 !h-3" :style="{ '--dot': STATUS_COLORS[status] }"></span>
+                                    <span v-if="status === 'REWISH'" class="text-[13px]" :style="{ color: STATUS_COLORS.REWISH }"><i class="fa-solid fa-rotate-right"></i></span>
+                                    <span v-else class="qa-dot !w-3 !h-3" :style="{ '--dot': STATUS_COLORS[status] }"></span>
                                     <span class="font-display font-semibold text-ink text-lg">{{ STATUS_LABELS[status] }}</span>
                                     <span class="font-mono text-xs text-mute">{{ group.length }}</span>
                                 </h3>
@@ -3057,7 +3069,12 @@
 
     <!-- ============ SELECTION BAR (batch edit) ============ -->
     <transition name="toast">
-        <div v-if="selectMode && currentAppView === 'tracker'" class="batch-wrap" @click.stop>
+        <div v-if="batchShown && currentAppView === 'tracker'" class="batch-wrap" :class="{ 'is-min': batchMin }" @click.stop>
+            <!-- v10 tucked away: a small pill with the count; tap it to open the bar again -->
+            <button v-if="batchMin" @click="batchMin = false" class="batch-pill" title="Show the selection bar">
+                <span class="batch-pill-n">{{ selectedCount }}</span><span>selected</span><i class="fa-solid fa-chevron-up text-[10px]"></i>
+            </button>
+            <template v-else>
             <transition name="pop">
                 <div v-if="batchSquadMenu" class="qa-menu !w-60 !origin-bottom absolute bottom-full mb-2 left-0 right-0 mx-auto z-10">
                     <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">ADD SELECTED TO…</p>
@@ -3085,7 +3102,9 @@
                     <button @click="batchRemove" :disabled="!selectedCount || batchBusy" class="batch-btn !text-rose-300 shrink-0"><i class="fa-solid fa-trash-can"></i><span>Remove</span></button>
                     <button @click="toggleSelectMode" class="batch-btn batch-done-lg !bg-ink !text-inv shrink-0">Done</button>
                 </div>
+                <button @click="batchMin = true; batchSquadMenu = false" class="batch-btn batch-hide shrink-0" title="Make the bar small (you stay in select mode)"><i class="fa-solid fa-chevron-down"></i><span class="batch-hide-l">Hide</span></button>
             </div>
+            </template>
         </div>
     </transition>
 
@@ -3948,13 +3967,20 @@
     <transition name="fade">
         <div v-if="randomOpen" class="modal-back" @click.self="randomOpen = false">
             <transition name="pop" appear>
-                <div class="modal-card max-w-md p-6 max-h-[92dvh] overflow-y-auto">
+                <div class="modal-card p-6 max-h-[92dvh] overflow-y-auto" :class="randomCount > 2 ? 'max-w-xl' : 'max-w-md'">
                     <div class="flex items-center justify-between mb-6">
                         <div>
                             <p class="kicker">// {{ randomSourceLabel }}</p>
                             <h3 class="mt-1 font-display font-bold text-ink text-xl">Random pick</h3>
                         </div>
-                        <button @click="randomOpen = false" class="icon-btn !w-9 !h-9"><i class="fa-solid fa-xmark"></i></button>
+                        <div class="flex items-center gap-2">
+                            <!-- v10 how many to roll at once -->
+                            <div class="rand-count" title="How many picks per roll">
+                                <i class="fa-solid fa-dice"></i>
+                                <button v-for="n in 4" :key="n" @click="randomCount = n" :class="{ on: randomCount === n }">{{ n }}</button>
+                            </div>
+                            <button @click="randomOpen = false" class="icon-btn !w-9 !h-9"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
                     </div>
                     <div class="seg w-full mb-3">
                         <button @click="randomFilter.from = 'all'" :class="{ 'is-on': randomFilter.from === 'all' }" class="seg-btn flex-1"><i class="fa-solid fa-earth-americas mr-1.5"></i>Everything</button>
@@ -3975,17 +4001,36 @@
                         <p class="label">{{ randomWide ? 'from all ' + (({ MANGA: 'manga', GAME: 'games', TV: 'movies & shows', SONG: 'songs' })[randomWideType] || 'anime') : randomPool.length + ' match' + (randomPool.length === 1 ? '' : 'es') }}</p>
                         <button @click="clearRandomFilters" :disabled="randomWide ? !randomWideFiltered : (!randomFilter.status && !randomFilter.genre && !randomFilter.squad)" class="text-xs font-bold text-sub hover:text-ink disabled:opacity-30 transition-colors"><i class="fa-solid fa-filter-circle-xmark mr-1"></i>Clear</button>
                     </div>
-                    <div class="h-64 flex items-center justify-center mb-5">
+                    <div class="min-h-64 flex items-center justify-center mb-5">
                         <transition name="roll" mode="out-in">
                             <div v-if="randomRolling && randomWide && !randomPick" key="loading" class="text-center text-sub text-sm"><i class="fa-solid fa-circle-notch fa-spin text-3xl text-lilac mb-4 block"></i>Rolling…</div>
+                            <!-- v10 several picks: small cards, each with its own add buttons -->
+                            <div v-else-if="randomPick && randomMore.length && !randomRolling" :key="'many-' + randomSpinKey" class="rand-grid w-full" :class="'n' + randomPicks.length">
+                                <div v-for="p in randomPicks" :key="p.anime.id" class="rand-card">
+                                    <button @click="randomOpen = false; fetchAnimeDetails(p.anime)" class="block w-full text-left" :title="'Open ' + titleOf(p.anime)">
+                                        <img :src="p.anime.coverImage?.large" class="w-full aspect-[2/3] object-cover rounded-xl ring-1 ring-line2" alt="">
+                                        <p class="text-xs text-ink font-semibold line-clamp-2 mt-2 leading-snug">{{ titleOf(p.anime) }}</p>
+                                    </button>
+                                    <div class="qadd mt-1.5">
+                                        <button v-for="st in addStatuses(p.anime)" :key="st" @click.stop="quickAdd(p.anime, st)" class="qadd-btn" :class="{ on: addOn(p.anime, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(p.anime.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
+                                    </div>
+                                </div>
+                            </div>
                             <div v-else-if="randomPick" :key="'pick-' + randomSpinKey" class="flex gap-4 items-center w-full">
                                 <img :src="randomPick.anime.coverImage?.large" :class="randomRolling ? 'opacity-60' : 'shadow-[0_0_40px_-6px_rgba(180,144,245,.6)]'" class="w-32 h-48 object-cover rounded-2xl ring-1 ring-line2 shrink-0 transition-shadow" alt="">
                                 <div class="min-w-0" :class="randomRolling ? 'opacity-50' : ''">
                                     <h4 class="font-display font-bold text-ink text-lg leading-tight line-clamp-3">{{ titleOf(randomPick.anime) }}</h4>
-                                    <span v-if="randomPick.status" class="status-pill mt-3"><span class="status-dot" :style="{ '--dot': STATUS_COLORS[randomPick.status] }"></span>{{ STATUS_SHORT[randomPick.status] }}</span>
+                                    <span v-if="soloEntry(randomPick.anime.id)?.status || randomPick.status" class="status-pill mt-3"><span class="status-dot" :style="{ '--dot': STATUS_COLORS[soloEntry(randomPick.anime.id)?.status || randomPick.status] }"></span>{{ STATUS_SHORT[soloEntry(randomPick.anime.id)?.status || randomPick.status] }}</span>
                                     <span v-else class="status-pill mt-3"><i class="fa-solid fa-earth-americas mr-1"></i>Not on your list</span>
-                                    <p class="text-xs text-sub mt-2"><template v-if="randomPick.anime.type === 'SONG'">▶ {{ randomPick.progress || 0 }} plays</template><template v-else>{{ randomPick.progress || 0 }}/{{ randomPick.anime.episodes || '?' }} {{ UNIT.unit.toLowerCase() }}</template><span v-if="randomPick.group"> · {{ randomPick.group }}</span></p>
+                                    <p class="text-xs text-sub mt-2"><template v-if="randomPick.anime.type === 'SONG'">▶ {{ randomPick.progress || 0 }} plays</template><template v-else>{{ soloEntry(randomPick.anime.id)?.progress ?? randomPick.progress ?? 0 }}/{{ randomPick.anime.episodes || '?' }} {{ UNIT.unit.toLowerCase() }}</template><span v-if="randomPick.group"> · {{ randomPick.group }}</span></p>
                                     <p v-if="randomPick.anime.genres?.length" class="text-[11px] text-mute mt-1 line-clamp-2">{{ randomPick.anime.genres.join(', ') }}</p>
+                                    <!-- v10 add it to your list right here -->
+                                    <div v-if="!randomRolling" class="mt-3">
+                                        <p class="label mb-1.5">Add to my list</p>
+                                        <div class="qadd qadd-lg">
+                                            <button v-for="st in addStatuses(randomPick.anime)" :key="st" @click.stop="quickAdd(randomPick.anime, st)" class="qadd-btn" :class="{ on: addOn(randomPick.anime, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(randomPick.anime.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div v-else key="empty" class="text-center text-sub text-sm">
@@ -3996,7 +4041,7 @@
                     </div>
                     <div class="flex gap-3">
                         <button @click="rollRandom" :disabled="(!randomWide && !randomPool.length) || randomRolling" class="btn-primary flex-1"><i class="fa-solid fa-dice"></i> {{ randomPick ? 'Roll again' : 'Roll' }}</button>
-                        <button v-if="randomPick && !randomRolling" @click="randomOpen = false; fetchAnimeDetails(randomPick.anime)" class="btn-ghost flex-1">Open it <i class="fa-solid fa-arrow-right text-xs"></i></button>
+                        <button v-if="randomPick && !randomRolling && !randomMore.length" @click="randomOpen = false; fetchAnimeDetails(randomPick.anime)" class="btn-ghost flex-1">Open it <i class="fa-solid fa-arrow-right text-xs"></i></button>
                     </div>
                 </div>
             </transition>
@@ -4624,14 +4669,15 @@
                     <div class="grid lg:grid-cols-[290px_1fr] min-h-0 flex-grow overflow-hidden">
                         <!-- where the items come from -->
                         <aside class="p-4 border-b lg:border-b-0 lg:border-r border-line space-y-3 overflow-y-auto max-h-[36dvh] lg:max-h-none">
-                            <p class="label">1 · Fill it</p>
-                            <div class="chip-wrap w-full"><select v-model="tier.source" @change="tier.q = ''; tier.results = []" class="chip w-full"><option v-for="o in TIER_SOURCES" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
-                            <div v-if="(tierAL && ['genre', 'tag', 'search'].includes(tier.source)) || (tierType === 'GAME' && tier.source === 'search')" class="seg w-full">
-                                <button @click="tier.what = 'CHARACTER'" :class="{ 'is-on': tier.what === 'CHARACTER' }" class="seg-btn flex-1">Characters</button>
-                                <button @click="tier.what = 'MEDIA'" :class="{ 'is-on': tier.what !== 'CHARACTER' }" class="seg-btn flex-1 capitalize">{{ tierNoun }}</button>
+                            <p class="label">1 · What are you ranking?</p>
+                            <div class="seg w-full tier-what">
+                                <button @click="tier.what = 'CHARACTER'" :class="{ 'is-on': tier.what === 'CHARACTER' }" class="seg-btn flex-1 capitalize"><i class="fa-solid mr-1" :class="tierType === 'SONG' ? 'fa-microphone' : 'fa-user'"></i>{{ tierWho }}</button>
+                                <button @click="tier.what = 'MEDIA'" :class="{ 'is-on': tier.what !== 'CHARACTER' }" class="seg-btn flex-1 capitalize"><i class="fa-solid fa-clapperboard mr-1"></i>{{ tierNoun }}</button>
                             </div>
+                            <p class="label pt-1">2 · Fill it</p>
+                            <div class="chip-wrap w-full"><select v-model="tier.source" @change="tier.q = ''; tier.results = []" class="chip w-full"><option v-for="o in TIER_SOURCES" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             <template v-if="tier.source === 'anime' || tier.source === 'search'">
-                                <input v-model="tier.q" :placeholder="tier.what === 'CHARACTER' && tier.source === 'search' ? 'Search a character…' : tier.source === 'anime' && tierType === 'GAME' ? 'Search a game…' : 'Search ' + tierNoun + '…'" class="field !py-2 !rounded-xl !text-sm">
+                                <input v-model="tier.q" :placeholder="tierPlaceholder" class="field !py-2 !rounded-xl !text-sm">
                                 <div v-if="tier.results.length" class="rounded-xl border border-line overflow-hidden">
                                     <button v-for="r in tier.results" :key="(r.kind || 'm') + r.id" @click="pickTierResult(r)" class="w-full flex items-center gap-2.5 p-2 hover:bg-raised text-left">
                                         <img :src="picOf(r.image || r.coverImage?.large, r.name || titleOf(r))" class="w-8 h-11 rounded object-cover shrink-0" alt="">
@@ -4656,7 +4702,7 @@
                                 </div>
                             </template>
                             <p v-if="tier.loading" class="text-xs text-sub"><i class="fa-solid fa-circle-notch fa-spin text-volt mr-1"></i>Loading…</p>
-                            <p class="label pt-2">2 · Rank it</p>
+                            <p class="label pt-2">3 · Rank it</p>
                             <p class="text-xs text-sub leading-relaxed">Drag items into a tier — or tap an item, then tap a tier (easier on phones). Tap a tier’s letter to rename it.</p>
                         </aside>
                         <!-- tiers + unranked pool -->
