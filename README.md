@@ -728,3 +728,39 @@ free "API client":
    `MAL_CLIENT_ID` = the Client ID, `MAL_CLIENT_SECRET` = the Client Secret. (Keys stay in Supabase only — never in the
    repo.)
 5. Done. The Connect MyAnimeList button now works for everyone (after the SQL and the Edge Function update above).
+
+## v10.1 — countdown, header search box, more lists, fixes
+
+**Update:** merge the PR (GitHub Pages updates by itself). **No SQL, no Edge Function change.**
+
+1. **GIFs:** a **Show 30 more** button under the GIFs (scrolling down still loads more too — both need the v10 Edge
+   Function).
+2. **Tier lists on the Activity page** follow the filter at the top: Games → games or game characters, Manga / Manhwa →
+   manga or manga characters, Movies & TV → movies & shows or their characters (with the actors' photos), Songs → songs
+   or artists. The filters now sit **above** the post box.
+3. (Music with the screen off: can't be done — YouTube only allows that in its Premium app.)
+4. **Home:** P1's and P2's dots sit exactly on the ends of the line on every screen size (on wide screens they were off).
+5. **Search button:** opens a small search box right in the header. Results from the section you're in appear as you
+   type (most popular first, with your status if it's on your list); tap one to open it, **Enter** shows every result.
+6. **New lists:** **Wanna Reread** (manga & manhwa) and **Wanna Replay** (games), like Wanna Rewatch.
+7. **Rankings on your profile:** tap your score on any title to change it right there.
+8. **Fixed:** a title's page showed "–" instead of your score and episodes / chapters. (That bug could also reset them to
+   0 when you pressed Save on the title's page — it's gone.)
+9. **New list for games: In Rotation** (the games you keep going back to). A game can be In Rotation and Playing / Beaten
+   at the same time.
+10. **Lists:** a **Genre** filter (the genres of what's on that list, with how many).
+11. **Compare lists:** the "Select all / Add to my list" bar follows you down while you scroll.
+12. **Compare lists:** tapping a row selects it; only the cover or the name opens the title's page.
+13. **Trailers:** a **volume** slider (it remembers your level) and a **⚙ quality** button. YouTube doesn't let websites
+    pick the quality anymore, so ⚙ switches to YouTube's own controls at the same moment, where its ⚙ → Quality works
+    ("Simple controls" switches back).
+14. **Removed** the "series" count (seasons of the same anime counted as one): anime and manga are counted title by title.
+15. **Fixed the X buttons** in Settings and in "Squads & more" (and two other windows): they sat half outside the window's
+    left edge; now they're in the top-right corner.
+16. **Anime countdown:** Anime → **Countdown** (next to History). Trending anime, upcoming anime and every episode airing
+    soon, each with a live timer (days / hours / minutes / seconds, in your time zone). **Only my list** shows the ones on
+    your lists. On phones the three columns are three tabs.
+17. **The + menu** (and the phone's list sheet) has every list of that section: On Hold and Dropped everywhere, plus Wanna
+    Rewatch (anime, movies & TV), Wanna Reread (manga & manhwa), Wanna Replay and In Rotation (games).
+18. **Settings → Profile decorations:** each one (avatar frame, profile theme, page background, effect, name style,
+    badges) is a small row showing what you picked; tap it to open its options.

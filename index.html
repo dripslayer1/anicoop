@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.0">
+    <link rel="stylesheet" href="app.css?v=10.1">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.0" defer></script>
+    <script src="app.js?v=10.1" defer></script>
 </head>
 <body>
 
@@ -121,7 +121,7 @@
                     </button>
                 </nav>
                 <div class="home-icons flex items-center gap-2">
-                    <button @click.stop="openSearch()" class="icon-btn !w-9 !h-9" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
+                    <button @click.stop="toggleHeaderSearch()" class="icon-btn !w-9 !h-9" :class="{ '!bg-ink !text-inv': hs.open }" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
                     <button @click.stop="openSettings()" class="icon-btn !w-9 !h-9" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                     <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                     <span class="hdr-space" aria-hidden="true"></span>
@@ -196,14 +196,16 @@
                         </div>
                     </div>
                     </div>
-                    <div class="intro-el i-p1 absolute left-[-16px] top-[14px] flex items-center gap-3 z-30 pointer-events-none">
-                        <span class="font-pixel text-lg" :style="{ color: heroColors.c1 }">P1</span>
-                        <span class="relative w-[52px] h-[52px] flex items-center justify-center" :style="{ '--c': heroColors.c1 }"><span class="absolute inset-0 rounded-full orb-ring"></span><span class="w-5 h-5 rounded-full orb-core"></span></span>
+                    <!-- v10.1 each dot sits exactly on its end of the line at every screen width (the line's drawing stretches with
+                         the width: 560×600 units, ends at 40,40 and 496,568), the name next to it -->
+                    <div class="intro-el i-p1 hero-orb absolute z-30 pointer-events-none" style="left: 7.143%; top: 6.667%" :style="{ '--c': heroColors.c1 }">
+                        <span class="absolute inset-0 rounded-full orb-ring"></span><span class="w-5 h-5 rounded-full orb-core"></span>
+                        <span class="hero-orb-name is-left font-pixel text-lg" :style="{ color: heroColors.c1 }">P1</span>
                     </div>
                     <div class="intro-el i-trail absolute left-[-240px] top-[-70px] w-[280px] h-[2px] rotate-[33deg] origin-right pointer-events-none" :style="{ background: 'linear-gradient(90deg,transparent,' + heroColors.c1 + ')' }"></div>
-                    <div class="intro-el i-p2 absolute right-[6px] bottom-[6px] flex items-center gap-3 z-30 pointer-events-none">
-                        <span class="relative w-[52px] h-[52px] flex items-center justify-center" :style="{ '--c': heroColors.c2 }"><span class="absolute inset-0 rounded-full orb-ring"></span><span class="w-5 h-5 rounded-full orb-core"></span></span>
-                        <span class="font-pixel text-lg" :style="{ color: heroColors.c2 }">P2</span>
+                    <div class="intro-el i-p2 hero-orb absolute z-30 pointer-events-none" style="left: 88.571%; top: 94.667%" :style="{ '--c': heroColors.c2 }">
+                        <span class="absolute inset-0 rounded-full orb-ring"></span><span class="w-5 h-5 rounded-full orb-core"></span>
+                        <span class="hero-orb-name font-pixel text-lg" :style="{ color: heroColors.c2 }">P2</span>
                     </div>
                     <div style="left: 24px; bottom: 60px" class="intro-el i-tag absolute z-30 px-3 py-1.5 rounded-md bg-base border border-line2 font-mono text-[10px] font-bold tracking-[.14em] text-ink pointer-events-none">
                         LINKED • {{ Math.max(2, friendsList.length + 1) }} PLAYERS
@@ -212,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.0</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -258,7 +260,7 @@
                         </button>
                     </nav>
                     <div class="hdr-side flex items-center justify-end gap-2">
-                        <button @click.stop="openSearch()" class="icon-btn !w-9 !h-9 hdr-search" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
+                        <button @click.stop="toggleHeaderSearch()" class="icon-btn !w-9 !h-9 hdr-search" :class="{ '!bg-ink !text-inv': hs.open }" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                         <span class="hdr-space hdr-extra" aria-hidden="true"></span>
@@ -521,9 +523,10 @@
                                         <span class="text-[10px] font-semibold leading-none">{{ STATUS_SHORT[s] }}</span>
                                     </button>
                                 </div>
-                                <!-- v10 "Wanna rewatch": its own list, the title keeps its status -->
-                                <button v-if="REWISH_TYPES.includes(selectedAnime.type || 'ANIME')" @click="toggleRewish(selectedAnime)" class="rewish-btn" :class="{ on: isRewish(selectedAnime.id) }" :title="isRewish(selectedAnime.id) ? 'Take it off Wanna Rewatch' : 'Put it on your Wanna Rewatch list'">
-                                    <i class="fa-solid fa-rotate-right"></i><span>{{ isRewish(selectedAnime.id) ? 'On Wanna Rewatch' : 'Wanna rewatch' }}</span><i class="fa-solid ml-auto text-[10px]" :class="isRewish(selectedAnime.id) ? 'fa-check' : 'fa-plus'"></i>
+                                <!-- v10 "Wanna rewatch" · v10.1 "Wanna reread" (manga), "Wanna replay" + "In rotation" (games): their own
+                                     lists, the title keeps its status -->
+                                <button v-for="k in addStatuses(selectedAnime).filter(k => k === 'REWISH' || k === 'ROTATION')" :key="k" @click="toggleFlag(selectedAnime, k)" class="rewish-btn" :class="{ on: isFlagged(selectedAnime.id, k) }" :style="{ '--mk': STATUS_COLORS[k] }" :title="isFlagged(selectedAnime.id, k) ? 'Take it off ' + statusLabelFor(selectedAnime.type, k) : 'Put it on your ' + statusLabelFor(selectedAnime.type, k) + ' list'">
+                                    <i class="fa-solid" :class="ADD_ICONS[k]"></i><span>{{ isFlagged(selectedAnime.id, k) ? 'On ' + statusLabelFor(selectedAnime.type, k) : statusLabelFor(selectedAnime.type, k) }}</span><i class="fa-solid ml-auto text-[10px]" :class="isFlagged(selectedAnime.id, k) ? 'fa-check' : 'fa-plus'"></i>
                                 </button>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div v-if="inlineForm.status === 'REPEATING'">
@@ -1227,7 +1230,7 @@
                                 </div>
                                 <p class="text-[11px] text-mute -mt-2">{{ comparison.total }} titles between you — each one is in exactly one group.</p>
                                 <!-- titles not on your list: pick them and add in one click -->
-                                <div v-if="compareAddable.length" class="flex flex-wrap items-center gap-2.5 panel !rounded-2xl px-4 py-3">
+                                <div v-if="compareAddable.length" class="compare-bar flex flex-wrap items-center gap-2.5 panel !rounded-2xl px-4 py-3">
                                     <button @click="toggleCompareAll" class="flex items-center gap-2.5 text-sm font-semibold text-ink"><span class="cbox" :class="{ on: compareAllSelected }"><i class="fa-solid fa-check"></i></span>Select all ({{ compareAddable.length }} not on your list)</button>
                                     <span class="text-xs text-mute">{{ compareSel.size }} selected</span>
                                     <span class="ml-auto flex items-center gap-2">
@@ -1240,12 +1243,12 @@
                                     <div class="grid gap-2 px-4 py-2.5 border-b border-line label" :class="compareBig ? 'grid-cols-[28px_1fr_96px_96px_40px] sm:grid-cols-[28px_1fr_150px_150px_44px]' : 'grid-cols-[28px_1fr_88px_88px_40px] sm:grid-cols-[28px_1fr_130px_130px_44px]'">
                                         <span></span><span>Title</span><span class="text-center">You</span><span class="text-center truncate">{{ viewedUser.profile.username }}</span><span></span>
                                     </div>
-                                    <div v-for="r in comparison.groups[compareTab]" :key="r.anime.id" @click="fetchAnimeDetails(r.anime)" role="button" tabindex="0" class="w-full grid gap-2 items-center px-4 border-b border-line last:border-0 hover:bg-raised text-left transition-colors cursor-pointer" :class="[compareBig ? 'py-3.5 grid-cols-[28px_1fr_96px_96px_40px] sm:grid-cols-[28px_1fr_150px_150px_44px]' : 'py-2.5 grid-cols-[28px_1fr_88px_88px_40px] sm:grid-cols-[28px_1fr_130px_130px_44px]', compareSel.has(r.anime.id) ? 'bg-lilac/[.07]' : '']">
+                                    <div v-for="r in comparison.groups[compareTab]" :key="r.anime.id" @click="!r.me && toggleCompareSel(r.anime.id)" class="w-full grid gap-2 items-center px-4 border-b border-line last:border-0 hover:bg-raised text-left transition-colors" :style="{ cursor: r.me ? 'default' : 'pointer' }" :class="[compareBig ? 'py-3.5 grid-cols-[28px_1fr_96px_96px_40px] sm:grid-cols-[28px_1fr_150px_150px_44px]' : 'py-2.5 grid-cols-[28px_1fr_88px_88px_40px] sm:grid-cols-[28px_1fr_130px_130px_44px]', compareSel.has(r.anime.id) ? 'bg-lilac/[.07]' : '']">
                                         <button v-if="!r.me" @click.stop="toggleCompareSel(r.anime.id)" class="cbox" :class="{ on: compareSel.has(r.anime.id) }" title="Select"><i class="fa-solid fa-check"></i></button><span v-else></span>
                                         <span class="flex items-center min-w-0" :class="compareBig ? 'gap-4' : 'gap-3'">
-                                            <img :src="r.anime.coverImage?.large" :class="compareBig ? 'w-16 h-24 sm:w-20 sm:h-[120px] rounded-xl' : 'w-9 h-12 rounded-md'" class="object-cover shrink-0" loading="lazy" decoding="async" alt="">
+                                            <button @click.stop="fetchAnimeDetails(r.anime)" class="shrink-0" :title="'Open ' + titleOf(r.anime)"><img :src="r.anime.coverImage?.large" :class="compareBig ? 'w-16 h-24 sm:w-20 sm:h-[120px] rounded-xl' : 'w-9 h-12 rounded-md'" class="object-cover" loading="lazy" decoding="async" alt=""></button>
                                             <span class="min-w-0">
-                                                <span class="block text-ink font-semibold" :class="compareBig ? 'text-[16px] line-clamp-2' : 'text-sm truncate'">{{ titleOf(r.anime) }}</span>
+                                                <button @click.stop="fetchAnimeDetails(r.anime)" class="block max-w-full text-left text-ink font-semibold hover:text-lilac hover:underline underline-offset-2" :class="compareBig ? 'text-[16px] line-clamp-2' : 'text-sm truncate'" :title="'Open ' + titleOf(r.anime)">{{ titleOf(r.anime) }}</button>
                                                 <span v-if="compareBig" class="block text-xs text-mute mt-1">{{ [(r.anime.format || '').replace('_', ' '), r.anime.seasonYear, r.anime.episodes ? r.anime.episodes + ' ' + (r.anime.type === 'MANGA' ? 'ch' : 'eps') : ''].filter(Boolean).join(' · ') }}</span>
                                             </span>
                                         </span>
@@ -1422,6 +1425,49 @@
                 </main>
 
                 <!-- ===== TOP 100 (leaderboard per section) ===== -->
+                <!-- ===== v10.1 ANIME COUNTDOWN ===== -->
+                <main v-else-if="activeTab === 'countdown'" key="countdown" class="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
+                    <p class="kicker">// airing schedule · times in your time zone</p>
+                    <div class="flex flex-wrap items-end justify-between gap-3 mt-2">
+                        <h1 class="font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Anime countdown</h1>
+                        <div class="flex items-center gap-2">
+                            <button @click="cd.onlyMine = !cd.onlyMine" class="toggle !h-10" :class="{ 'is-on': cd.onlyMine }"><span class="knob"></span>Only my list</button>
+                            <button @click="loadCountdown(true)" class="icon-btn !w-10 !h-10" title="Refresh"><i class="fa-solid fa-rotate-right text-xs" :class="{ 'fa-spin': cd.loading }"></i></button>
+                        </div>
+                    </div>
+                    <p v-if="cd.error" class="mt-6 panel !rounded-2xl px-4 py-3 text-sm text-rose-300"><i class="fa-solid fa-circle-exclamation mr-2"></i>{{ cd.error }}</p>
+                    <!-- phones: one column at a time -->
+                    <div class="seg w-full mt-6 lg:hidden">
+                        <button v-for="c in cdCols" :key="c.id" @click="cd.col = c.id" :class="{ 'is-on': cd.col === c.id }" class="seg-btn flex-1"><i class="fa-solid mr-1.5" :class="c.icon"></i>{{ c.title.replace(' anime', '') }}</button>
+                    </div>
+                    <div class="cd-cols mt-6">
+                        <section v-for="c in cdCols" :key="c.id" class="cd-col" :class="{ 'is-on': cd.col === c.id }">
+                            <h2 class="font-display font-semibold text-ink text-xl mb-4 hidden lg:flex items-center gap-2"><i class="fa-solid text-lilac text-base" :class="c.icon"></i>{{ c.title }}</h2>
+                            <div v-if="cd.loading && !c.rows.length" class="space-y-3"><div v-for="n in 4" :key="n" class="h-40 rounded-2xl skeleton"></div></div>
+                            <p v-else-if="!c.rows.length" class="panel !rounded-2xl p-6 text-center text-sm text-mute">{{ cd.onlyMine ? 'Nothing from your lists here.' : 'Nothing here right now.' }}</p>
+                            <div class="space-y-3">
+                                <button v-for="r in c.rows" :key="c.id + r.anime.id + '-' + r.ep" @click="fetchAnimeDetails(r.anime)" class="cd-card">
+                                    <img :src="r.anime.coverImage?.large" alt="" loading="lazy" decoding="async">
+                                    <span class="cd-body">
+                                        <span class="flex items-start gap-2">
+                                            <span class="min-w-0 flex-grow">
+                                                <span class="block text-ink font-semibold text-sm leading-snug line-clamp-2">{{ titleOf(r.anime) }}</span>
+                                                <span v-if="r.anime.title?.romaji && r.anime.title.romaji !== titleOf(r.anime)" class="block text-[11px] text-mute line-clamp-1 mt-0.5">{{ r.anime.title.romaji }}</span>
+                                            </span>
+                                            <span v-if="myEntry(r.anime.id)" class="status-pill shrink-0"><span class="status-dot" :style="{ '--dot': STATUS_COLORS[myEntry(r.anime.id).status] }"></span>{{ STATUS_SHORT[myEntry(r.anime.id).status] }}</span>
+                                        </span>
+                                        <span class="block text-xs text-sub mt-1.5">{{ r.ep ? 'Episode ' + r.ep + (r.anime.episodes ? ' / ' + r.anime.episodes : '') : 'Starts' }}</span>
+                                        <span v-if="cdParts(r.at)" class="cd-timer">
+                                            <span v-for="p in cdParts(r.at)" :key="p[1]"><b>{{ p[0] }}</b><i>{{ p[1] }}</i></span>
+                                        </span>
+                                        <span v-else class="block text-xs text-mute mt-3"><i class="fa-regular fa-calendar mr-1.5"></i>{{ cdStart(r.start) }}</span>
+                                    </span>
+                                </button>
+                            </div>
+                        </section>
+                    </div>
+                </main>
+
                 <main v-else-if="activeTab === 'top'" :key="'top-' + section" class="w-full max-w-3xl mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
                     <div class="flex flex-wrap items-end justify-between gap-3">
                         <div>
@@ -1554,6 +1600,7 @@
                             <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ listTitle }}</h1>
                         </div>
                         <div class="flex flex-wrap gap-2">
+                            <button v-if="section === 'anime'" @click="openCountdown" class="btn-ghost"><i class="fa-solid fa-hourglass-half text-lilac"></i> Countdown</button>
                             <button @click="openHistory(mediaType)" class="btn-ghost"><i class="fa-solid fa-clock-rotate-left text-volt"></i> History<span v-if="histList.some(h => h.type === mediaType)" class="opacity-60">· {{ histList.filter(h => h.type === mediaType).length }}</span></button>
                         </div>
                     </div>
@@ -1794,8 +1841,14 @@
                     <p class="kicker">// every section · what the squad is up to</p>
                     <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Activity</h1>
 
+                    <!-- v9.9 what the posts are about (every section is in this one feed) · v10.1 above the composer: a new post,
+                         poll or tier list starts on the type picked here -->
+                    <div class="feed-types mt-6">
+                        <button v-for="t in FEED_TYPES" :key="t.v" @click="feedFilter.type = t.v" class="genre-toggle" :class="{ sel: feedFilter.type === t.v }">{{ t.l }}</button>
+                    </div>
+
                     <!-- composer -->
-                    <div class="composer mt-7">
+                    <div class="composer mt-4">
                         <input ref="mediaInput" type="file" accept="image/*,video/*" multiple class="hidden" @change="onMediaFiles">
                         <div class="flex items-center gap-3">
                             <user-avatar :user="currentProfile" :size="36"></user-avatar>
@@ -1851,7 +1904,9 @@
 
                             <template v-if="composer.kind === 'tierlist'">
                                 <div class="rounded-2xl border border-dashed border-line2 p-5 text-center">
-                                    <p class="text-sm text-sub"><template v-if="tierAL">Pick a{{ mediaType === 'ANIME' ? 'n anime' : ' manga' }} and get its whole cast, or a genre / tag (tsundere, isekai…) and get matching {{ tierNoun }} or characters — then drag them into tiers.</template><template v-else-if="mediaType === 'GAME'">Pick a game and get its whole cast, search characters or games one by one, add a whole genre, or fill it from your list — then drag them into tiers.</template><template v-else>Search {{ tierNoun }}, add a whole genre, or fill it from your list — then drag them into tiers.</template></p>
+                                    <p class="label mb-2" :style="{ color: SECTIONS[SECTION_OF_TYPE[tierType]]?.color }"><i class="fa-solid mr-1" :class="SECTIONS[SECTION_OF_TYPE[tierType]]?.icon"></i>{{ tierManhwaNow ? 'Manhwa' : SECTIONS[SECTION_OF_TYPE[tierType]]?.short }} tier list</p>
+                                    <p class="text-sm text-sub"><template v-if="tierAL">Rank {{ tierNoun }} or their characters: pick a{{ tierType === 'ANIME' ? 'n anime' : ' manga' }} and get its whole cast, a genre / tag (tsundere, isekai…), your list, or one by one — then drag them into tiers.</template><template v-else-if="tierType === 'GAME'">Rank games or game characters: a game’s whole cast, one by one, a whole genre, or your list — then drag them into tiers.</template><template v-else-if="tierType === 'TV'">Rank movies &amp; shows or their characters (with the actors’ photos): a movie’s or show’s whole cast, one by one, a genre, or your list — then drag them into tiers.</template><template v-else>Rank songs or artists: one by one, a genre, or your list — then drag them into tiers.</template></p>
+                                    <p class="text-[11px] text-mute mt-2">Pick another type in the filters above to rank something else.</p>
                                     <button @click="openTierMaker()" class="btn-primary mt-4"><i class="fa-solid fa-layer-group"></i> Open the tier list maker</button>
                                 </div>
                             </template>
@@ -1934,11 +1989,7 @@
                         </div>
                     </div>
 
-                    <!-- v9.9 what the posts are about (every section is in this one feed) -->
-                    <div class="feed-types mt-6">
-                        <button v-for="t in FEED_TYPES" :key="t.v" @click="feedFilter.type = t.v" class="genre-toggle" :class="{ sel: feedFilter.type === t.v }">{{ t.l }}</button>
-                    </div>
-                    <div class="mt-3 flex flex-wrap items-center gap-2.5">
+                    <div class="mt-6 flex flex-wrap items-center gap-2.5">
                         <div class="seg overflow-x-auto no-scrollbar max-w-full">
                             <button v-for="k in FEED_KINDS" :key="k.v" @click="feedFilter.kind = k.v" :class="{ 'is-on': feedFilter.kind === k.v }" class="seg-btn !px-3">{{ k.l }}</button>
                         </div>
@@ -2251,6 +2302,7 @@
                                             <div v-for="g in gifState.results" :key="g.id" class="gif-tile"><button @click="sendGif(g.url)" class="block w-full rounded-lg overflow-hidden bg-raised"><img :src="g.preview" class="w-full h-24 object-cover" loading="lazy" decoding="async" alt=""></button><button @click.stop="toggleSaveGif(g)" class="gif-star" :class="{ on: isGifSaved(g.url) }" :title="isGifSaved(g.url) ? 'Remove from saved' : 'Save this GIF'"><i :class="isGifSaved(g.url) ? 'fa-solid' : 'fa-regular'" class="fa-star"></i></button></div>
                                             <p v-if="gifState.more" class="gif-more"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> More GIFs…</p>
                                         </div>
+                                        <button v-if="gifState.results.length && gifState.next" @click="gifMore()" :disabled="gifState.more" class="gif-more-btn"><i class="fa-solid mr-1.5" :class="gifState.more ? 'fa-circle-notch fa-spin' : 'fa-chevron-down'"></i>{{ gifState.more ? 'Loading…' : 'Show 30 more' }}</button>
                                         <p v-if="gifState.results.length && gifState.by" class="text-[10px] text-mute mt-1 text-right">Powered by {{ gifState.by }}</p>
                                         </template>
                                         <div class="flex flex-wrap gap-2 mt-2">
@@ -2376,6 +2428,7 @@
                                             <div v-for="g in gifState.results" :key="g.id" class="gif-tile"><button @click="sendGif(g.url)" class="block w-full rounded-lg overflow-hidden bg-raised"><img :src="g.preview" class="w-full h-24 object-cover" loading="lazy" decoding="async" alt=""></button><button @click.stop="toggleSaveGif(g)" class="gif-star" :class="{ on: isGifSaved(g.url) }" :title="isGifSaved(g.url) ? 'Remove from saved' : 'Save this GIF'"><i :class="isGifSaved(g.url) ? 'fa-solid' : 'fa-regular'" class="fa-star"></i></button></div>
                                             <p v-if="gifState.more" class="gif-more"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> More GIFs…</p>
                                         </div>
+                                        <button v-if="gifState.results.length && gifState.next" @click="gifMore()" :disabled="gifState.more" class="gif-more-btn"><i class="fa-solid mr-1.5" :class="gifState.more ? 'fa-circle-notch fa-spin' : 'fa-chevron-down'"></i>{{ gifState.more ? 'Loading…' : 'Show 30 more' }}</button>
                                         <p v-if="gifState.results.length && gifState.by" class="text-[10px] text-mute mt-1 text-right">Powered by {{ gifState.by }}</p>
                                         </template>
                                         <div class="flex flex-wrap gap-2 mt-2">
@@ -2447,6 +2500,11 @@
                                         <span class="font-mono text-xs text-mute">{{ statusCounts[opt] || 0 }}</span>
                                     </button>
                                 </div>
+                            </div>
+                            <!-- v10.1 genre filter -->
+                            <div v-if="listGenres.length" class="la-genre">
+                                <p class="label mb-2 px-1">Genre</p>
+                                <div class="chip-wrap w-full"><select v-model="listFilterGenre" :class="{ 'is-on': listFilterGenre }" class="chip w-full"><option value="">All genres</option><option v-for="x in listGenres" :key="x.g" :value="x.g">{{ x.g }} ({{ x.c }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
                             <!-- v9.8 Solo ⇄ Squads: one switch instead of a separate tab -->
                             <div class="la-list">
@@ -2577,7 +2635,7 @@
                             </div>
                             <section v-for="(group, status) in filteredGroupedList" :key="status" class="mb-12">
                                 <h3 class="flex items-center gap-3 mb-5">
-                                    <span v-if="status === 'REWISH'" class="text-[13px]" :style="{ color: STATUS_COLORS.REWISH }"><i class="fa-solid fa-rotate-right"></i></span>
+                                    <span v-if="status === 'REWISH' || status === 'ROTATION'" class="text-[13px]" :style="{ color: STATUS_COLORS[status] }"><i class="fa-solid" :class="ADD_ICONS[status]"></i></span>
                                     <span v-else class="qa-dot !w-3 !h-3" :style="{ '--dot': STATUS_COLORS[status] }"></span>
                                     <span class="font-display font-semibold text-ink text-lg">{{ STATUS_LABELS[status] }}</span>
                                     <span class="font-mono text-xs text-mute">{{ group.length }}</span>
@@ -2683,7 +2741,7 @@
                                 <button v-if="rankEdit && myRankOrders[cat.id]?.length" @click="resetRankOrder(cat.id)" class="ml-auto text-[11px] font-bold text-sub hover:text-ink">Sort by score</button>
                             </div>
                             <div class="rank-list">
-                                <div v-for="(item, idx) in cat.items.slice(0, shownOf('me:' + cat.id))" :key="item.anime.id" class="rank-row" role="button" tabindex="0"
+                                <template v-for="(item, idx) in cat.items.slice(0, shownOf('me:' + cat.id))" :key="item.anime.id"><div class="rank-row" role="button" tabindex="0"
                                     :class="{ 'is-edit': rankEdit, 'is-dragging': rankDrag.key === cat.id && rankDrag.from === idx }" :style="rankRowStyle(cat.id, idx)"
                                     @pointerdown="onRankPointerDown(cat.id, idx, $event)" @pointermove="onRankPointerMove" @pointerup="onRankPointerUp" @pointercancel="onRankPointerUp"
                                     @click="!rankEdit && fetchAnimeDetails(item.anime)" @keydown.enter.self="!rankEdit && fetchAnimeDetails(item.anime)">
@@ -2695,8 +2753,15 @@
                                     <span v-if="(item.anime.genres || []).length" class="rank-genres">{{ item.anime.genres.slice(0, 3).join(' · ') }}</span>
                                     <span v-if="item.anime.seasonYear" class="rank-year">{{ item.anime.seasonYear }}</span>
                                     <span v-if="item.anime.type === 'SONG'" class="rank-plays" :title="(item.progress || 0) + ' plays'"><i class="fa-solid fa-play"></i>{{ item.progress || 0 }}</span>
-                                    <span v-if="item.anime.type === 'SONG' && !item.score" class="rank-love shrink-0" title="In Love"><i class="fa-solid fa-heart"></i></span><span v-else class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}</span>
+                                    <span v-if="item.anime.type === 'SONG' && !item.score" class="rank-love shrink-0" title="In Love"><i class="fa-solid fa-heart"></i></span><button v-else-if="!rankEdit" @click.stop="openRankScore(item)" @pointerdown.stop class="rating mine shrink-0 rank-score-btn" :class="{ on: rankScore.id === item.anime.id }" title="Change your score"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}<i class="fa-solid fa-pen rank-score-pen"></i></button><span v-else class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}</span>
                                 </div>
+                                <!-- v10.1 change the score right here -->
+                                <div v-if="rankScore.id === item.anime.id && !rankEdit" class="rank-score-edit" @click.stop @pointerdown.stop>
+                                    <span class="text-xs text-sub">Your score for <b class="text-ink">{{ titleOf(item.anime) }}</b></span>
+                                    <div class="w-32"><score-input v-model="rankScore.value"></score-input></div>
+                                    <button @click="saveRankScore(item)" :disabled="rankScore.busy" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid" :class="rankScore.busy ? 'fa-circle-notch fa-spin' : 'fa-check'"></i> Save</button>
+                                    <button @click="rankScore.id = null" class="btn-ghost !py-2 !px-3 !text-xs">Cancel</button>
+                                </div></template>
                             </div>
                             <button v-if="cat.items.length > shownOf('me:' + cat.id)" @click="showMoreRank('me:' + cat.id)" class="w-full py-3 text-xs font-bold text-sub hover:text-ink hover:bg-raised transition-colors border-t border-line"><i class="fa-solid fa-chevron-down mr-1.5"></i>Show 10 more · {{ cat.items.length - shownOf('me:' + cat.id) }} left</button>
                             <p v-if="!cat.items.length" class="p-10 text-center text-mute text-sm">{{ cat.id === 'TV' ? 'Movies & TV isn’t connected to a database yet — your scored movies and shows will rank here once it is.' : 'Score some ' + cat.noun + ' and they show up here.' }}</p>
@@ -3069,6 +3134,28 @@
 
     <!-- ============ SELECTION BAR (batch edit) ============ -->
     <transition name="toast">
+        <!-- v10.1 header search: a small box under the 🔍, results from the section you're in -->
+        <div v-if="hs.open && currentUser" class="hs-panel" :class="{ 'on-home': currentAppView !== 'tracker' }" @click.stop>
+            <form class="hs-row" @submit.prevent="headerSearchAll">
+                <i class="fa-solid fa-magnifying-glass text-sub text-sm"></i>
+                <input id="hdr-search-input" v-model="hs.q" type="search" enterkeyhint="search" autocomplete="off" :placeholder="'Search ' + currentSection.label.toLowerCase() + '…'" @keydown.esc="closeHeaderSearch">
+                <button type="button" @click="closeHeaderSearch" class="text-mute hover:text-ink px-1" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </form>
+            <div v-if="hs.q.trim()" class="hs-results">
+                <p v-if="hs.loading && !hs.results.length" class="hs-note"><i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>Searching…</p>
+                <button v-for="m in hs.results" :key="m.id" @click="pickHeaderResult(m)" class="hs-item">
+                    <img :src="m.coverImage?.large" :class="{ 'is-square': m.type === 'SONG' }" alt="" loading="lazy">
+                    <span class="min-w-0 flex-grow">
+                        <span class="block text-sm text-ink font-semibold truncate">{{ titleOf(m) }}</span>
+                        <span class="block text-[11px] text-mute truncate">{{ m.type === 'SONG' ? (m.artists || []).join(', ') : [(m.format || '').replace('_', ' '), m.seasonYear].filter(Boolean).join(' · ') }}</span>
+                    </span>
+                    <span v-if="myEntry(m.id)" class="status-pill shrink-0"><span class="status-dot" :style="{ '--dot': STATUS_COLORS[myEntry(m.id).status] }"></span>{{ statusLabelFor(m.type, myEntry(m.id).status, true) }}</span>
+                </button>
+                <p v-if="!hs.loading && !hs.results.length" class="hs-note">Nothing found.</p>
+                <button v-if="hs.results.length" @click="headerSearchAll" class="hs-all">See all results in Browse <i class="fa-solid fa-arrow-right text-[10px] ml-1"></i></button>
+            </div>
+            <p v-else class="hs-note">Searching {{ currentSection.label.toLowerCase() }} · Enter shows every result</p>
+        </div>
         <div v-if="batchShown && currentAppView === 'tracker'" class="batch-wrap" :class="{ 'is-min': batchMin }" @click.stop>
             <!-- v10 tucked away: a small pill with the count; tap it to open the bar again -->
             <button v-if="batchMin" @click="batchMin = false" class="batch-pill" title="Show the selection bar">
@@ -3116,13 +3203,13 @@
                     <div class="relative h-40 shrink-0">
                         <img :src="editForm.anime.bannerImage || editForm.anime.coverImage?.large" class="absolute inset-0 w-full h-full object-cover opacity-60" alt="">
                         <div class="absolute inset-0 bg-gradient-to-t from-surface to-transparent"></div>
-                        <button @click="closeEditor" class="absolute top-4 right-4 icon-btn !w-9 !h-9 !bg-base/70"><i class="fa-solid fa-xmark"></i></button>
+                        <button @click="closeEditor" class="absolute top-4 right-4 z-10 icon-btn !w-9 !h-9 !bg-base/70" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
                         <div class="absolute bottom-0 left-0 w-full px-6 flex gap-5 items-end translate-y-8">
                             <img :src="editForm.anime.coverImage?.large" class="w-20 h-28 rounded-xl ring-2 ring-surface object-cover shadow-xl" alt="">
                             <h2 class="font-display font-bold text-ink text-xl leading-tight line-clamp-2 mb-9">{{ titleOf(editForm.anime) }}</h2>
                         </div>
                     </div>
-                    <div class="px-6 pt-14 pb-6 overflow-y-auto space-y-6">
+                    <div class="px-6 pt-14 pb-6 overflow-y-auto overflow-x-hidden space-y-6">
                         <div>
                             <p class="label mb-2.5">Status</p>
                             <div class="status-grid gap-1.5" :style="{ '--n': statusPick().length }">
@@ -3263,7 +3350,9 @@
     <transition name="fade">
         <div v-if="settingsOpen" class="modal-back !p-0 md:!p-4" @click.self="settingsOpen = false">
             <transition name="pop" appear>
-                <div class="modal-card max-w-4xl h-[100dvh] md:h-[min(780px,92dvh)] !rounded-none md:!rounded-3xl flex flex-col md:flex-row">
+                <div class="modal-card relative max-w-4xl h-[100dvh] md:h-[min(780px,92dvh)] !rounded-none md:!rounded-3xl flex flex-col md:flex-row">
+                    <!-- v10.1 the X sits on the window itself, outside the part that scrolls, so it can't slide away -->
+                    <button @click="settingsOpen = false" class="hidden md:flex absolute top-4 right-4 icon-btn !w-9 !h-9 z-20" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
                     <div class="md:hidden flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-1 shrink-0">
                         <p class="font-display font-bold text-ink text-lg">Settings</p>
                         <button @click="settingsOpen = false" class="icon-btn !w-9 !h-9" title="Close"><i class="fa-solid fa-xmark"></i></button>
@@ -3278,8 +3367,7 @@
                         </button>
                     </nav>
 
-                    <div class="flex-grow min-w-0 overflow-y-auto relative">
-                        <button @click="settingsOpen = false" class="hidden md:flex absolute top-4 right-4 icon-btn !w-9 !h-9 z-10" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="flex-grow min-w-0 overflow-y-auto overflow-x-hidden relative">
                         <div class="p-5 md:p-8 space-y-8 pb-16">
 
                             <!-- ACCOUNT -->
@@ -3395,82 +3483,118 @@
                                 <button @click="saveProfileEdit" :disabled="profileEdit.saving || !profileDirty" class="btn-primary w-full sm:w-auto"><i v-if="profileEdit.saving" class="fa-solid fa-circle-notch fa-spin"></i> Save profile</button>
 
                                 <div class="pt-4"><p class="kicker">// make it yours</p><h3 class="mt-1 font-display font-bold text-ink text-2xl">Decorations</h3></div>
-                                <div class="set-block">
-                                    <p class="set-title">Avatar frame</p>
-                                    <p class="set-hint">Shows around your picture everywhere — feed, chat, friends lists.</p>
-                                    <div class="grid grid-cols-4 sm:grid-cols-8 gap-3 mt-4">
-                                        <button v-for="f in FRAMES" :key="f.v" @click="decorDraft.frame = f.v" class="flex flex-col items-center gap-2 p-2 rounded-xl border transition-colors" :class="decorDraft.frame === f.v ? 'border-volt bg-volt/5' : 'border-line hover:border-line2'">
-                                            <user-avatar :user="{ username: currentProfile?.username, avatar_url: profileEdit.avatar_url, accent: profileEdit.accent, decor: { frame: f.v } }" :size="40"></user-avatar>
-                                            <span class="text-[10px] font-semibold text-sub">{{ f.l }}</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="set-block">
-                                    <p class="set-title">Profile theme</p>
-                                    <p class="set-hint">The background of your profile card.</p>
-                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
-                                        <button v-for="t in THEMES" :key="t.v" @click="decorDraft.theme = t.v" class="h-16 rounded-xl border panel !rounded-xl flex items-end p-2.5 text-xs font-bold text-ink transition-colors" :class="['pt-' + t.v, decorDraft.theme === t.v ? '!border-volt' : '!border-line']">{{ t.l }}</button>
-                                    </div>
-                                </div>
-                                <div class="set-block">
-                                    <p class="set-title">Page background</p>
-                                    <p class="set-hint">Fills the whole page behind your profile — friends see it when they visit (like a Steam profile background).</p>
-                                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2.5 mt-4">
-                                        <button @click="decorDraft.bg = { ...decorDraft.bg, type: 'none', v: '' }" class="bg-pick bg-base" :class="{ on: decorDraft.bg.type === 'none' }"><span>None</span></button>
-                                        <button v-for="t in THEMES.filter(t => t.v !== 'default')" :key="t.v" @click="decorDraft.bg = { type: 'theme', v: t.v, dim: decorDraft.bg.type === 'theme' ? decorDraft.bg.dim : 10 }" class="bg-pick" :class="['pt-' + t.v, { on: decorDraft.bg.type === 'theme' && decorDraft.bg.v === t.v }]"><span>{{ t.l }}</span></button>
-                                    </div>
-                                    <template v-if="bgBannerChoices.length">
-                                        <p class="label mt-5 mb-2">From your list</p>
-                                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                            <button v-for="b in bgBannerChoices" :key="b.url" @click="decorDraft.bg = { type: 'image', v: b.url, dim: decorDraft.bg.type === 'image' ? decorDraft.bg.dim : 55 }" class="bg-pick" :style="{ backgroundImage: 'url(' + b.url + ')' }" :class="{ on: decorDraft.bg.type === 'image' && decorDraft.bg.v === b.url }" :title="b.title"><span class="truncate">{{ b.title }}</span></button>
+                                <div class="set-block decor-sec" :class="{ open: decorOpen === 'frame' }">
+                                    <button type="button" @click="decorOpen = decorOpen === 'frame' ? '' : 'frame'" class="decor-head" :aria-expanded="decorOpen === 'frame'">
+                                        <span class="decor-ic"><i class="fa-solid fa-circle-user"></i></span>
+                                        <span class="min-w-0 flex-grow text-left"><span class="set-title block">Avatar frame</span><span class="decor-now">{{ (FRAMES.find(f => f.v === decorDraft.frame) || FRAMES[0]).l }}</span></span>
+                                        <i class="fa-solid fa-chevron-down decor-chev"></i>
+                                    </button>
+                                    <div v-if="decorOpen === 'frame'" class="decor-body">
+                                        <p class="set-hint">Shows around your picture everywhere — feed, chat, friends lists.</p>
+                                        <div class="grid grid-cols-4 sm:grid-cols-8 gap-3 mt-4">
+                                            <button v-for="f in FRAMES" :key="f.v" @click="decorDraft.frame = f.v" class="flex flex-col items-center gap-2 p-2 rounded-xl border transition-colors" :class="decorDraft.frame === f.v ? 'border-volt bg-volt/5' : 'border-line hover:border-line2'">
+                                                <user-avatar :user="{ username: currentProfile?.username, avatar_url: profileEdit.avatar_url, accent: profileEdit.accent, decor: { frame: f.v } }" :size="40"></user-avatar>
+                                                <span class="text-[10px] font-semibold text-sub">{{ f.l }}</span>
+                                            </button>
                                         </div>
-                                    </template>
-                                    <p class="label mt-5 mb-2">Your own picture</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <input v-model="bgUrlDraft" placeholder="https://… image link" class="field !py-2.5 !rounded-xl !text-sm flex-grow min-w-[200px]" @keydown.enter.prevent="setBgUrl">
-                                        <button @click="setBgUrl" :disabled="!bgUrlDraft.trim()" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-link"></i> Use link</button>
-                                        <button @click="bgInput?.click()" :disabled="bgUploading" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid" :class="bgUploading ? 'fa-circle-notch fa-spin' : 'fa-upload'"></i> Upload</button>
-                                        <input ref="bgInput" type="file" accept="image/*" class="hidden" @change="onBgFile">
-                                    </div>
-                                    <div v-if="decorDraft.bg.type !== 'none'" class="mt-5">
-                                        <div class="bg-preview" :class="profileBg(decorDraft)?.cls" :style="profileBg(decorDraft)?.style"><span class="bg-preview-card"></span></div>
-                                        <label class="mt-3 flex items-center gap-3 text-sm text-ink">Darken <input type="range" min="0" max="85" step="5" v-model.number="decorDraft.bg.dim" class="flex-grow accent-[rgb(var(--c-volt))]"><span class="font-mono text-xs text-sub w-10 text-right">{{ decorDraft.bg.dim }}%</span></label>
                                     </div>
                                 </div>
-                                <div class="set-block">
-                                    <p class="set-title">Profile effect</p>
-                                    <p class="set-hint">An animated layer over your profile card.</p>
-                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
-                                        <button v-for="e in EFFECTS" :key="e.v" @click="decorDraft.effect = e.v" class="relative h-16 rounded-xl border overflow-hidden flex items-end p-2.5 text-xs font-bold text-ink bg-base transition-colors" :class="decorDraft.effect === e.v ? 'border-volt' : 'border-line hover:border-line2'">
-                                            <div v-if="e.v !== 'none'" class="fx-layer" :class="'fx-' + e.v"><span v-for="pt in effectParticles(e.v).slice(0, 8)" :key="pt.n" :style="{ left: pt.x + '%', animationDelay: pt.d + 's', animationDuration: pt.t + 's', '--s': pt.s }"></span></div>
-                                            <span class="relative">{{ e.l }}</span>
-                                        </button>
+                                <div class="set-block decor-sec" :class="{ open: decorOpen === 'theme' }">
+                                    <button type="button" @click="decorOpen = decorOpen === 'theme' ? '' : 'theme'" class="decor-head" :aria-expanded="decorOpen === 'theme'">
+                                        <span class="decor-ic"><i class="fa-solid fa-palette"></i></span>
+                                        <span class="min-w-0 flex-grow text-left"><span class="set-title block">Profile theme</span><span class="decor-now">{{ (THEMES.find(t => t.v === decorDraft.theme) || THEMES[0]).l }}</span></span>
+                                        <i class="fa-solid fa-chevron-down decor-chev"></i>
+                                    </button>
+                                    <div v-if="decorOpen === 'theme'" class="decor-body">
+                                        <p class="set-hint">The background of your profile card.</p>
+                                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
+                                            <button v-for="t in THEMES" :key="t.v" @click="decorDraft.theme = t.v" class="h-16 rounded-xl border panel !rounded-xl flex items-end p-2.5 text-xs font-bold text-ink transition-colors" :class="['pt-' + t.v, decorDraft.theme === t.v ? '!border-volt' : '!border-line']">{{ t.l }}</button>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="set-block">
-                                    <p class="set-title">Name style</p>
-                                    <p class="set-hint">How your name looks on your profile.</p>
-                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
-                                        <button v-for="n in NAME_STYLES" :key="n.v" @click="decorDraft.name = n.v" class="h-14 rounded-xl border px-2 flex flex-col items-center justify-center gap-0.5 transition-colors bg-base" :class="decorDraft.name === n.v ? 'border-volt' : 'border-line hover:border-line2'">
-                                            <span class="font-display font-bold text-ink text-[16px] truncate max-w-full" :class="'nm-' + n.v" :data-text="currentProfile?.username">{{ currentProfile?.username || 'You' }}</span>
-                                            <span class="text-[10px] text-mute">{{ n.l }}</span>
-                                        </button>
+                                <div class="set-block decor-sec" :class="{ open: decorOpen === 'bg' }">
+                                    <button type="button" @click="decorOpen = decorOpen === 'bg' ? '' : 'bg'" class="decor-head" :aria-expanded="decorOpen === 'bg'">
+                                        <span class="decor-ic"><i class="fa-solid fa-image"></i></span>
+                                        <span class="min-w-0 flex-grow text-left"><span class="set-title block">Page background</span><span class="decor-now">{{ decorDraft.bg.type === 'none' ? 'None' : decorDraft.bg.type === 'theme' ? (THEMES.find(t => t.v === decorDraft.bg.v) || {}).l || 'Theme' : 'Picture' }}</span></span>
+                                        <i class="fa-solid fa-chevron-down decor-chev"></i>
+                                    </button>
+                                    <div v-if="decorOpen === 'bg'" class="decor-body">
+                                        <p class="set-hint">Fills the whole page behind your profile — friends see it when they visit (like a Steam profile background).</p>
+                                        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2.5 mt-4">
+                                            <button @click="decorDraft.bg = { ...decorDraft.bg, type: 'none', v: '' }" class="bg-pick bg-base" :class="{ on: decorDraft.bg.type === 'none' }"><span>None</span></button>
+                                            <button v-for="t in THEMES.filter(t => t.v !== 'default')" :key="t.v" @click="decorDraft.bg = { type: 'theme', v: t.v, dim: decorDraft.bg.type === 'theme' ? decorDraft.bg.dim : 10 }" class="bg-pick" :class="['pt-' + t.v, { on: decorDraft.bg.type === 'theme' && decorDraft.bg.v === t.v }]"><span>{{ t.l }}</span></button>
+                                        </div>
+                                        <template v-if="bgBannerChoices.length">
+                                            <p class="label mt-5 mb-2">From your list</p>
+                                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                                <button v-for="b in bgBannerChoices" :key="b.url" @click="decorDraft.bg = { type: 'image', v: b.url, dim: decorDraft.bg.type === 'image' ? decorDraft.bg.dim : 55 }" class="bg-pick" :style="{ backgroundImage: 'url(' + b.url + ')' }" :class="{ on: decorDraft.bg.type === 'image' && decorDraft.bg.v === b.url }" :title="b.title"><span class="truncate">{{ b.title }}</span></button>
+                                            </div>
+                                        </template>
+                                        <p class="label mt-5 mb-2">Your own picture</p>
+                                        <div class="flex flex-wrap gap-2">
+                                            <input v-model="bgUrlDraft" placeholder="https://… image link" class="field !py-2.5 !rounded-xl !text-sm flex-grow min-w-[200px]" @keydown.enter.prevent="setBgUrl">
+                                            <button @click="setBgUrl" :disabled="!bgUrlDraft.trim()" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-link"></i> Use link</button>
+                                            <button @click="bgInput?.click()" :disabled="bgUploading" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid" :class="bgUploading ? 'fa-circle-notch fa-spin' : 'fa-upload'"></i> Upload</button>
+                                            <input ref="bgInput" type="file" accept="image/*" class="hidden" @change="onBgFile">
+                                        </div>
+                                        <div v-if="decorDraft.bg.type !== 'none'" class="mt-5">
+                                            <div class="bg-preview" :class="profileBg(decorDraft)?.cls" :style="profileBg(decorDraft)?.style"><span class="bg-preview-card"></span></div>
+                                            <label class="mt-3 flex items-center gap-3 text-sm text-ink">Darken <input type="range" min="0" max="85" step="5" v-model.number="decorDraft.bg.dim" class="flex-grow accent-[rgb(var(--c-volt))]"><span class="font-mono text-xs text-sub w-10 text-right">{{ decorDraft.bg.dim }}%</span></label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="set-block decor-sec" :class="{ open: decorOpen === 'effect' }">
+                                    <button type="button" @click="decorOpen = decorOpen === 'effect' ? '' : 'effect'" class="decor-head" :aria-expanded="decorOpen === 'effect'">
+                                        <span class="decor-ic"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                                        <span class="min-w-0 flex-grow text-left"><span class="set-title block">Profile effect</span><span class="decor-now">{{ (EFFECTS.find(e => e.v === (decorDraft.effect || 'none')) || EFFECTS[0]).l }}</span></span>
+                                        <i class="fa-solid fa-chevron-down decor-chev"></i>
+                                    </button>
+                                    <div v-if="decorOpen === 'effect'" class="decor-body">
+                                        <p class="set-hint">An animated layer over your profile card.</p>
+                                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
+                                            <button v-for="e in EFFECTS" :key="e.v" @click="decorDraft.effect = e.v" class="relative h-16 rounded-xl border overflow-hidden flex items-end p-2.5 text-xs font-bold text-ink bg-base transition-colors" :class="decorDraft.effect === e.v ? 'border-volt' : 'border-line hover:border-line2'">
+                                                <div v-if="e.v !== 'none'" class="fx-layer" :class="'fx-' + e.v"><span v-for="pt in effectParticles(e.v).slice(0, 8)" :key="pt.n" :style="{ left: pt.x + '%', animationDelay: pt.d + 's', animationDuration: pt.t + 's', '--s': pt.s }"></span></div>
+                                                <span class="relative">{{ e.l }}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="set-block decor-sec" :class="{ open: decorOpen === 'name' }">
+                                    <button type="button" @click="decorOpen = decorOpen === 'name' ? '' : 'name'" class="decor-head" :aria-expanded="decorOpen === 'name'">
+                                        <span class="decor-ic"><i class="fa-solid fa-signature"></i></span>
+                                        <span class="min-w-0 flex-grow text-left"><span class="set-title block">Name style</span><span class="decor-now">{{ (NAME_STYLES.find(n => n.v === (decorDraft.name || 'none')) || NAME_STYLES[0]).l }}</span></span>
+                                        <i class="fa-solid fa-chevron-down decor-chev"></i>
+                                    </button>
+                                    <div v-if="decorOpen === 'name'" class="decor-body">
+                                        <p class="set-hint">How your name looks on your profile.</p>
+                                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
+                                            <button v-for="n in NAME_STYLES" :key="n.v" @click="decorDraft.name = n.v" class="h-14 rounded-xl border px-2 flex flex-col items-center justify-center gap-0.5 transition-colors bg-base" :class="decorDraft.name === n.v ? 'border-volt' : 'border-line hover:border-line2'">
+                                                <span class="font-display font-bold text-ink text-[16px] truncate max-w-full" :class="'nm-' + n.v" :data-text="currentProfile?.username">{{ currentProfile?.username || 'You' }}</span>
+                                                <span class="text-[10px] text-mute">{{ n.l }}</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="set-block">
                                     <p class="set-title">Tagline <span class="font-mono text-[11px] text-mute font-normal">{{ decorDraft.tagline.length }}/60</span></p>
                                     <input v-model="decorDraft.tagline" maxlength="60" placeholder="e.g. certified tsundere enjoyer" class="field mt-3">
                                 </div>
-                                <div class="set-block">
-                                    <p class="set-title">Badges</p>
-                                    <p class="set-hint">Earned automatically from your lists. Tap up to 3 to feature them first. Tap the <i class="fa-solid fa-eye"></i> to hide one you don’t want on your profile.</p>
-                                    <div class="flex flex-wrap gap-2 mt-4">
-                                        <span v-for="b in BADGES.filter(x => !x.secret || myEarnedBadges.some(y => y.id === x.id))" :key="b.id" class="inline-flex items-center gap-1">
-                                            <button @click="myEarnedBadges.some(x => x.id === b.id) && togglePinBadge(b.id)" class="badge-chip" :class="{ pinned: decorDraft.pinned.includes(b.id), 'opacity-35 grayscale cursor-default': !myEarnedBadges.some(x => x.id === b.id), 'is-hidden': decorDraft.hidden.includes(b.id) }" :style="{ color: b.c }" :title="b.d + (myEarnedBadges.some(x => x.id === b.id) ? (decorDraft.hidden.includes(b.id) ? ' (hidden)' : '') : ' (not earned yet)')">
-                                                <span class="bi" :style="{ background: b.c + '26' }"><i class="fa-solid" :class="myEarnedBadges.some(x => x.id === b.id) ? b.icon : 'fa-lock'"></i></span><span class="text-ink">{{ b.l }}</span><i v-if="decorDraft.pinned.includes(b.id)" class="fa-solid fa-thumbtack text-[9px]"></i>
-                                            </button>
-                                            <button v-if="myEarnedBadges.some(x => x.id === b.id)" @click="toggleHideBadge(b.id)" class="badge-eye" :class="{ on: decorDraft.hidden.includes(b.id) }" :title="decorDraft.hidden.includes(b.id) ? 'Hidden — tap to show it again' : 'Hide from my profile'"><i class="fa-solid" :class="decorDraft.hidden.includes(b.id) ? 'fa-eye-slash' : 'fa-eye'"></i></button>
-                                        </span>
+                                <div class="set-block decor-sec" :class="{ open: decorOpen === 'badges' }">
+                                    <button type="button" @click="decorOpen = decorOpen === 'badges' ? '' : 'badges'" class="decor-head" :aria-expanded="decorOpen === 'badges'">
+                                        <span class="decor-ic"><i class="fa-solid fa-medal"></i></span>
+                                        <span class="min-w-0 flex-grow text-left"><span class="set-title block">Badges</span><span class="decor-now">{{ decorDraft.pinned.length ? decorDraft.pinned.length + ' featured' : 'None featured' }}</span></span>
+                                        <i class="fa-solid fa-chevron-down decor-chev"></i>
+                                    </button>
+                                    <div v-if="decorOpen === 'badges'" class="decor-body">
+                                        <p class="set-hint">Earned automatically from your lists. Tap up to 3 to feature them first. Tap the <i class="fa-solid fa-eye"></i> to hide one you don’t want on your profile.</p>
+                                        <div class="flex flex-wrap gap-2 mt-4">
+                                            <span v-for="b in BADGES.filter(x => !x.secret || myEarnedBadges.some(y => y.id === x.id))" :key="b.id" class="inline-flex items-center gap-1">
+                                                <button @click="myEarnedBadges.some(x => x.id === b.id) && togglePinBadge(b.id)" class="badge-chip" :class="{ pinned: decorDraft.pinned.includes(b.id), 'opacity-35 grayscale cursor-default': !myEarnedBadges.some(x => x.id === b.id), 'is-hidden': decorDraft.hidden.includes(b.id) }" :style="{ color: b.c }" :title="b.d + (myEarnedBadges.some(x => x.id === b.id) ? (decorDraft.hidden.includes(b.id) ? ' (hidden)' : '') : ' (not earned yet)')">
+                                                    <span class="bi" :style="{ background: b.c + '26' }"><i class="fa-solid" :class="myEarnedBadges.some(x => x.id === b.id) ? b.icon : 'fa-lock'"></i></span><span class="text-ink">{{ b.l }}</span><i v-if="decorDraft.pinned.includes(b.id)" class="fa-solid fa-thumbtack text-[9px]"></i>
+                                                </button>
+                                                <button v-if="myEarnedBadges.some(x => x.id === b.id)" @click="toggleHideBadge(b.id)" class="badge-eye" :class="{ on: decorDraft.hidden.includes(b.id) }" :title="decorDraft.hidden.includes(b.id) ? 'Hidden — tap to show it again' : 'Hide from my profile'"><i class="fa-solid" :class="decorDraft.hidden.includes(b.id) ? 'fa-eye-slash' : 'fa-eye'"></i></button>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <button @click="saveDecor" :disabled="!decorDirty" class="btn-primary w-full sm:w-auto"><i class="fa-solid fa-wand-magic-sparkles"></i> Save decorations</button>
@@ -4078,7 +4202,16 @@
                 <div class="grid grid-cols-3 gap-2 mt-2">
                     <button v-for="s in ['PLANNING','WATCHING','COMPLETED']" :key="s" @click="sheetAction(s)" :class="soloEntry(sheetAnime.id)?.status === s ? 'bg-overlay ring-1 ring-line2 text-ink' : 'bg-raised text-sub'" class="flex flex-col items-center gap-2 py-3.5 rounded-2xl active:scale-95 transition-transform">
                         <span class="qa-dot !w-3 !h-3" :style="{ '--dot': STATUS_COLORS[s] }"></span>
-                        <span class="text-xs font-semibold">{{ STATUS_LABELS[s] }}</span>
+                        <span class="text-xs font-semibold">{{ statusLabelFor(sheetAnime.type, s) }}</span>
+                    </button>
+                </div>
+                <!-- v10.1 On Hold / Dropped and the marks (Wanna rewatch / reread / replay, In rotation) -->
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <button v-for="s in ['PAUSED', 'DROPPED']" :key="s" @click="sheetAction(s)" :class="soloEntry(sheetAnime.id)?.status === s ? 'bg-overlay ring-1 ring-line2 text-ink' : 'bg-raised text-sub'" class="sheet-chip">
+                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span>{{ statusLabelFor(sheetAnime.type, s) }}
+                    </button>
+                    <button v-for="k in addStatuses(sheetAnime).filter(k => k === 'REWISH' || k === 'ROTATION')" :key="k" @click="sheetAction(k)" :class="isFlagged(sheetAnime.id, k) ? 'bg-overlay ring-1 ring-line2 text-ink' : 'bg-raised text-sub'" class="sheet-chip">
+                        <i class="fa-solid text-[11px]" :class="ADD_ICONS[k]" :style="{ color: STATUS_COLORS[k] }"></i>{{ statusLabelFor(sheetAnime.type, k) }}<i v-if="isFlagged(sheetAnime.id, k)" class="fa-solid fa-check text-[10px]"></i>
                     </button>
                 </div>
                 <div class="grid grid-cols-2 gap-2 mt-2">
@@ -4554,7 +4687,7 @@
                         <button @click="closeTrailer" class="icon-btn" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     <div ref="ytBox" class="yt-box relative w-full aspect-video rounded-2xl overflow-hidden bg-black ring-1 ring-line2 shadow-2xl" :class="{ 'is-playing': yt.state === 1 }">
-                        <template v-if="isYouTube">
+                        <template v-if="isYouTube && !ytNative.on">
                             <!-- the frame is taller than the box: YouTube's title bar + logo sit in the cropped-off black bars -->
                             <iframe ref="ytFrame" :src="trailerUrl" @load="onYtLoad" class="yt-frame" title="Trailer" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1"></iframe>
                             <!-- our layer: catches clicks (so YouTube's hover UI never appears) and covers its pause screen -->
@@ -4569,9 +4702,18 @@
                                 <button @click="ytToggle" class="yt-btn" :title="yt.state === 1 ? 'Pause (space)' : 'Play (space)'"><i class="fa-solid" :class="yt.state === 1 ? 'fa-pause' : 'fa-play'"></i></button>
                                 <span class="font-mono text-[11px] text-white/80 w-24 shrink-0">{{ fmtClock(yt.time) }} / {{ fmtClock(yt.dur) }}</span>
                                 <div class="yt-track" @click="ytSeek"><div class="yt-fill" :style="{ width: (yt.dur ? yt.time / yt.dur * 100 : 0) + '%' }"></div></div>
-                                <button @click="ytMute" class="yt-btn" :title="yt.muted ? 'Unmute (m)' : 'Mute (m)'"><i class="fa-solid" :class="yt.muted ? 'fa-volume-xmark' : 'fa-volume-high'"></i></button>
+                                <!-- v10.1 volume + quality -->
+                                <div class="yt-vol">
+                                    <button @click="ytMute" class="yt-btn" :title="yt.muted ? 'Unmute (m)' : 'Mute (m)'"><i class="fa-solid" :class="yt.muted || !ytVol ? 'fa-volume-xmark' : ytVol < 50 ? 'fa-volume-low' : 'fa-volume-high'"></i></button>
+                                    <input type="range" min="0" max="100" step="1" :value="yt.muted ? 0 : ytVol" @input="setYtVol($event.target.value)" class="yt-vol-range" :style="{ '--v': (yt.muted ? 0 : ytVol) + '%' }" aria-label="Volume" title="Volume">
+                                </div>
+                                <button @click="ytQuality" class="yt-btn" title="Quality: switches to YouTube's own controls, then use its ⚙ → Quality"><i class="fa-solid fa-gear"></i></button>
                                 <button @click="ytFull" class="yt-btn" title="Full screen (f)"><i class="fa-solid fa-expand"></i></button>
                             </div>
+                        </template>
+                        <template v-else-if="isYouTube && ytNative.on">
+                            <iframe :src="trailerUrl" class="absolute inset-0 w-full h-full" title="Trailer" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                            <button @click="ytNative.on = false" class="yt-back" title="Back to the simple controls"><i class="fa-solid fa-arrow-left mr-1.5"></i>Simple controls</button>
                         </template>
                         <iframe v-else :src="trailerUrl" class="absolute inset-0 w-full h-full" title="Trailer" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe>
                     </div>
