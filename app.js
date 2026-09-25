@@ -85,6 +85,7 @@ const defaultPrefs = () => ({
     players: [],                                            // player links you added (anime, movies & TV): an address with {tmdb} / {episode}… blanks
     sources: [],                                            // website sources you added (Mihon-style extensions: settings only, no code) · kind: manga | anime | tv
     repos: {},                                              // the extension repository you last opened, per section
+    savedGifs: [],                                          // v9.8 GIFs you starred (like Discord favourites): { url, preview }
     reader: { autoMark: true, saver: false, modes: {} },   // reader: mark chapters read at the end, data saver, reading mode per title
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
@@ -1458,6 +1459,23 @@ const appleChartPage = async (cc = 'global', page = 1) => {
     } catch { return { list: [], more: false }; }
 };
 // the same song is often on a single and an album: keep the first (most relevant) one
+// v9.8 how well a song matches what you typed: the exact title (or "title + artist") first, then titles that start
+// with it, the artist's own songs, titles containing it, and finally songs that only share some words
+const songRelevance = (s, q) => {
+    const w = (x) => String(x || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const nq = w(q), q0 = nq.replace(/ /g, ''); if (!q0) return 0;
+    const full = w(s.title?.romaji), t = w(String(s.title?.romaji || '').replace(/\s*[([].*?[)\]]/g, '')) || full;
+    const t0 = t.replace(/ /g, ''), f0 = full.replace(/ /g, ''), arts = (s.artists || []).map(a => w(a).replace(/ /g, '')).filter(Boolean);
+    if (f0 === q0) return 100;
+    if (t0 === q0) return 97;   // the same title with (Remix), (feat. …) after it
+    if (t0 && q0.includes(t0) && arts.some(a => q0.includes(a))) return 95;
+    if (t0.startsWith(q0)) return 70;
+    if (arts.includes(q0)) return 60;
+    if (t0.includes(q0)) return 50;
+    const words = nq.split(' ').filter(x => x.length > 1), hay = `${t} ${(s.artists || []).map(w).join(' ')}`;
+    return words.length ? Math.round(40 * words.filter(x => hay.includes(x)).length / words.length) : 0;
+};
+const bySongRelevance = (list, q) => list.map((s, i) => ({ s, i, r: songRelevance(s, q) })).sort((a, b) => b.r - a.r || a.i - b.i).map(x => x.s);
 const dedupeSongs = (list) => { const seen = new Set(); return list.filter(s => { const k = `${s.title.romaji.toLowerCase()}|${(s.artists[0] || '').toLowerCase()}`; return !seen.has(k) && seen.add(k); }); };
 const genreMatch = (s, g) => { const a = (s.genres[0] || '').toLowerCase().replace(/[^a-z]/g, ''), b = g.toLowerCase().replace(/[^a-z]/g, ''); return a.includes(b) || b.includes(a.slice(0, 4)); };
 // the artist a Songs search matched (shown as a card above the results)
@@ -1515,6 +1533,7 @@ const songApi = {
             }
             if (genres.length) { const g = items.filter(s => genres.some(x => genreMatch(s, x))); if (g.length >= 8 || q || words.length) items = g; }
             items = items.filter(hasWords);
+            if (q && page === 1) items = bySongRelevance(dedupeSongs(items), [q, ...words].join(' '));
             return { items: clean(items), hasNextPage: (d.results || []).length === per && offset + per < 200 };
         }
         // "trending": this week's most played in that country (100 at a time)
@@ -1852,7 +1871,7 @@ const QuickAdd = {
                     <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">SOLO LIST</p>
                     <button @click="pick('EP')" class="qa-row" title="Add one">
                         <span class="font-mono text-[11px] font-bold text-volt w-2.5">+1</span> {{ UNIT.ep }}
-                        <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
+                        <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ anime.type === 'SONG' ? '▶ ' : '' }}{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : anime.type === 'SONG' ? ' plays' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
                     </button>
                     <button v-for="s in ['PLANNING', 'WATCHING', 'COMPLETED']" :key="s" @click="pick(s)" class="qa-row" :class="entry?.status === s ? 'bg-overlay' : ''">
                         <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span> {{ STATUS_LABELS[s] }}
@@ -1913,8 +1932,10 @@ const PosterCard = {
         </div>
         <div class="absolute bottom-0 inset-x-0 p-3.5 pr-14 z-10 pointer-events-none">
             <p class="text-ink font-semibold text-sm leading-snug line-clamp-2">{{ titleOf(anime) }}</p>
+            <p v-if="anime.type === 'SONG' && (anime.artists || []).length" class="text-[11px] text-sub truncate mt-0.5">{{ anime.artists.join(', ') }}</p>
             <template v-if="entry">
                 <p v-if="anime.type === 'GAME'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }">{{ entry.progress || 0 }} HRS</p>
+                <p v-else-if="anime.type === 'SONG'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }"><i class="fa-solid fa-play text-[8px] mr-1"></i>{{ entry.progress || 0 }} {{ entry.progress === 1 ? 'PLAY' : 'PLAYS' }}</p>
                 <p v-else class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }">{{ entry.progress || 0 }}/{{ total ? fmtChapter(total) : '?' }} {{ UNIT.unit }}</p>
                 <div v-if="total" class="mt-2 h-[3px] rounded-full bg-white/10 overflow-hidden">
                     <div class="h-full rounded-full transition-[width] duration-500 ease-expo" :style="{ width: pct + '%', background: STATUS_COLORS[entry.status] }"></div>
@@ -2143,8 +2164,7 @@ createApp({
             { id: 'browse', label: 'Browse', icon: 'fa-compass' },
             { id: 'top', label: 'Top 100', icon: 'fa-trophy' },
             { id: 'feed', label: 'Feed', icon: 'fa-bolt' },
-            { id: 'coop', label: 'Squads', icon: 'fa-user-group' },
-            { id: 'solo', label: 'Solo', icon: 'fa-user' },
+            { id: 'solo', label: 'Solo', icon: 'fa-user' },   // v9.8 Squads live inside it now (a switch under the statuses)
             { id: 'profile', label: 'Profile', icon: 'fa-circle-user' },
         ];
 
@@ -3601,13 +3621,19 @@ createApp({
         // ---------- tier list maker ----------
         const TIER_COLORS = ['#ff7f7f', '#ffbf7f', '#ffdf80', '#bfff7f', '#7fbfff', '#bf7fff'];
         const newTiers = () => ['S', 'A', 'B', 'C', 'D'].map((l, n) => ({ label: l, color: TIER_COLORS[n], items: [] }));
-        const TIER_SOURCES = [
-            { v: 'anime', l: 'Characters from an anime' }, { v: 'tag', l: 'By tag (tsundere, isekai…)' }, { v: 'genre', l: 'By genre' },
+        // v9.8 the tier list maker follows the section you're in (anime, manga, games, movies & TV, songs)
+        const TIER_NOUN = { ANIME: 'anime', MANGA: 'manga', GAME: 'games', TV: 'movies & shows', SONG: 'songs' };
+        const tierType = computed(() => mediaType.value || 'ANIME');
+        const tierAL = computed(() => tierType.value === 'ANIME' || tierType.value === 'MANGA');
+        const tierNoun = computed(() => TIER_NOUN[tierType.value] || 'anime');
+        const TIER_SOURCES = computed(() => tierAL.value ? [
+            { v: 'anime', l: 'Characters from a' + (tierType.value === 'ANIME' ? 'n anime' : ' manga') }, { v: 'tag', l: 'By tag (tsundere, isekai…)' }, { v: 'genre', l: 'By genre' },
             { v: 'mine', l: 'From my list' }, { v: 'search', l: 'Pick one by one' },
-        ];
+        ] : [{ v: 'search', l: 'Pick one by one' }, { v: 'genre', l: 'By genre' }, { v: 'mine', l: 'From my list' }]);
+        const tierStatuses = computed(() => ['COMPLETED', 'WATCHING', 'PLANNING', 'DROPPED'].filter(st => !(tierType.value === 'SONG' && st === 'PLANNING')));
         const tier = reactive({ open: false, title: '', source: 'anime', what: 'CHARACTER', q: '', results: [], media: null, genre: '', tag: '', loading: false, pool: [], tiers: newTiers(), sel: null, posting: false, drag: null });
         const openTierMaker = (from = null) => {
-            Object.assign(tier, { open: true, title: '', source: 'anime', what: 'CHARACTER', q: '', results: [], media: null, genre: '', tag: '', loading: false, pool: [], tiers: newTiers(), sel: null, posting: false, drag: null });
+            Object.assign(tier, { open: true, title: '', source: tierAL.value ? 'anime' : 'search', what: tierAL.value ? 'CHARACTER' : 'MEDIA', q: '', results: [], media: null, genre: '', tag: '', loading: false, pool: [], tiers: newTiers(), sel: null, posting: false, drag: null });
             if (from?.extra?.tiers) {   // "make my own version" of someone's tier list: same items, empty tiers
                 tier.title = from.extra.title || from.body || '';
                 tier.pool = from.extra.tiers.flatMap(t => t.items).map(x => ({ ...x }));
@@ -3630,11 +3656,15 @@ createApp({
         const runTierSearch = debounce(async () => {
             const q = tier.q.trim(); if (!q) { tier.results = []; return; }
             try {
-                if (tier.source === 'search' && tier.what === 'CHARACTER') {
+                const T = tierType.value;
+                if (!tierAL.value) {
+                    const list = T === 'GAME' ? await gameApi.search(q) : T === 'TV' ? await tvApi.search(q) : await songApi.search(q);
+                    tier.results = (list || []).slice(0, 10);
+                } else if (tier.source === 'search' && tier.what === 'CHARACTER') {
                     const d = await anilist('query ($q: String) { Page(perPage: 8) { characters(search: $q, sort: SEARCH_MATCH) { id name { full } image { large } } } }', { q });
                     tier.results = (d?.Page?.characters || []).map(charItem);
                 } else {
-                    const d = await anilist(`query ($q: String) { Page(perPage: 8) { media(search: $q, isAdult: false, sort: SEARCH_MATCH) { ${MEDIA_FIELDS} } } }`, { q });
+                    const d = await anilist(`query ($q: String, $t: MediaType) { Page(perPage: 8) { media(search: $q, type: $t, isAdult: false, sort: SEARCH_MATCH) { ${MEDIA_FIELDS} } } }`, { q, t: T });
                     tier.results = (d?.Page?.media || []).map(normMedia);
                 }
             } catch { tier.results = []; }
@@ -3660,24 +3690,30 @@ createApp({
         const loadTierGroup = async () => {
             const key = tier.source === 'genre' ? tier.genre : tier.tag; if (!key) return;
             tier.loading = true;
-            if (!tier.title) tier.title = tier.what === 'CHARACTER' ? `${key} characters` : `${key} anime`;
+            if (!tier.title) tier.title = tier.what === 'CHARACTER' ? `${key} characters` : `${(allGenreOptions.value.find(g => g.v === key)?.l) || key} ${tierNoun.value}`;
             try {
+                if (!tierAL.value) {   // games, movies & TV, songs: the most popular with that genre
+                    const d = await browseFetch(tierType.value, { ...defaultFilters(), genre: key }, 1);
+                    const n = addToPool((d?.items || []).slice(0, 40).map(mediaItem));
+                    showToast(n ? `${n} ${tierNoun.value} added` : 'Nothing new to add', n ? 'success' : 'error');
+                    return;
+                }
                 const arg = tier.source === 'genre' ? 'genre: $k' : 'tag: $k';
                 if (tier.what === 'CHARACTER') {
-                    const d = await anilist(`query ($k: String) { Page(perPage: 25) { media(${arg}, type: ANIME, isAdult: false, sort: POPULARITY_DESC) { id characters(role: MAIN, perPage: 3, sort: FAVOURITES_DESC) { nodes { id name { full } image { large } } } } } }`, { k: key });
+                    const d = await anilist(`query ($k: String) { Page(perPage: 25) { media(${arg}, type: ${tierType.value}, isAdult: false, sort: POPULARITY_DESC) { id characters(role: MAIN, perPage: 3, sort: FAVOURITES_DESC) { nodes { id name { full } image { large } } } } } }`, { k: key });
                     const n = addToPool((d?.Page?.media || []).flatMap(m => (m.characters?.nodes || []).map(charItem)));
                     showToast(`${n} main characters from popular ${key} anime`);
                 } else {
-                    const d = await anilist(`query ($k: String) { Page(perPage: 40) { media(${arg}, type: ANIME, isAdult: false, sort: POPULARITY_DESC) { ${MEDIA_FIELDS} } } }`, { k: key });
+                    const d = await anilist(`query ($k: String) { Page(perPage: 40) { media(${arg}, type: ${tierType.value}, isAdult: false, sort: POPULARITY_DESC) { ${MEDIA_FIELDS} } } }`, { k: key });
                     const n = addToPool((d?.Page?.media || []).map(normMedia).map(mediaItem));
-                    showToast(`${n} anime added`);
+                    showToast(`${n} ${tierNoun.value} added`);
                 }
             } catch (err) { showToast(err.message || 'Could not load', 'error'); }
             finally { tier.loading = false; }
         };
         const loadTierMine = (status = 'COMPLETED') => {
-            const items = uniqueItems.value.filter(i => typeOf(i) === 'ANIME' && i.status === status).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 80).map(i => mediaItem(i.anime));
-            if (!tier.title) tier.title = 'My ' + (status === 'COMPLETED' ? 'completed' : STATUS_LABELS[status].toLowerCase()) + ' anime';
+            const items = uniqueItems.value.filter(i => typeOf(i) === tierType.value && i.status === status).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 80).map(i => mediaItem(i.anime));
+            if (!tier.title) tier.title = 'My ' + statusLabelFor(tierType.value, status).toLowerCase() + ' ' + tierNoun.value;
             const n = addToPool(items); showToast(n ? `${n} added from your list` : 'Nothing new to add', n ? 'success' : 'error');
         };
         // moving items: drag (mouse) or tap an item, then tap a tier (phone)
@@ -4023,7 +4059,7 @@ createApp({
             ]);
             const nq = q.toLowerCase().replace(/[^a-z0-9]/g, '');
             const byArtist = [...apple, ...sp].filter(x => (x.artists || []).some(a => String(a).toLowerCase().replace(/[^a-z0-9]/g, '') === nq));
-            return dedupeSongs([...byArtist, ...apple, ...sp]).slice(0, 40);
+            return bySongRelevance(dedupeSongs([...byArtist, ...apple, ...sp]), q).slice(0, 40);
         };
         const runMusicSearch = debounce(async () => {
             const q = music.q.trim(), tok = ++musicTok;
@@ -4169,7 +4205,11 @@ createApp({
                         if (player.mode !== 'yt') return;
                         ytState = e.data;
                         if (e.data === 1) { player.playing = true; player.loading = false; player.status = ''; clearTimeout(ytStartCheck); ytWaiter?.('ok'); }
-                        else if (e.data === 2) player.playing = false;
+                        else if (e.data === 2) {
+                            player.playing = false;
+                            // v9.8 phones pause YouTube when the screen locks or you leave the tab: start it again (you didn't pause it)
+                            if (document.hidden && Date.now() - userPausedAt > 1500) setTimeout(() => { try { if (player.mode === 'yt' && !player.playing) ytP?.playVideo?.(); } catch {} }, 400);
+                        }
                         else if (e.data === 0) { player.playing = false; songEnded(); }
                     },
                     // 100 removed · 101/150 the owner only allows it on YouTube → the preview plays instead
@@ -4178,7 +4218,15 @@ createApp({
                 },
             });
         })), 12000, 'YouTube’s player didn’t load').catch(err => { ytReady = null; throw err; }));
-        let ytState = -1, ytWaiter = null;
+        // v9.8 get YouTube's player (and our server) ready as soon as songs are in view, so the first play doesn't wait for them
+        let warmedSongs = false;
+        const warmSongs = () => {
+            if (warmedSongs || !player.full || !songsOn.value || !currentUser.value) return; warmedSongs = true;
+            const go = () => { ytPlayer().catch(() => {}); ytmSearch('official audio').catch(() => {}); };
+            (window.requestIdleCallback || ((f) => setTimeout(f, 1200)))(go);
+        };
+        watch(() => songsOn.value && !!currentUser.value && (section.value === 'songs' || music.open || !!player.song || selectedAnime.value?.type === 'SONG'), (on) => { if (on) warmSongs(); }, { immediate: true });
+        let ytState = -1, ytWaiter = null, userPausedAt = 0;
         // load one upload and wait for what happens: 'ok' (playing), 'error' (removed / the label blocks it outside YouTube),
         // 'tap' (the browser wants a tap before sound starts) or 'timeout'
         const ytTry = (yp, id, ms = 8000) => new Promise((done) => {
@@ -4217,7 +4265,18 @@ createApp({
         };
         // the uploads to try, best first: YouTube Music's songs, then YouTube's videos. Several are kept because
         // record labels often block their songs from playing outside YouTube; the next one may be allowed.
-        const ytCandidates = async (s) => {
+        // v9.8 searches are kept for the session (and the next song in the queue is looked up while this one plays)
+        const candCache = new Map();
+        const ytCandidates = (s) => {
+            const k = songYtKey(s);
+            if (!candCache.has(k)) candCache.set(k, ytCandidatesRaw(s).catch(err => { candCache.delete(k); throw err; }));
+            return candCache.get(k);
+        };
+        const prefetchNextSong = () => {
+            const n = player.queue[player.qi + 1]; if (!n || !player.full || n.pending) return;
+            setTimeout(() => { if (!candCache.has(songYtKey(n))) ytCandidates(n).catch(() => {}); }, 2500);
+        };
+        const ytCandidatesRaw = async (s) => {
             const artist = (s.artists || [])[0] || '', title = s.title?.romaji || '';
             let found = [], err = null;
             try { found = rankSongVideos(await ytmSearch(`${artist} ${title}`), s); } catch (e) { err = e; }
@@ -4264,16 +4323,27 @@ createApp({
             if (player.full) {
                 try {
                     player.status = 'Finding it on YouTube Music…';
-                    const [ids, yp] = await Promise.all([withTimeout(ytCandidates(song), 12000, 'search took too long'), ytPlayer()]);
+                    // a song played before starts straight away (no search); the search only runs if that upload fails
+                    const known = ytSongs[songYtKey(song)];
+                    const [ids, yp] = await Promise.all([known ? Promise.resolve([known]) : withTimeout(ytCandidates(song), 12000, 'search took too long'), ytPlayer()]);
+
                     if (tok !== playTok) return;
                     player.status = ids.length ? 'Starting…' : '';
-                    for (const id of ids) {
+                    let searched = !known;
+                    for (let k = 0; k < ids.length || !searched; k++) {
+                        if (k >= ids.length) {   // the remembered upload failed: now search for others
+                            searched = true;
+                            try { (await withTimeout(ytCandidates(song), 12000, 'search took too long')).forEach(id => { if (!ids.includes(id)) ids.push(id); }); } catch {}
+                            if (tok !== playTok) return;
+                            if (k >= ids.length) break;
+                        }
+                        const id = ids[k];
                         player.mode = 'yt'; audio.pause();
                         yp.setVolume(Math.round(player.vol * 100)); if (player.muted) yp.mute(); else yp.unMute();
                         ytTick();
                         const r = await ytTry(yp, id);
                         if (tok !== playTok) return;
-                        if (r === 'ok') { ytSongs[songYtKey(song)] = id; saveYtSongs(); fullDown = null; player.why = ''; return; }
+                        if (r === 'ok') { ytSongs[songYtKey(song)] = id; saveYtSongs(); fullDown = null; player.why = ''; prefetchNextSong(); return; }
                         if (r === 'tap') { player.loading = false; player.status = ''; ytSongs[songYtKey(song)] = id; showToast('Tap play to start the song'); return; }
                         if (ytSongs[songYtKey(song)] === id) forgetYt(song);
                     }
@@ -4317,7 +4387,7 @@ createApp({
         const togglePlay = () => {
             if (!player.song) return;
             if (player.mode === 'yt' && ytP) {
-                if (player.playing) ytP.pauseVideo();
+                if (player.playing) { userPausedAt = Date.now(); ytP.pauseVideo(); }
                 else { ytP.playVideo(); player.loading = true; ytWatch.tapped = true; ytWatch(playTok, player.song, 6000); }   // your tap didn't start it either → preview
             }
             else if (player.mode === 'preview') { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); }
@@ -4397,7 +4467,7 @@ createApp({
             } catch {}
         };
         // a video (episode, trailer) pauses the song
-        const pauseSong = () => { if (!player.playing) return; if (player.mode === 'yt') ytP?.pauseVideo?.(); else audio.pause(); };
+        const pauseSong = () => { if (!player.playing) return; userPausedAt = Date.now(); if (player.mode === 'yt') ytP?.pauseVideo?.(); else audio.pause(); };
         // the bar takes room at the bottom: the page and every popup end above it, so it never covers a button
         watch(() => !!player.song && !player.hidden && !!currentUser.value, (on) => document.documentElement.classList.toggle('has-player', on), { immediate: true });
         // "hide" tucks the bar away (the song keeps playing); the small button in the bottom-left corner brings it back
@@ -4610,7 +4680,8 @@ createApp({
         };
         // Titles you placed by hand keep their spot; newly scored ones slot in by score.
         const applyRankOrder = (items, order) => {
-            const byScore = [...items].sort((a, b) => b.score - a.score || titleOf(a.anime).localeCompare(titleOf(b.anime)));
+            // (songs: the ones you're "In Love" with count too, with the most played first among equal scores)
+            const byScore = [...items].sort((a, b) => (b.score || 0) - (a.score || 0) || (b.progress || 0) - (a.progress || 0) || titleOf(a.anime).localeCompare(titleOf(b.anime)));
             if (!order?.length) return byScore;
             const pos = new Map(order.map((id, k) => [id, k]));
             const out = byScore.filter(i => pos.has(i.anime.id)).sort((a, b) => pos.get(a.anime.id) - pos.get(b.anime.id));
@@ -4618,7 +4689,7 @@ createApp({
             return out;
         };
         // manhwa used to share the manga ranking, so until you reorder Manhwa it keeps the order you gave it there
-        const buildRankings = (entries, orders) => RANK_CATS.filter(c => songsOn.value || c.id !== 'SONG').map(c => ({ ...c, items: applyRankOrder(entries.filter(i => i.score > 0 && rankCatOf(i) === c.id), orders[c.id]?.length ? orders[c.id] : (c.id === 'MANHWA' ? orders.MANGA : null)) }));
+        const buildRankings = (entries, orders) => RANK_CATS.filter(c => songsOn.value || c.id !== 'SONG').map(c => ({ ...c, items: applyRankOrder(entries.filter(i => (i.score > 0 || (c.id === 'SONG' && i.status === 'WATCHING')) && rankCatOf(i) === c.id), orders[c.id]?.length ? orders[c.id] : (c.id === 'MANHWA' ? orders.MANGA : null)) }));
         const myRankOrders = reactive({});
         const viewedRankOrders = reactive({});
         const myRankings = computed(() => buildRankings(uniqueItems.value, myRankOrders));
@@ -4930,6 +5001,7 @@ createApp({
         // ---------- compare lists with a friend ----------
         const compareTab = ref('meDone');
         const compareType = ref('ANIME');
+        watch(() => viewedSection.value === 'compare', (on) => { if (on) compareType.value = songsOn.value || mediaType.value !== 'SONG' ? mediaType.value : 'ANIME'; });   // v9.8 opens on the section you're in
         const comparison = computed(() => {
             const theirs = (viewedUser.value?.entries || []).filter(i => typeOf(i) === compareType.value);
             const mine = uniqueItems.value.filter(i => typeOf(i) === compareType.value);
@@ -4968,27 +5040,32 @@ createApp({
             }
             const genreTop = (list) => { const c = {}; list.forEach(i => (i.anime.genres || []).forEach(g => { c[g] = (c[g] || 0) + 1; })); return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]); };
             const a = statsFor(mine), b = statsFor(theirs);
-            const isManga = compareType.value === 'MANGA';
+            const T = compareType.value;
+            // v9.8 each section compares its own numbers
+            const HOW = { ANIME: ['eps', 'Episodes watched', 'epsWatched'], MANGA: ['chapters', 'Chapters read', 'chaptersRead'], GAME: ['hours', 'Hours played', 'hoursPlayed'], TV: ['tv_done', 'Episodes watched', 'tvEps'], SONG: ['plays', 'Plays', 'plays'] }[T] || ['eps', 'Episodes watched', 'epsWatched'];
             const stat = (key, label, x, y, fmt = (v) => v) => viewedStatHidden(key)
                 ? { label, me: fmt(x), them: 'hidden', hidden: true, pm: x ? 100 : 0, pt: 0 }
                 : { label, me: fmt(x), them: fmt(y), pm: Math.max(x, y) ? x / Math.max(x, y) * 100 : 0, pt: Math.max(x, y) ? y / Math.max(x, y) * 100 : 0 };
             return {
                 groups, affinity, scoredBoth: scoredBoth.length, total: rows.length,
                 stats: [
-                    stat(compareType.value, isManga ? 'Manga' : 'Anime', mine.length, theirs.length),
-                    stat(isManga ? 'chapters' : 'eps', isManga ? 'Chapters read' : 'Episodes watched', isManga ? a.chaptersRead : a.epsWatched, isManga ? b.chaptersRead : b.epsWatched),
-                    stat('completed', 'Completed', a.completed, b.completed),
+                    stat(T, ({ ANIME: 'Anime', MANGA: 'Manga', GAME: 'Games', TV: 'Movies & TV', SONG: 'Songs' })[T] || 'Anime', mine.length, theirs.length),
+                    stat(HOW[0], HOW[1], a[HOW[2]], b[HOW[2]]),
+                    stat('completed', T === 'GAME' ? 'Beaten' : T === 'SONG' ? 'Liked' : 'Completed', a.completed, b.completed),
                     stat('mean', 'Mean score', a.mean, b.mean, formatMean),
                     stat('days', 'Days active', daysActive.value, viewedUser.value?.days || 0),
                 ],
                 genres: { me: genreTop(mine), them: genreTop(theirs) },
             };
         });
-        const compareGroups = [
-            { id: 'meDone', label: 'Only me completed' }, { id: 'themDone', label: 'Only them completed' }, { id: 'bothDone', label: 'Both completed' },
-            { id: 'mePlan', label: 'Only me planning' }, { id: 'themPlan', label: 'Only them planning' }, { id: 'bothPlan', label: 'Both planning' },
-            { id: 'extras', label: 'Everything else' },
-        ];
+        const compareGroups = computed(() => {
+            const done = statusLabelFor(compareType.value, 'COMPLETED').toLowerCase(), plan = statusLabelFor(compareType.value, 'PLANNING', true).toLowerCase();
+            return [
+                { id: 'meDone', label: 'Only me ' + done }, { id: 'themDone', label: 'Only them ' + done }, { id: 'bothDone', label: 'Both ' + done },
+                ...(compareType.value === 'SONG' ? [] : [{ id: 'mePlan', label: 'Only me ' + plan }, { id: 'themPlan', label: 'Only them ' + plan }, { id: 'bothPlan', label: 'Both ' + plan }]),
+                { id: 'extras', label: 'Everything else' },
+            ];
+        });
         const compareBig = ref((() => { try { return localStorage.getItem('anicoop_compare_big') === '1'; } catch { return false; } })());
         watch(compareBig, (v) => { try { localStorage.setItem('anicoop_compare_big', v ? '1' : '0'); } catch {} });
         // rows you can add to your own list (the title isn't on any of your lists yet)
@@ -6163,6 +6240,14 @@ createApp({
         };
         const discOpenRelease = computed(() => artistDiscog.value?.kinds.flatMap(k => k.items).find(r => r.id === discOpen.value) || null);
         const artistPopularShown = ref(5);
+        // v9.8 search this artist's songs (every song we know of: their catalogue + any release you opened)
+        const artistQ = ref('');
+        watch(() => entity.value?.id, () => { artistQ.value = ''; });
+        const artistHits = computed(() => {
+            const q = artistQ.value.trim(), d = entityData.value; if (!q || !d?.isArtist) return [];
+            const pool = dedupeSongs([...(d.tracks || d.songs || []), ...Object.values(albumTracks).flat(), ...(artistDiscog.value?.elsewhere || [])].filter(x => x?.title?.romaji));
+            return bySongRelevance(pool.filter(x => songRelevance(x, q) >= 20 || normTitle(x.album || '').includes(normTitle(q))), q).slice(0, 60);
+        });
         watch(() => entity.value?.id, () => { artistPopularShown.value = 5; });
 
         // Songs browse, organised: a numbered track list (or the old poster grid), grouped the way you pick.
@@ -6406,7 +6491,15 @@ createApp({
             list.sort((a, b) => a.n != null && b.n != null ? (a.n - b.n) * dir || a.i - b.i : a.n != null ? -1 : b.n != null ? 1 : a.i - b.i);
             return list.map(x => x.c);
         });
-        const shownChapters = computed(() => sortedChapters.value.slice(0, reader.shown));
+        // v9.8 find a chapter: "120" jumps to chapter 120 (and 120.5…), words search the chapter names
+        const chQ = ref('');
+        watch(() => selectedAnime.value?.id, () => { chQ.value = ''; });
+        const filteredChapters = computed(() => {
+            const q = chQ.value.trim().toLowerCase().replace(/^(ch(apter)?\.?\s*)/, ''); if (!q) return sortedChapters.value;
+            const num = /^\d+(\.\d+)?$/.test(q);
+            return sortedChapters.value.filter(c => num ? String(c.ch ?? '') === q || String(c.ch ?? '').startsWith(q + '.') || String(c.ch ?? '').startsWith(q) : `${c.title || ''} ${c.vol ? 'volume ' + c.vol : ''} ${c.group || ''}`.toLowerCase().includes(q));
+        });
+        const shownChapters = computed(() => filteredChapters.value.slice(0, chQ.value.trim() ? 200 : reader.shown));
         const loadAllChapters = async () => {   // MangaDex sends the newest first, 100 at a time: oldest-first needs them all
             let guard = 0;
             while (readSrc.value === 'mangadex' && reader.chapters.length < reader.total && !reader.error && guard++ < 40) {
@@ -6418,6 +6511,7 @@ createApp({
             try { localStorage.setItem(CH_SORT_KEY, chSort.value); } catch {}
             if (chSort.value === 'asc') loadAllChapters();
         };
+        watch(chQ, (q) => { if (q.trim() && readSrc.value === 'mangadex' && reader.chapters.length < reader.total && !reader.loading) loadAllChapters(); });   // search every chapter, not just the loaded ones
         watch(() => reader.total, (t) => { if (t && chSort.value === 'asc' && reader.chapters.length < t && !reader.loading) loadAllChapters(); });
         const showMoreChapters = () => { reader.shown += 40; if (readSrc.value === 'mangadex' && reader.shown > reader.chapters.length && reader.chapters.length < reader.total) loadChapters(true); };
         const chapterUrl = (c) => c.url || `https://mangadex.org/chapter/${c.id}`;
@@ -7177,6 +7271,13 @@ createApp({
                 tvSeasons[key] = (d.episodes || []).map(e => ({ n: e.episode_number, name: e.name, overview: e.overview || '', still: TMDB_IMG(e.still_path, 'w300'), runtime: e.runtime || null, air: e.air_date || null }));
             } catch { tvSeasons[key] = 'error'; }
         };
+        // v9.8 "Continue reading / watching" cards: open the title with its Read / Watch window already up
+        const continueItem = async (item) => {
+            const a = item?.anime; if (!a) return;
+            if (!MEDIA_KIND[a.type]) { fetchAnimeDetails(a); return; }
+            await fetchAnimeDetails(a);
+            if (selectedAnime.value?.id === a.id) nextTick(() => openWatch());
+        };
         const openWatch = () => {
             const a = selectedAnime.value; if (!a || !playKind.value) return;
             if (!readSrc.value || !readTabs.value.some(t => t.id === readSrc.value)) readSrc.value = readTabs.value[0]?.id || null;
@@ -7804,6 +7905,14 @@ createApp({
         const sendAny = (msg) => groupWith.value ? sendGroupMessage(msg) : sendMessage(msg);
         const sendText = async () => { const body = chatDraft.value.trim(); if (!body) return; if (await sendAny({ kind: 'text', body: body.slice(0, 4000) })) chatDraft.value = ''; };
         const sendSticker = (st) => { chatPanel.value = ''; sendAny({ kind: 'sticker', payload: { id: st.id } }); };
+        // v9.8 saved GIFs: star one (in the picker or in a chat) and it's in "Saved" on every device you sign in on
+        const gifTab = ref('saved');
+        const isGifSaved = (url) => (PREFS.savedGifs || []).some(g => g.url === url);
+        const toggleSaveGif = (g) => {
+            const list = [...(PREFS.savedGifs || [])], i = list.findIndex(x => x.url === g.url);
+            if (i === -1) { list.unshift({ url: g.url, preview: g.preview || g.url }); showToast('GIF saved'); } else list.splice(i, 1);
+            PREFS.savedGifs = list.slice(0, 200);
+        };
         const sendGif = (url, kind = 'gif') => { chatPanel.value = ''; gifState.link = ''; sendAny({ kind, payload: { url } }); };
         const sendGifLink = () => { const u = gifState.link.trim(); if (!/^https?:\/\/\S+$/i.test(u)) { showToast('Paste a full link (https://…)', 'error'); return; } sendGif(u, /\.gif(\?|$)/i.test(u) || /tenor|giphy/i.test(u) ? 'gif' : 'image'); };
         const gifCall = async (q) => {
@@ -7820,7 +7929,7 @@ createApp({
         }, 400);
         let gifTok = 0;
         // opening the GIF panel shows what's trending right away
-        watch(chatPanel, (p) => { if (p === 'gif' && !gifState.results.length && !gifState.loading) searchGifs(); if (p === 'emoji') loadEmojis(); });
+        watch(chatPanel, (p) => { if (p === 'gif') gifTab.value = (PREFS.savedGifs || []).length && !gifState.q.trim() ? 'saved' : 'search'; if (p === 'gif' && !gifState.results.length && !gifState.loading) searchGifs(); if (p === 'emoji') loadEmojis(); });
         // ---- emoji ----
         const EMOJI_KEY = 'anicoop_emojis_v1', EMOJI_RECENT = 'anicoop_emoji_recent';
         const EMOJI_GROUPS = [['smileys-emotion', '😀', 'Smileys'], ['people-body', '👋', 'People'], ['animals-nature', '🐶', 'Nature'], ['food-drink', '🍔', 'Food'],
@@ -7853,7 +7962,7 @@ createApp({
             emoji.recent = [c, ...emoji.recent.filter(x => x !== c)].slice(0, 24);
             try { localStorage.setItem(EMOJI_RECENT, JSON.stringify(emoji.recent)); } catch {}
         };
-        watch(() => gifState.q, searchGifs);
+        watch(() => gifState.q, (q) => { if (q.trim()) gifTab.value = 'search'; searchGifs(); });
         const onChatFile = async (e) => {
             const f = e.target.files?.[0]; e.target.value = '';
             if (!f) return;
@@ -8827,7 +8936,7 @@ createApp({
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
-            STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
+            gifTab, isGifSaved, toggleSaveGif, STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
             incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendSticker, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
             msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, TENOR_KEY, emoji, EMOJI_GROUPS, emojiShown, insertEmoji, noteCaret, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,
             statColumns, myRecent, viewedRecent,
@@ -8836,7 +8945,7 @@ createApp({
             friendsOnAnime, isOnline, people, peopleTab, peopleLoading, peopleOnline, peopleOffline, lastSeenText, friendStateOf, addFriendById, viewedFriends,
             EFFECTS, NAME_STYLES, effectParticles, heroColors,
             personKind, FAV_PEOPLE, isPeopleTab, favTheirTab, favItems, favCount, openFavItem, removeFavItem, FAV_EMPTY, heroGlow, FRAMES, THEMES, BADGES, myBadges, viewedBadges, decorOf, decorDraft, togglePinBadge, toggleHideBadge, hideBadgeNow, myEarnedBadges, decorDirty, saveDecor, profileBg, pageBg, bgBannerChoices, setBgUrl, onBgFile, bgUrlDraft, bgUploading, bgInput,
-            debateInfo, sideLabel, tier, TIER_SOURCES, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
+            debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, tierNoun, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
             follows, isFollowing, toggleFollow, checkFollowed, mediaLinks, linkDraft, saveMediaLink, deleteMediaLink,
             buddyState, buddyRequests, buddyList, askBuddy, acceptBuddy, endBuddy,
             siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList,
@@ -8847,7 +8956,7 @@ createApp({
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, artistQ, artistHits, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
             picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,
@@ -8860,7 +8969,7 @@ createApp({
             notifQuote, notifIcon, likeOf, toggleLike, likeNames, mentionSuggestions, applyMention, bodyParts,
             repliesOf, replyTo, replyDraft, startReply,
             feed, feedLoading, feedEnd, feedFilter, feedReplies, replyDrafts, openReplies, fetchFeed, loadMoreFeed, activityVerb, toggleReplies, postReply, deleteReply, deleteActivity, highlightActivity,
-            chSort, toggleChSort, typeOf, drill, openDrill, drillTitle, drillItems, drillStatusCounts, drillShowsStatus, drillName, drillType, scoreBuckets, heatmap, streak, countedOf,
+            continueItem, chSort, toggleChSort, chQ, filteredChapters, typeOf, drill, openDrill, drillTitle, drillItems, drillStatusCounts, drillShowsStatus, drillName, drillType, scoreBuckets, heatmap, streak, countedOf,
             compareTab, compareType, comparison, compareGroups, viewedSection,
             detailStaff, detailInfo, detailRankings, detailTags, showSpoilerTags, detailStats,
             loadMoreBrowse, moreError, quickFormats, checkListMedia, genreOptions, GAME_PLATFORMS, platformFamilies, CHART_COUNTRIES, typeWord, isAniListType, fmtDuration, mediaType, songPlayerId, songSpotifyUrl, addMulti, removeMulti, hasMulti, activeChips, TV_TAGS, TV_TAG_GROUPS,
