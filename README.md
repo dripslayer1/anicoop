@@ -550,3 +550,26 @@ create policy "admin: song settings" on public.app_config for update to authenti
 * **Volume:** dragging it all the way down mutes; un-muting from there brings the last volume back.
 * **Read window:** a "Newest first / Oldest first" button above the chapters (remembered).
 * **Home:** the 4 posters no longer go blurry for a moment when you hover them.
+
+## v9.8 — phone layout, saved GIFs, faster songs, Squads inside Solo
+
+**Update:** re-upload the folder (no database or Edge Function change).
+
+* **Phones:** the bottom-bar icons were almost invisible (fixed); the Solo list's filters take two short rows instead of
+  a whole screen; a title page shows the cover, title and Watch / Read first, then your list; smaller stat cards;
+  tab rows scroll sideways; typing no longer zooms the page on iPhone; taps respond instantly.
+* **Squads live inside Solo:** a Solo / Squads switch under the statuses (one less tab on the bottom bar).
+* **Chat:** stickers removed (emojis replace them). **Saved GIFs** like Discord: tap the ☆ on any GIF (in the picker
+  or in a chat) and it's in "Saved", on every device you sign in on.
+* **Songs:** faster first play (YouTube's player loads in the background, a song played before starts without a
+  new search, the next song in the queue is looked up early); music tries to keep playing when the phone locks or
+  you leave the tab; artist names on song covers; better search order (exact titles first); search an artist's songs
+  on their page; no more "2/?" anywhere for songs; the Songs ranking includes the songs people are In Love with; friends'
+  Songs lists (for people allowed to see Songs).
+* **Read window:** "Find chapter…" box (type 120 or a chapter name).
+* **Friends:** pending requests (sent or received) open that person's profile.
+* **Continue reading / watching cards** open the title with the Read / Watch window already up.
+* **Compare** works per section (Anime, Manga, Games, Movies & TV, Songs) with that section's numbers, and opens on the
+  section you're in.
+* **Feed:** the tier list maker, poll / question pickers and hints follow the section you're in (games, movies & TV,
+  songs… not only anime).
