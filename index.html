@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.6">
+    <link rel="stylesheet" href="app.css?v=9.7">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.6" defer></script>
+    <script src="app.js?v=9.7" defer></script>
 </head>
 <body>
 
@@ -124,7 +124,7 @@
                     <button @click.stop="openSettings()" class="icon-btn !w-9 !h-9" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                     <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                     <span class="hdr-space" aria-hidden="true"></span>
-                    <button @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
+                    <button v-if="songsOn" @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
                     <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                         <i class="fa-solid fa-bell text-sm"></i>
                         <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
@@ -145,7 +145,7 @@
                         <span class="font-display font-brand font-black text-ink text-[64px] sm:text-[92px] xl:text-[118px] leading-[.9] tracking-[-0.045em]">anicoop</span>
                         <span class="font-pixel font-semibold text-volt text-4xl sm:text-5xl xl:text-[64px]">.studio</span>
                     </h1>
-                    <p class="mt-6 text-lg md:text-xl text-sub leading-relaxed intro-el i-rise" style="--d:2">Track anime, manga, movies, games &amp; music together.<br class="hidden sm:block"> Built by fans, for fans + content creators.</p>
+                    <p class="mt-6 text-lg md:text-xl text-sub leading-relaxed intro-el i-rise" style="--d:2">Track anime, manga, movies<template v-if="songsOn">, games &amp; music</template><template v-else> &amp; games</template> together.<br class="hidden sm:block"> Built by fans, for fans + content creators.</p>
                     <p class="label mt-9 mb-3 intro-el i-late" style="--d:0">Pick your world</p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
                         <button v-for="(s, n) in sectionList" :key="s.id" @click.stop="openSection(s.id)" @mouseenter="warmSection(s.id)" @touchstart.passive="warmSection(s.id)" class="tile intro-el i-late" :class="{ 'tile-wide': sectionList.length % 2 === 1 && n === sectionList.length - 1 }" :style="{ '--d': n, '--c': s.color }">
@@ -211,7 +211,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.6</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.7</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -260,7 +260,7 @@
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                         <span class="hdr-space hdr-extra" aria-hidden="true"></span>
-                        <button @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
+                        <button v-if="songsOn" @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
                     <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                             <i class="fa-solid fa-bell text-sm"></i>
                             <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
@@ -609,9 +609,9 @@
                             <!-- songs: Spotify player (full song if you're signed in to Spotify in this browser, otherwise a preview) -->
                             <template v-if="selectedAnime.type === 'SONG'">
                                 <!-- our own preview player: same player (and remembered volume) as the play buttons everywhere -->
-                                <div v-if="selectedAnime.previewUrl || selectedAnime.appleId" class="mt-6 max-w-3xl song-player">
+                                <div class="mt-6 max-w-3xl song-player">
                                     <img v-if="selectedAnime.coverImage?.large" :src="selectedAnime.coverImage.large" class="w-14 h-14 rounded-lg object-cover shrink-0" alt="">
-                                    <button @click="playPreview(selectedAnime)" class="sp-play" :title="isPlaying(selectedAnime) ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="player.loading && player.song?.id === selectedAnime.id ? 'fa-circle-notch fa-spin' : isPlaying(selectedAnime) ? 'fa-pause' : 'fa-play'"></i></button>
+                                    <button @click="playPreview(selectedAnime)" class="sp-play" :title="isPlaying(selectedAnime) ? 'Pause' : 'Play'"><i class="fa-solid" :class="player.loading && player.song?.id === selectedAnime.id ? 'fa-circle-notch fa-spin' : isPlaying(selectedAnime) ? 'fa-pause' : 'fa-play'"></i></button>
                                     <div class="min-w-0 flex-grow">
                                         <p class="label">{{ player.full ? 'Listen' : '30-second preview' }}</p>
                                         <div class="sp-bar mt-2" @click="player.song?.id === selectedAnime.id && seekPreview($event)"><div :style="{ width: (player.song?.id === selectedAnime.id ? Math.min(100, player.t / (player.dur || 30) * 100) : 0) + '%' }"></div></div>
@@ -856,11 +856,14 @@
                                     <div class="flex gap-1.5"><button @click="scrollRow($event, -1)" class="row-arrow" aria-label="Scroll left"><i class="fa-solid fa-chevron-left"></i></button><button @click="scrollRow($event, 1)" class="row-arrow" aria-label="Scroll right"><i class="fa-solid fa-chevron-right"></i></button></div>
                                 </div>
                                 <div class="row-scroll flex gap-4 overflow-x-auto no-scrollbar pb-1">
-                                    <button v-for="g in selectedAnime.similar" :key="g.id" @click="fetchAnimeDetails(g)" class="w-32 shrink-0 text-left group">
-                                        <div class="poster"><img :src="g.coverImage?.large" class="art" loading="lazy" decoding="async" alt=""></div>
+                                    <div v-for="g in selectedAnime.similar" :key="g.id" @click="fetchAnimeDetails(g)" @keydown.enter.self="fetchAnimeDetails(g)" role="button" tabindex="0" class="w-32 shrink-0 text-left group cursor-pointer sim-card">
+                                        <div class="poster" :class="{ 'is-square': g.type === 'SONG' }"><img :src="g.coverImage?.large" class="art" loading="lazy" decoding="async" alt="">
+                                            <button v-if="g.type === 'SONG'" @click.stop="playPreview(g, selectedAnime.similar)" class="sim-play" :class="{ on: player.song?.id === g.id }" :title="isPlaying(g) ? 'Pause' : 'Play'"><i class="fa-solid" :class="player.loading && player.song?.id === g.id ? 'fa-circle-notch fa-spin' : isPlaying(g) ? 'fa-pause' : 'fa-play ml-0.5'"></i></button>
+                                        </div>
                                         <p class="text-xs text-ink font-semibold line-clamp-2 mt-2.5">{{ titleOf(g) }}</p>
-                                        <p v-if="g.seasonYear" class="font-mono text-[10px] text-mute mt-0.5">{{ g.seasonYear }}</p>
-                                    </button>
+                                        <p v-if="g.type === 'SONG' && (g.artists || []).length" class="text-[11px] text-sub truncate mt-0.5">{{ g.artists.join(', ') }}</p>
+                                        <p v-else-if="g.seasonYear" class="font-mono text-[10px] text-mute mt-0.5">{{ g.seasonYear }}</p>
+                                    </div>
                                 </div>
                             </section>
 
@@ -1115,7 +1118,7 @@
                             </div>
                         </div>
                         <div v-if="viewedSection !== 'list'" class="px-5 md:px-8 pb-6 md:pb-8 mt-6">
-                            <div class="stat-grid grid grid-cols-2 sm:grid-cols-5 sm:grid-rows-[auto_auto] gap-3">
+                            <div class="stat-grid grid grid-cols-2 sm:grid-cols-5 sm:grid-rows-[auto_auto] gap-3" :class="{ 'no-songs': !songsOn }">
                                 <div v-for="(col, n) in statColumns(viewedStats)" :key="n" class="flex gap-3 sm:grid sm:grid-rows-subgrid sm:row-span-2" :class="n === 0 ? 'col-span-2 sm:col-span-1 flex-row' : 'flex-col'">
                                     <button v-for="c in col" :key="c.key" @click="openFriendStat(c)" class="stat-card flex-1 sm:h-full" :class="[{ 'is-soon': c.soon || c.hidden, '!py-3': c.small, 'has-alt': c.alt != null && !c.hidden }]" :title="c.alt != null && !c.hidden ? c.value + ' episodes (each counted once) · ' + c.alt + ' with rewatches' : null">
                                         <span v-if="c.hidden" class="font-display font-bold text-mute" :class="c.small ? 'text-lg' : 'text-2xl'"><i class="fa-solid fa-lock" :class="c.small ? 'text-sm' : 'text-lg'"></i></span>
@@ -1226,7 +1229,7 @@
                                 <h2 class="font-display font-semibold text-ink text-2xl mb-5">Activity</h2>
                                 <p v-if="decorOf(viewedUser?.profile).hideActivity" class="panel !rounded-2xl px-5 py-4 text-sm text-sub"><i class="fa-solid fa-lock text-mute mr-2"></i>{{ viewedUser.profile.username }} keeps their activity private.</p>
                                 <div v-else-if="viewedRecent.length" class="panel overflow-hidden">
-                                    <button v-for="a in viewedRecent" :key="a.id" @click="openActivity(a)" class="act-row">
+                                    <button v-for="a in viewedRecent.filter(a => songsOn || a.media_type !== 'SONG')" :key="a.id" @click="openActivity(a)" class="act-row">
                                         <img v-if="a.media_cover" :src="a.media_cover" class="w-9 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" alt="">
                                         <span v-else class="w-9 h-12 rounded-md bg-raised flex items-center justify-center text-mute shrink-0"><i class="fa-solid fa-comment"></i></span>
                                         <span class="min-w-0 flex-grow text-sm text-sub line-clamp-2"><span v-if="a.kind === 'list'" class="qa-dot inline-block mr-1.5 align-middle" :style="{ '--dot': STATUS_COLORS[a.status] }"></span>{{ activityLine(a) }}</span>
@@ -1323,10 +1326,10 @@
                                             <button v-for="s in FAV_SECTIONS.filter(s => favCount(viewedUser.favs, viewedUser.favStaff, s.t))" :key="s.t" @click="favTab.them = s.t" :class="{ 'is-on': favTheirTab === s.t }" class="seg-btn !px-3">{{ s.l }} <span class="opacity-60">{{ favCount(viewedUser.favs, viewedUser.favStaff, s.t) }}</span></button>
                                         </div>
                                     </template>
-                                    <template v-if="FAV_PEOPLE.some(s => favCount(viewedUser.favs, viewedUser.favStaff, s.t))">
+                                    <template v-if="FAV_PEOPLE.filter(s => songsOn || s.t !== 'SINGER').some(s => favCount(viewedUser.favs, viewedUser.favStaff, s.t))">
                                         <span class="label">People</span>
                                         <div class="seg flex-wrap">
-                                            <button v-for="s in FAV_PEOPLE.filter(s => favCount(viewedUser.favs, viewedUser.favStaff, s.t))" :key="s.t" @click="favTab.them = s.t" :class="{ 'is-on': favTheirTab === s.t }" class="seg-btn !px-3">{{ s.l }} <span class="opacity-60">{{ favCount(viewedUser.favs, viewedUser.favStaff, s.t) }}</span></button>
+                                            <button v-for="s in FAV_PEOPLE.filter(s => (songsOn || s.t !== 'SINGER') && favCount(viewedUser.favs, viewedUser.favStaff, s.t))" :key="s.t" @click="favTab.them = s.t" :class="{ 'is-on': favTheirTab === s.t }" class="seg-btn !px-3">{{ s.l }} <span class="opacity-60">{{ favCount(viewedUser.favs, viewedUser.favStaff, s.t) }}</span></button>
                                         </div>
                                     </template>
                                 </div>
@@ -1586,10 +1589,11 @@
                                 <div class="relative h-full p-4 flex flex-col">
                                     <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}</p>
                                     <p class="mt-1 text-ink font-semibold truncate pr-24">{{ titleOf(item.anime) }}</p>
-                                    <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}</template></p>
-                                    <div class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
+                                    <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}</template></p>
+                                    <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
                                 </div>
-                                <button @click.stop="bumpEpisode(item)" class="absolute top-4 right-4 px-3.5 py-2 rounded-full bg-volt text-onvolt font-mono text-[11px] font-bold transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]">+1 {{ UNIT.short }}</button>
+                                <button v-if="section === 'songs'" @click.stop="playPreview(item.anime, continueWatching.map(x => x.anime))" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-volt text-onvolt flex items-center justify-center transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]" :title="isPlaying(item.anime) ? 'Pause' : 'Play'"><i class="fa-solid text-sm" :class="player.loading && player.song?.id === item.anime.id ? 'fa-circle-notch fa-spin' : isPlaying(item.anime) ? 'fa-pause' : 'fa-play ml-0.5'"></i></button>
+                                <button v-else @click.stop="bumpEpisode(item)" class="absolute top-4 right-4 px-3.5 py-2 rounded-full bg-volt text-onvolt font-mono text-[11px] font-bold transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]">+1 {{ UNIT.short }}</button>
                             </div>
                         </div>
                     </section>
@@ -2561,7 +2565,7 @@
                                 <button @click="setActivityHidden(!decorOf(currentProfile).hideActivity)" :class="{ 'is-on': !decorOf(currentProfile).hideActivity }" class="toggle"><span class="knob"></span>{{ decorOf(currentProfile).hideActivity ? 'Hidden from others' : 'Visible on my profile' }}</button>
                             </div>
                             <div v-if="myRecent.length" class="panel overflow-hidden max-h-[420px] overflow-y-auto">
-                                <button v-for="a in myRecent" :key="a.id" @click="openActivity(a)" class="act-row">
+                                <button v-for="a in myRecent.filter(a => songsOn || a.media_type !== 'SONG')" :key="a.id" @click="openActivity(a)" class="act-row">
                                     <img v-if="a.media_cover" :src="a.media_cover" class="w-9 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" alt="">
                                     <span v-else class="w-9 h-12 rounded-md bg-raised flex items-center justify-center text-mute shrink-0"><i class="fa-solid fa-comment"></i></span>
                                     <span class="min-w-0 flex-grow text-sm text-sub line-clamp-2"><span v-if="a.kind === 'list'" class="qa-dot inline-block mr-1.5 align-middle" :style="{ '--dot': STATUS_COLORS[a.status] }"></span>{{ activityLine(a) }}</span>
@@ -2572,7 +2576,7 @@
                         </div>
                         </div>
                         <div class="px-5 md:px-8 pb-6 md:pb-8 mt-6">
-                            <div class="stat-grid grid grid-cols-2 sm:grid-cols-5 sm:grid-rows-[auto_auto] gap-3">
+                            <div class="stat-grid grid grid-cols-2 sm:grid-cols-5 sm:grid-rows-[auto_auto] gap-3" :class="{ 'no-songs': !songsOn }">
                                 <div v-for="(col, n) in statColumns(profileStatCards)" :key="n" class="flex gap-3 sm:grid sm:grid-rows-subgrid sm:row-span-2" :class="n === 0 ? 'col-span-2 sm:col-span-1 flex-row' : 'flex-col'">
                                     <button v-for="c in col" :key="c.key" @click="openDrill(c, 'me')" class="stat-card flex-1 sm:h-full" :class="[{ 'is-soon': c.soon || c.hidden, '!py-3': c.small, 'has-alt': c.alt != null && !c.hidden }]" :title="c.alt != null && !c.hidden ? c.value + ' episodes (each counted once) · ' + c.alt + ' with rewatches' : null">
                                         <span v-if="c.hidden" class="font-display font-bold text-mute" :class="c.small ? 'text-lg' : 'text-2xl'"><i class="fa-solid fa-lock" :class="c.small ? 'text-sm' : 'text-lg'"></i></span>
@@ -2634,7 +2638,7 @@
                             </div>
                             <span class="label">People</span>
                             <div class="seg flex-wrap">
-                                <button v-for="s in FAV_PEOPLE" :key="s.t" @click="favTab.me = s.t" :class="{ 'is-on': favTab.me === s.t }" class="seg-btn !px-3">{{ s.l }} <span class="opacity-60">{{ favCount(favCharacters, favStaff, s.t) }}</span></button>
+                                <button v-for="s in FAV_PEOPLE.filter(s => songsOn || s.t !== 'SINGER')" :key="s.t" @click="favTab.me = s.t" :class="{ 'is-on': favTab.me === s.t }" class="seg-btn !px-3">{{ s.l }} <span class="opacity-60">{{ favCount(favCharacters, favStaff, s.t) }}</span></button>
                             </div>
                         </div>
                         <div v-if="favItems(favCharacters, favStaff, favTab.me).length" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mt-5">
@@ -2747,7 +2751,7 @@
         <transition name="to-top"><button v-if="showToTop && currentUser && currentAppView !== 'home'" @click="scrollToTop" class="to-top" title="Back to top" aria-label="Back to top"><i class="fa-solid fa-arrow-up"></i></button></transition>
         <!-- song preview mini player (the same audio as every play button; the volume is remembered) -->
         <!-- the song player: full songs (sound from YouTube), queue, shuffle, repeat. It sits above every window, and the page and windows end above it -->
-        <transition name="pbar"><div v-if="player.song && currentUser && !player.hidden" class="pbar" :class="{ 'above-nav': currentAppView === 'tracker' }" role="region" aria-label="Song player">
+        <transition name="pbar"><div v-if="player.song && currentUser && songsOn && !player.hidden" class="pbar" :class="{ 'above-nav': currentAppView === 'tracker' }" role="region" aria-label="Song player">
             <div class="pbar-song">
                 <button class="pbar-cover" @click="fetchAnimeDetails(player.song)" :title="'Open ' + player.song.title?.romaji">
                     <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt=""><i v-else class="fa-solid fa-music"></i>
@@ -2800,7 +2804,7 @@
         </div></transition>
         <!-- the music panel: search songs, your playlists, liked and recent songs, from anywhere (even while reading) -->
         <transition name="music">
-            <div v-if="music.open && currentUser" class="music-panel" role="dialog" aria-label="Music">
+            <div v-if="music.open && currentUser && songsOn" class="music-panel" role="dialog" aria-label="Music">
                 <div class="flex items-center gap-2 px-4 pt-4 pb-2">
                     <span class="w-8 h-8 rounded-full bg-[#1DB954] text-black flex items-center justify-center shrink-0"><i class="fa-solid fa-music text-sm"></i></span>
                     <p class="font-display font-bold text-ink text-lg flex-grow">Music</p>
@@ -2890,7 +2894,7 @@
             </div>
         </template>
         <!-- the player, hidden: a small button in the bottom-left corner brings it back -->
-        <transition name="to-top"><button v-if="player.song && currentUser && player.hidden" @click="showPlayer" class="pbar-peek" :class="{ 'above-nav': currentAppView === 'tracker', on: player.playing }" :title="'Show the player · ' + player.song.title?.romaji" aria-label="Show the song player">
+        <transition name="to-top"><button v-if="player.song && currentUser && songsOn && player.hidden" @click="showPlayer" class="pbar-peek" :class="{ 'above-nav': currentAppView === 'tracker', on: player.playing }" :title="'Show the player · ' + player.song.title?.romaji" aria-label="Show the song player">
             <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt=""><i v-else class="fa-solid fa-music"></i>
             <span class="pbar-peek-eq" aria-hidden="true"><span></span><span></span><span></span></span>
         </button></transition>
@@ -3415,7 +3419,7 @@
                                     <p class="set-title">Reset scores</p>
                                     <p class="set-hint">Sets every score on that list back to 0. Your statuses and progress stay.</p>
                                     <div class="flex flex-wrap gap-2 mt-3">
-                                        <button v-for="pt in PRIVACY_TYPES" :key="pt.type" @click="!pt.soon && resetScores(pt.type, pt.label)" :disabled="pt.soon" class="btn-danger !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-rotate-left"></i> {{ pt.label }}<span v-if="pt.soon" class="opacity-70"> · soon</span></button>
+                                        <button v-for="pt in PRIVACY_TYPES.filter(pt => songsOn || pt.type !== 'SONG')" :key="pt.type" @click="!pt.soon && resetScores(pt.type, pt.label)" :disabled="pt.soon" class="btn-danger !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-rotate-left"></i> {{ pt.label }}<span v-if="pt.soon" class="opacity-70"> · soon</span></button>
                                     </div>
                                 </div>
                             </template>
@@ -3440,7 +3444,7 @@
                                     <p class="set-title">Who can see my lists</p>
                                     <p class="set-hint">Squad lists are always shared with that squad. This controls your personal lists, their activity and profile stats.</p>
                                     <div class="space-y-4 mt-4">
-                                        <div v-for="pt in PRIVACY_TYPES" :key="pt.type" class="pt-4 border-t border-line first:border-0 first:pt-0">
+                                        <div v-for="pt in PRIVACY_TYPES.filter(pt => songsOn || pt.type !== 'SONG')" :key="pt.type" class="pt-4 border-t border-line first:border-0 first:pt-0">
                                             <div class="flex flex-wrap items-center justify-between gap-3">
                                                 <p class="text-sm font-semibold text-ink">{{ pt.label }} <span v-if="pt.soon" class="font-mono text-[10px] text-volt ml-1">SOON</span></p>
                                                 <div v-if="!pt.soon" class="seg">
@@ -3579,6 +3583,30 @@
                                         <form class="flex gap-2 mt-3 max-w-md" @submit.prevent="addAdultUserByName">
                                             <input v-model="ownerSearch" placeholder="Add someone by username" class="field !py-2 !rounded-xl">
                                             <button type="submit" :disabled="!ownerSearch.trim()" class="btn-ghost !py-2 !px-4 !text-xs shrink-0">Allow</button>
+                                        </form>
+                                    </template>
+                                </div>
+
+                                <!-- SONGS (v9.7) -->
+                                <div v-if="can('manage_songs')" class="set-block">
+                                    <p class="set-title">Songs</p>
+                                    <p class="set-hint">Hidden for everyone by default: the Songs section, the music button, the player, song stats, rankings and artist pages disappear. The owner (and roles with “Manage songs”) always have access.</p>
+                                    <p v-if="songsCfg.missing" class="set-hint !text-[#f59e0b] mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Run the v9.7 SQL in Supabase (see README) before changing this.</p>
+                                    <div class="seg mt-4 w-fit">
+                                        <button @click="setSongsEveryone(false)" :class="{ 'is-on': !songsCfg.everyone }" class="seg-btn"><i class="fa-solid fa-lock mr-1.5"></i>Only people I pick</button>
+                                        <button @click="setSongsEveryone(true)" :class="{ 'is-on': songsCfg.everyone }" class="seg-btn">Everyone</button>
+                                    </div>
+                                    <template v-if="!songsCfg.everyone">
+                                        <p class="label mt-5 mb-2">Allowed ({{ songsCfg.users.length }})</p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <button v-for="pp in statPeople" :key="pp.id" @click="toggleSongsUser(pp.id)" class="squad-chip" :class="{ on: songsCfg.users.includes(pp.id) }" style="--c:#1DB954">
+                                                <i class="fa-solid" :class="songsCfg.users.includes(pp.id) ? 'fa-check' : 'fa-plus'"></i><user-avatar :user="pp" :size="16"></user-avatar>{{ pp.username }}
+                                            </button>
+                                            <button v-for="id in songsCfg.users.filter(id => !statPeople.some(p => p.id === id))" :key="id" @click="toggleSongsUser(id)" class="squad-chip on" style="--c:#1DB954"><i class="fa-solid fa-check"></i>{{ personOf(id).username }}</button>
+                                        </div>
+                                        <form class="flex gap-2 mt-3 max-w-md" @submit.prevent="addSongsUserByName">
+                                            <input v-model="songsSearch" placeholder="Add someone by username" class="field !py-2 !rounded-xl">
+                                            <button type="submit" :disabled="!songsSearch.trim()" class="btn-ghost !py-2 !px-4 !text-xs shrink-0">Allow</button>
                                         </form>
                                     </template>
                                 </div>
@@ -3798,17 +3826,18 @@
                             </div>
                             <div v-if="drillShowsStatus" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-3">
                                 <button v-for="opt in ['ALL', ...STATUS_ORDER].filter(o => o === 'ALL' || drillStatusCounts[o])" :key="opt" @click="drill.status = opt" :class="{ on: drill.status === opt }" class="ep-chip">
-                                    <span v-if="opt !== 'ALL'" class="qa-dot" :style="{ '--dot': STATUS_COLORS[opt] }"></span>{{ opt === 'ALL' ? 'All' : STATUS_LABELS[opt] }} <span>{{ drillStatusCounts[opt] || 0 }}</span>
+                                    <span v-if="opt !== 'ALL'" class="qa-dot" :style="{ '--dot': STATUS_COLORS[opt] }"></span>{{ opt === 'ALL' ? 'All' : statusLabelFor(drillType || 'ANIME', opt) }} <span>{{ drillStatusCounts[opt] || 0 }}</span>
                                 </button>
                             </div>
                             <div class="panel overflow-hidden">
                                 <button v-for="item in drillItems" :key="item.anime.id" @click="drill.open = false; fetchAnimeDetails(item.anime)" class="w-full flex items-center gap-3.5 px-4 py-2.5 border-b border-line last:border-0 hover:bg-raised text-left transition-colors">
-                                    <img :src="item.anime.coverImage?.large" class="w-9 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" alt="">
+                                    <img :src="item.anime.coverImage?.large" class="w-9 rounded-md object-cover shrink-0" :class="typeOf(item) === 'SONG' ? 'h-9' : 'h-12'" loading="lazy" decoding="async" alt="">
                                     <span class="min-w-0 flex-grow">
                                         <span class="block text-sm text-ink font-semibold truncate">{{ titleOf(item.anime) }}</span>
-                                        <span class="flex items-center gap-1.5 text-[11px] text-sub mt-0.5"><span class="qa-dot" :style="{ '--dot': STATUS_COLORS[item.status] }"></span>{{ STATUS_LABELS[item.status] }}<span v-if="item.group"> · {{ item.group }}</span></span>
+                                        <span class="flex items-center gap-1.5 text-[11px] text-sub mt-0.5"><span class="qa-dot" :style="{ '--dot': STATUS_COLORS[item.status] }"></span>{{ statusLabelFor(typeOf(item), item.status) }}<span v-if="item.group"> · {{ item.group }}</span></span>
                                     </span>
                                     <span v-if="drill.key === 'eps' || drill.key === 'chapters'" class="font-mono text-xs font-bold text-ink shrink-0">{{ countedOf(item) }} {{ drill.key === 'eps' ? 'eps' : 'ch' }}</span>
+                                    <span v-else-if="typeOf(item) === 'SONG'" class="rank-plays shrink-0" :title="(item.progress || 0) + ' plays'"><i class="fa-solid fa-play"></i>{{ item.progress || 0 }}</span>
                                     <span v-else class="font-mono text-[11px] text-mute shrink-0">{{ item.status === 'COMPLETED' && item.anime.episodes ? item.anime.episodes : (item.progress || 0) }}/{{ item.anime.episodes || '?' }}</span>
                                     <span v-if="item.score" class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i>{{ formatScore(item.score) }}</span>
                                 </button>
@@ -3980,6 +4009,7 @@
                             <h4 class="font-display font-semibold text-ink text-xl">{{ playKind === 'manga' ? 'Chapters' : isMovie ? 'Movie' : 'Episodes' }}
                                 <span class="font-mono text-xs text-mute">{{ playKind === 'manga' ? chapterList.length + (readSrc === 'mangadex' && reader.total > chapterList.length ? ' of ' + reader.total : '') : isMovie ? '' : wpRows.length }}</span></h4>
                             <div class="flex items-center gap-2 min-w-0">
+                                <button v-if="playKind === 'manga' && chapterList.length > 1" @click="toggleChSort" class="ch-sort" :title="chSort === 'asc' ? 'Oldest first — click for newest first' : 'Newest first — click for oldest first'"><i class="fa-solid" :class="reader.loading && chSort === 'asc' ? 'fa-circle-notch fa-spin' : chSort === 'asc' ? 'fa-arrow-up-1-9' : 'fa-arrow-down-9-1'"></i>{{ chSort === 'asc' ? 'Oldest first' : 'Newest first' }}</button>
                                 <div v-if="playKind === 'manga' && readSrc === 'mangadex'" class="chip-wrap"><select v-model="reader.lang" class="chip !h-9 !text-xs"><option v-for="l in readLangs" :key="l.v" :value="l.v">{{ l.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                                 <div v-if="selectedAnime.type === 'TV' && !isMovie && seasonsOf(selectedAnime).length" class="chip-wrap"><select v-model.number="wp.season" class="chip !h-9 !text-xs"><option v-for="x in seasonsOf(selectedAnime)" :key="x.n" :value="x.n">{{ x.name || 'Season ' + x.n }} ({{ x.episodes }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>

@@ -1537,6 +1537,15 @@ create policy "playlists: edit"   on public.playlists for update to authenticate
 create policy "playlists: remove" on public.playlists for delete to authenticated using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------
+-- 8d. v9.7 — SONGS ARE HIDDEN UNTIL YOU'RE ALLOWED (like 18+)
+--   The owner (and roles with "Manage songs") pick who sees Songs in Settings → Admin.
+-- ---------------------------------------------------------------------
+insert into public.app_config (key, value) values ('songs', '{"everyone": false, "users": []}') on conflict (key) do nothing;
+drop policy if exists "admin: song settings" on public.app_config;
+create policy "admin: song settings" on public.app_config for update to authenticated
+  using (key = 'songs' and public.has_perm('manage_songs')) with check (key = 'songs' and public.has_perm('manage_songs'));
+
+-- ---------------------------------------------------------------------
 -- 10. Tell the Supabase API about new columns right away (avoids "not in the schema cache" errors)
 -- ---------------------------------------------------------------------
 notify pgrst, 'reload schema';
