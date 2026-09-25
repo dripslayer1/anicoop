@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.4">
+    <link rel="stylesheet" href="app.css?v=9.5">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.4" defer></script>
+    <script src="app.js?v=9.5" defer></script>
 </head>
 <body>
 
@@ -211,7 +211,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -2870,15 +2870,16 @@
             <div id="pl-picker" class="pl-pick" :class="{ ready: plPicker.ready }" :style="{ left: plPicker.x + 'px', top: plPicker.y + 'px' }" role="dialog" aria-label="Add to playlist">
                 <div class="flex items-center gap-2.5 px-3 pt-3 pb-2">
                     <img v-if="plPicker.song.coverImage?.large" :src="plPicker.song.coverImage.large" class="w-9 h-9 rounded-md object-cover shrink-0" alt="">
-                    <div class="min-w-0"><p class="font-mono text-[9px] font-bold tracking-[.16em] text-mute">ADD TO PLAYLIST</p><p class="text-[13px] font-semibold text-ink truncate">{{ plPicker.song.title?.romaji }}</p></div>
+                    <div class="min-w-0"><p class="font-mono text-[9px] font-bold tracking-[.16em] text-mute">ADD TO PLAYLIST</p><p class="text-[13px] font-semibold text-ink truncate">{{ plPicker.list ? plPicker.list.length + ' songs' : plPicker.song.title?.romaji }}</p></div>
                 </div>
                 <p v-if="plMissing" class="px-3 pb-2 text-xs text-sub">Playlists need the latest database update: run the whole supabase_setup.sql in Supabase again.</p>
                 <div v-else class="pl-pick-list">
-                    <button v-for="p in playlists" :key="p.id" @click="togglePlaylistSong(p, plPicker.song)" class="qa-row" :class="{ 'bg-overlay': inPlaylist(p, plPicker.song) }">
+                    <button v-for="p in playlists" :key="p.id" @click="pickerToggle(p)" class="qa-row" :class="{ 'bg-overlay': pickerHas(p) === (plPicker.list ? plPicker.list.length : 1) }">
                         <span class="pl-pick-art"><img v-if="plCovers(p)[0]" :src="plCovers(p)[0]" alt=""><i v-else class="fa-solid fa-music"></i></span>
                         <span class="min-w-0 flex-grow truncate text-left">{{ p.name }}</span>
                         <span class="font-mono text-[10px] text-mute shrink-0">{{ (p.songs || []).length }}</span>
-                        <i class="fa-solid shrink-0 text-[12px]" :class="inPlaylist(p, plPicker.song) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
+                        <span v-if="plPicker.list && pickerHas(p)" class="font-mono text-[10px] text-volt shrink-0">{{ pickerHas(p) }}/{{ plPicker.list.length }}</span>
+                        <i class="fa-solid shrink-0 text-[12px]" :class="pickerHas(p) === (plPicker.list ? plPicker.list.length : 1) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
                     </button>
                     <p v-if="!playlists.length" class="px-3 py-1.5 text-xs text-mute">No playlists yet.</p>
                 </div>
@@ -3006,6 +3007,7 @@
                         <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span><span class="hidden lg:inline">{{ STATUS_SHORT[s] }}</span>
                     </button>
                 </div>
+                <button v-if="section === 'songs'" @click="openPlPicker(selectedSongs, $event)" :disabled="!selectedSongs.length" class="batch-btn shrink-0"><i class="fa-solid fa-circle-plus"></i> Add to playlist</button>
                 <button @click="batchSquadMenu = !batchSquadMenu" :disabled="!selectedCount || batchBusy || !squads.length" class="batch-btn shrink-0"><i class="fa-solid fa-user-group"></i> Add to squad</button>
                 <button @click="batchRemove" :disabled="!selectedCount || batchBusy" class="batch-btn !text-rose-300 shrink-0"><i class="fa-solid fa-trash-can"></i><span class="hidden sm:inline">Remove</span></button>
                 <button @click="toggleSelectMode" class="batch-btn !bg-ink !text-inv shrink-0">Done</button>
@@ -3955,7 +3957,11 @@
                     <div class="wp-body">
                         <!-- sources -->
                         <div v-if="readTabs.length" class="flex flex-wrap items-center gap-1.5 pb-1">
-                            <button v-for="t in readTabs" :key="t.id" @click="readSrc = t.id" class="src-tab" :class="{ on: readSrc === t.id }"><i class="fa-solid text-[10px]" :class="t.icon"></i>{{ t.name }}</button>
+                            <button v-for="t in readTabs" :key="t.id" @click="readSrc = t.id" class="src-tab" :class="[{ on: readSrc === t.id }, tabAvail(t.id) ? 'av-' + tabAvail(t.id) : '']"
+                                :title="tabAvail(t.id) === 'yes' ? t.name + ' has this title' : tabAvail(t.id) === 'no' ? t.name + ' doesn’t have this title' : tabAvail(t.id) === 'checking' ? 'Checking ' + t.name + '…' : tabAvail(t.id) === 'error' ? t.name + ' couldn’t be reached' : t.name">
+                                <i class="fa-solid text-[10px]" :class="t.icon"></i>{{ t.name }}
+                                <span v-if="tabAvail(t.id)" class="av-badge"><i class="fa-solid" :class="tabAvail(t.id) === 'yes' ? 'fa-check' : tabAvail(t.id) === 'checking' ? 'fa-circle-notch fa-spin' : tabAvail(t.id) === 'error' ? 'fa-exclamation' : 'fa-xmark'"></i></span>
+                            </button>
                             <button @click="openExtensions()" class="src-tab !border-dashed" title="Add a source"><i class="fa-solid fa-plus text-[10px]"></i></button>
                         </div>
                         <div v-else class="wp-empty">
