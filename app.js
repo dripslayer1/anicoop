@@ -999,9 +999,9 @@ const altNamesOn = async (s, url) => {
     return [...new Set(out)].slice(0, 30);
 };
 // → { match, results }: match is null when the source doesn't have the title under any of its names
-const findTitleOn = async (s, a, { deep = true } = {}) => {
+const findTitleOn = async (s, a, { deep = true, tries = 7 } = {}) => {
     const names = namesOf(a); const tried = new Set(); let first = null;
-    for (const n of names.slice(0, 7)) {
+    for (const n of names.slice(0, tries)) {
         const key = normTitle(n); if (key.length < 2 || tried.has(key)) continue;
         let results;
         try { results = await sourceApi.search(s, n); }
@@ -1783,67 +1783,67 @@ const TrackRow = {
     </div>`,
 };
 const QuickAdd = {
-    props: { anime: Object, entry: Object, open: Boolean, onList: Boolean },
-    emits: ['action', 'edit', 'toggle'],
-    // The menu is drawn on top of the page (not inside the poster), so a small card never cuts it off.
-    // It opens beside the card (right, or left when there's no room), so it never covers the card's own play button;
-    // on a narrow screen it falls back to above the +. It waits a moment first, so passing over the + doesn't open it.
-    setup() {
-        const btn = ref(null), menu = ref(null);
-        const pos = reactive({ show: false, ready: false, x: 0, y: 0, side: 'up' });
+    props: { anime: Object, entry: Object, open: Boolean, onList: Boolean, canPlay: Boolean },
+    emits: ['action', 'edit', 'toggle', 'play'],
+    // Hover the + → a compact row of round buttons pops up just above it, inside the card: close to the mouse, never over
+    // the next card, and low enough that the card's play button in the middle stays free. The caption names the button
+    // you're on. It waits a moment first, so passing over the + doesn't open it.
+    setup(props, { emit }) {
+        const root = ref(null);
+        const pos = reactive({ show: false, maxw: 0, hint: '', compact: false });
         const canHover = typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches;
         let hideT = null, openT = null;
-        const place = () => {
-            const b = btn.value?.getBoundingClientRect(), m = menu.value; if (!b || !m) return;
-            const card = (btn.value.closest('.poster-hit') || btn.value.closest('.poster') || btn.value.parentElement)?.getBoundingClientRect() || b;
-            const mh = m.offsetHeight, mw = m.offsetWidth, gap = 10;
-            const y = clamp(b.bottom - mh, 8, innerHeight - mh - 8);
-            if (card.right + gap + mw <= innerWidth - 8) Object.assign(pos, { side: 'right', x: card.right + gap, y });
-            else if (card.left - gap - mw >= 8) Object.assign(pos, { side: 'left', x: card.left - gap - mw, y });
-            else {
-                const below = b.top - mh - gap < 8 && b.bottom + mh + gap < innerHeight;
-                Object.assign(pos, { side: below ? 'down' : 'up', x: clamp(b.right - mw, 8, innerWidth - mw - 8), y: below ? b.bottom + gap : Math.max(8, b.top - mh - gap) });
-            }
-            pos.ready = true;
-        };
-        const shut = () => { clearTimeout(hideT); clearTimeout(openT); pos.show = false; pos.ready = false; window.removeEventListener('scroll', shut, true); };
+        const shut = () => { clearTimeout(hideT); clearTimeout(openT); pos.show = false; pos.hint = ''; };
         const enter = () => {
             if (!canHover) return;
-            clearTimeout(hideT);
-            if (pos.show) return;
+            clearTimeout(hideT); if (pos.show) return;
             clearTimeout(openT);
-            openT = setTimeout(() => { pos.show = true; pos.ready = false; window.addEventListener('scroll', shut, true); nextTick(place); }, 200);
+            openT = setTimeout(() => {
+                const card = root.value?.closest('.poster') || root.value?.parentElement;
+                const r = card?.getBoundingClientRect(); pos.maxw = Math.max(120, (r?.width || 200) - 24);
+                pos.compact = (r?.height || 300) < 210;   // small square cards (songs): no caption, smaller buttons
+                pos.show = true;
+            }, 160);
         };
-        const leave = () => { clearTimeout(openT); clearTimeout(hideT); hideT = setTimeout(shut, 220); };
-        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, btn, menu, pos, enter, leave, shut, openPlPicker };
+        const leave = () => { clearTimeout(openT); clearTimeout(hideT); hideT = setTimeout(shut, 200); };
+        const SONG_ICONS = { WATCHING: 'fa-heart', COMPLETED: 'fa-thumbs-up', DROPPED: 'fa-thumbs-down' };
+        const ICONS = { PLANNING: 'fa-bookmark', WATCHING: 'fa-eye', COMPLETED: 'fa-check' };
+        const items = computed(() => {
+            const a = props.anime || {}, e = props.entry, song = a.type === 'SONG', list = [];
+            // the card's own play button is under this row on small cards, so the row has it too
+            if (props.canPlay) list.push({ k: 'PLAY', icon: 'fa-play', label: song ? 'Play' : 'Play trailer', color: 'rgb(var(--c-ink))' });
+            if (!song) list.push({ k: 'EP', text: '+1', label: `+1 ${UNIT.ep.toLowerCase()} · ${e?.progress || 0}/${a.type === 'MANGA' ? (fmtChapter(lastChapterOf(a)) || '?') : (a.episodes || '?')}`, color: 'rgb(var(--c-volt))' });
+            (song ? ['WATCHING', 'COMPLETED', 'DROPPED'] : ['PLANNING', 'WATCHING', 'COMPLETED']).forEach(st => list.push({ k: st, icon: (song ? SONG_ICONS : ICONS)[st], label: STATUS_LABELS[st], color: STATUS_COLORS[st], on: e?.status === st }));
+            if ((a.type || 'ANIME') === 'ANIME' && (e?.status === 'COMPLETED' || e?.status === 'REPEATING')) list.push({ k: 'REPEATING', icon: 'fa-rotate-right', label: `Rewatch · ${(e.repeats || []).length}/${MAX_REPEATS}`, color: STATUS_COLORS.REPEATING, on: e?.status === 'REPEATING' });
+            if (song) list.push({ k: 'PLAYLIST', icon: 'fa-circle-plus', label: 'Add to playlist…' });
+            list.push({ k: 'EDIT', icon: 'fa-ellipsis', label: 'Squads & more…' });
+            if (props.onList) list.push({ k: 'REMOVE', icon: 'fa-trash-can', label: 'Remove from all lists', danger: true });
+            return list;
+        });
+        const pick = (it, ev) => {
+            if (it.k === 'PLAY') emit('play');
+            else if (it.k === 'PLAYLIST') openPlPicker(props.anime, ev);
+            else if (it.k === 'EDIT') emit('edit');
+            else emit('action', it.k);
+            if (it.k !== 'EP') shut();
+        };
+        return { root, pos, enter, leave, shut, items, pick };
     },
     unmounted() { this.shut(); },
     template: `
-    <div class="absolute bottom-3 right-3 z-20 group/qa flex flex-col items-end pointer-events-none" @click.stop @mouseenter="enter" @mouseleave="leave">
-        <teleport to="body">
-            <div v-if="pos.show" ref="menu" class="qa-float" :class="['side-' + pos.side, { ready: pos.ready }]" :style="{ left: pos.x + 'px', top: pos.y + 'px' }" @mouseenter="enter" @mouseleave="leave" @click.stop>
-                <div class="qa-menu" @click="shut">
-                    <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">SOLO LIST</p>
-                    <button v-if="anime.type !== 'SONG'" @click="$emit('action', 'EP')" class="qa-row" title="Add one">
-                        <span class="font-mono text-[11px] font-bold text-volt w-2.5">+1</span> {{ UNIT.ep }}
-                        <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
+    <div ref="root" class="absolute bottom-3 right-3 z-20 group/qa flex flex-col items-end pointer-events-none" @click.stop @mouseenter="enter" @mouseleave="leave">
+        <transition name="qa-bar">
+            <div v-if="pos.show" class="qa-bar" :class="{ compact: pos.compact }" :style="{ maxWidth: pos.maxw + 'px' }" @mouseenter="enter" @mouseleave="leave">
+                <p v-if="!pos.compact" class="qa-hint">{{ pos.hint || (anime.type === 'SONG' ? 'Your songs' : 'Solo list') }}</p>
+                <div class="qa-btns">
+                    <button v-for="it in items" :key="it.k" @click.stop="pick(it, $event)" @mouseenter="pos.hint = it.label" @mouseleave="pos.hint = ''" @focus="pos.hint = it.label"
+                        class="qa-b" :class="{ on: it.on, danger: it.danger }" :style="{ '--c': it.color || 'rgb(var(--c-sub))' }" :aria-label="it.label" :title="it.label">
+                        <span v-if="it.text" class="font-mono text-[11px] font-bold">{{ it.text }}</span><i v-else class="fa-solid" :class="it.icon"></i>
                     </button>
-                    <button v-for="s in (anime.type === 'SONG' ? ['WATCHING', 'COMPLETED', 'DROPPED'] : ['PLANNING', 'WATCHING', 'COMPLETED'])" :key="s" @click="$emit('action', s)" class="qa-row" :class="entry?.status === s ? 'bg-overlay' : ''">
-                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span> {{ STATUS_LABELS[s] }}
-                        <i v-if="entry?.status === s" class="fa-solid fa-check ml-auto text-[10px]"></i>
-                    </button>
-                    <button v-if="(anime.type || 'ANIME') === 'ANIME' && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING')" @click="$emit('action', 'REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
-                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS.REPEATING }"></span> Rewatch
-                        <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
-                    </button>
-                    <div class="h-px bg-line my-1 mx-1"></div>
-                    <button v-if="anime.type === 'SONG'" @click="openPlPicker(anime, $event)" class="qa-row"><i class="fa-solid fa-circle-plus text-[11px] w-2.5 text-volt"></i> Add to playlist…</button>
-                    <button @click="$emit('edit')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-group text-[11px] w-2.5"></i> Squads & more…</button>
-                    <button v-if="onList" @click="$emit('action', 'REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
                 </div>
             </div>
-        </teleport>
-        <button ref="btn" @click="$emit('toggle')" :aria-expanded="open"
+        </transition>
+        <button @click="$emit('toggle')" :aria-expanded="open"
             :class="open || pos.show ? 'bg-volt text-onvolt border-volt' : 'bg-base/80 text-ink border-line2 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-hover/qa:bg-volt group-hover/qa:text-onvolt group-hover/qa:border-volt'"
             class="pointer-events-auto w-10 h-10 rounded-full border flex items-center justify-center transition-[opacity,background-color,color,transform] duration-200 ease-expo active:scale-90 shadow-lg" title="Add to list">
             <i class="fa-solid" :class="entry ? 'fa-pen text-xs' : 'fa-plus'"></i>
@@ -1902,7 +1902,7 @@ const PosterCard = {
         </template>
         <template v-else>
             <button v-if="anime.trailer?.id || anime.type === 'SONG'" @click.stop="$emit('trailer')" :title="anime.type === 'SONG' ? 'Play preview' : 'Play trailer'" class="trailer-btn"><i class="fa-solid fa-play text-[13px] ml-0.5"></i></button>
-            <quick-add v-if="quick" :anime="anime" :entry="solo" :open="menuOpen" :on-list="ownList ? !!entry : !!solo" @action="$emit('action', $event)" @edit="$emit('edit')" @toggle="$emit('toggle')"></quick-add>
+            <quick-add v-if="quick" :anime="anime" :entry="solo" :open="menuOpen" :on-list="ownList ? !!entry : !!solo" :can-play="!!(anime.trailer?.id || anime.type === 'SONG')" @action="$emit('action', $event)" @edit="$emit('edit')" @toggle="$emit('toggle')" @play="$emit('trailer')"></quick-add>
             <button v-else-if="editable" @click.stop="$emit('edit')" title="Edit" class="absolute bottom-3 right-3 z-20 w-10 h-10 rounded-full bg-base/80 border border-line2 text-ink flex items-center justify-center [@media(hover:hover)]:opacity-0 group-hover:opacity-100 hover:bg-volt hover:text-onvolt hover:border-volt transition-[opacity,background-color,color] duration-200"><i class="fa-solid fa-pen text-xs"></i></button>
         </template>
     </div>
@@ -3984,19 +3984,24 @@ createApp({
         // everything, the reader and the video player included.
         const music = reactive({ open: false, tab: 'search', q: '', results: [], loading: false, error: '', pl: null });
         let musicTok = 0;
+        // any song, by name or artist: Apple + Spotify together (an exact artist name puts that artist's songs first)
+        const searchAllSongs = async (q) => {
+            const [apple, sp] = await Promise.all([
+                itunes('search', { term: q, media: 'music', entity: 'song', limit: 25 }).then(d => (d.results || []).map(normApple)).catch(() => []),
+                spotifyCall({ kind: 'search', q, limit: 20 }).then(r => (r.items || []).map(t => normSong(t))).catch(() => []),
+            ]);
+            const nq = q.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const byArtist = [...apple, ...sp].filter(x => (x.artists || []).some(a => String(a).toLowerCase().replace(/[^a-z0-9]/g, '') === nq));
+            return dedupeSongs([...byArtist, ...apple, ...sp]).slice(0, 40);
+        };
         const runMusicSearch = debounce(async () => {
             const q = music.q.trim(), tok = ++musicTok;
             if (!q) { music.results = []; music.loading = false; return; }
             music.loading = true; music.error = '';
             try {
-                const [apple, sp] = await Promise.all([
-                    itunes('search', { term: q, media: 'music', entity: 'song', limit: 25 }).then(d => (d.results || []).map(normApple)).catch(() => []),
-                    spotifyCall({ kind: 'search', q, limit: 20 }).then(r => (r.items || []).map(t => normSong(t))).catch(() => []),
-                ]);
+                const found = await searchAllSongs(q);
                 if (tok !== musicTok) return;
-                const nq = q.toLowerCase().replace(/[^a-z0-9]/g, '');
-                const byArtist = [...apple, ...sp].filter(x => (x.artists || []).some(a => String(a).toLowerCase().replace(/[^a-z0-9]/g, '') === nq));
-                music.results = dedupeSongs([...byArtist, ...apple, ...sp]).slice(0, 40);
+                music.results = found;
                 if (!music.results.length) music.error = 'No songs found.';
             } catch (err) { if (tok === musicTok) music.error = err.message || 'Search failed'; }
             finally { if (tok === musicTok) music.loading = false; }
@@ -4032,6 +4037,24 @@ createApp({
         const plPickerNew = async () => { const s = plPicker.song; closePlPicker(); await createPlaylist(s); };
         window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && plPicker.open) closePlPicker(); });
         window.addEventListener('resize', () => plPicker.open && closePlPicker());
+        // "Add songs" inside an open playlist: your songs first, and any song from a search; add as many as you like
+        const plAdd = reactive({ open: false, q: '', results: [], loading: false });
+        let plAddTok = 0;
+        const runPlAddSearch = debounce(async () => {
+            const q = plAdd.q.trim(), tok = ++plAddTok;
+            if (!q) { plAdd.results = []; plAdd.loading = false; return; }
+            plAdd.loading = true;
+            try { const r = await searchAllSongs(q); if (tok === plAddTok) plAdd.results = r; }
+            finally { if (tok === plAddTok) plAdd.loading = false; }
+        }, 350);
+        watch(() => plAdd.q, runPlAddSearch);
+        watch(plOpen, () => { Object.assign(plAdd, { open: false, q: '', results: [] }); });
+        const plAddMine = computed(() => {
+            const p = plOpenList.value; if (!p) return [];
+            const q = normTitle(plAdd.q);
+            return soloList.value.filter(i => typeOf(i) === 'SONG' && (!q || normTitle(`${i.anime.title?.romaji} ${(i.anime.artists || []).join(' ')}`).includes(q))).map(i => i.anime).slice(0, q ? 30 : 60);
+        });
+        const plAddToggle = (song) => { const p = plOpenList.value; if (p) togglePlaylistSong(p, song); };
         const addPickToPlaylist = (p) => { const e = soloList.value.find(i => String(i.anime.id) === String(plAddPick.value)); plAddPick.value = ''; if (e) togglePlaylistSong(p, e.anime); };
         const renamePlaylist = async (p) => { const name = await askText({ title: 'Rename playlist', value: p.name, ok: 'Rename', max: 60 }); if (name) savePlaylist(p, { name }); };
         const deletePlaylist = async (p) => {
@@ -6053,6 +6076,16 @@ createApp({
             if (!al.complete) loadAlbumTracks(al);
             nextTick(() => document.getElementById('disc-open')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
         };
+        // ▶ on a release's cover: play it from its first song (its other songs queued), without opening its track list
+        const releaseOf = (id) => artistDiscog.value?.kinds.flatMap(k => k.items).find(r => r.id === id) || null;
+        const releasePlaying = (al) => player.playing && (releaseOf(al.id)?.songs || al.songs || []).some(s => isPlaying(s));
+        const playRelease = async (al) => {
+            if (releasePlaying(al)) { togglePlay(); return; }
+            let songs = releaseOf(al.id)?.songs || al.songs || [];
+            if (!al.complete || !songs.length) { await loadAlbumTracks(al, true); songs = releaseOf(al.id)?.songs?.length ? releaseOf(al.id).songs : (albumTracks[al.id] || songs); }
+            if (!songs.length) { showToast('Couldn’t load that release’s songs', 'error'); return; }
+            playPreview(songs[0], songs);
+        };
         const discOpenRelease = computed(() => artistDiscog.value?.kinds.flatMap(k => k.items).find(r => r.id === discOpen.value) || null);
         const artistPopularShown = ref(5);
         watch(() => entity.value?.id, () => { artistPopularShown.value = 5; });
@@ -6703,6 +6736,46 @@ createApp({
             } catch (err) { if (!stale()) srcView.error = friendlyErr(err); }
             finally { if (readSrc.value === s.id) srcView.loading = false; }
         };
+        // ---- which of your installed sources have this title: checked quietly when you open a manga / anime / show ----
+        // A hit is saved as that source's match (so Read / Watch opens it straight away); a miss is remembered for this visit.
+        const availNo = reactive({});   // "titleId:sourceId" → 'checking' | 'no' | 'error'
+        let availTok = 0;
+        const availSources = (k) => [
+            ...(k === 'tv' && extOn('archive') ? [ARCHIVE_SRC] : []),
+            ...kindSources(k),
+        ];
+        const availRows = computed(() => {
+            const a = selectedAnime.value, k = playKind.value; if (!a || !k) return [];
+            const rows = [];
+            if (k === 'manga' && extOn('mangadex')) { const i = mangaInfo[a.id]; rows.push({ id: 'mangadex', name: 'MangaDex', st: !i ? 'checking' : i.md ? 'yes' : 'no' }); }
+            availSources(k).forEach(s => { const key = `${a.id}:${s.id}`; rows.push({ id: s.id, name: s.name, st: srcMatches[key] ? 'yes' : availNo[key] || 'checking' }); });
+            return rows;
+        });
+        const checkAvailability = async (a, k) => {
+            const tok = ++availTok;
+            if (k === 'manga') needMangaInfo(a);
+            const todo = availSources(k).filter(s => !srcMatches[`${a.id}:${s.id}`] && !['no', 'error'].includes(availNo[`${a.id}:${s.id}`]));
+            todo.forEach(s => { availNo[`${a.id}:${s.id}`] = 'checking'; });
+            const worker = async () => {
+                while (todo.length && tok === availTok) {
+                    const s = todo.shift(), key = `${a.id}:${s.id}`;
+                    try {
+                        const { match } = await findTitleOn(s, a, { deep: false, tries: 3 });
+                        if (match) { srcMatches[key] = { url: match.url, title: match.title, cover: match.cover || null }; saveMatches(); delete availNo[key]; }
+                        else availNo[key] = 'no';
+                    } catch { availNo[key] = 'error'; }
+                }
+            };
+            await Promise.all([worker(), worker(), worker()]);
+            todo.forEach(s => { if (availNo[`${a.id}:${s.id}`] === 'checking') delete availNo[`${a.id}:${s.id}`]; });   // stopped: another title was opened
+        };
+        watch(() => playKind.value && selectedAnime.value?.id, (id) => {
+            if (!id) { availTok++; return; }
+            const a = selectedAnime.value, k = playKind.value;
+            setTimeout(() => { if (selectedAnime.value?.id === id && (availSources(k).length || k === 'manga')) checkAvailability(a, k); }, 500);
+        });
+        // a source that has it: open Read / Watch on it
+        const openOnSource = (id) => { readSrc.value = id; openWatch(); };
         const chooseMatch = (r) => { const a = selectedAnime.value; const s = currentSite.value; if (!a || !s) return; srcMatches[`${a.id}:${s.id}`] = { url: r.url, title: r.title, cover: r.cover || null }; saveMatches(); srcView.match = r; srcView.picking = false; loadSourceFor(); };
         const changeMatch = () => { srcView.picking = true; srcView.results.length || loadSourceFor(srcView.q || titleOf(selectedAnime.value)); };
         // new title → start on MangaDex if it has the title, otherwise your first source for that section
@@ -6732,7 +6805,7 @@ createApp({
 
         const canReadInApp = (c) => !!c && (!!c.src || (extOn('mangadex') && !c.url));   // website-source chapter, or a MangaDex-hosted one
 
-        const rd = reactive({ open: false, manga: null, chapter: null, pages: [], i: 0, mode: 'rtl', loading: false, error: '', local: false, marked: false, ui: true });
+        const rd = reactive({ open: false, manga: null, chapter: null, pages: [], i: 0, mode: 'rtl', loading: false, error: '', local: false, marked: false, ui: true, flash: null, segs: [], appending: false });
         let blobUrls = [];
         const freeBlobs = () => { blobUrls.forEach(u => URL.revokeObjectURL(u)); blobUrls = []; };
         const chNum = (c) => parseFloat(c?.ch);
@@ -6800,7 +6873,15 @@ createApp({
             const c = !rd.local && rdNeighbourOf(last, 1); if (!c) return;
             chapterPages(c).then(r => r.pages.slice(0, 2).forEach(u => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = u; })).catch(() => {});
         };
-        const openChapter = async (c, manga = selectedAnime.value) => {
+        // a short "Chapter N" banner when the next chapter starts on its own (turning past the last page, or scrolling on)
+        let flashT = null;
+        const flashChapter = (c) => {
+            if (!c) return; clearTimeout(flashT);
+            const t = c.title && !/^(ch(apter)?\.?\s*)?[\d.]+$/i.test(c.title) ? c.title : '';
+            rd.flash = { ch: c.ch ? `Chapter ${c.ch}` : (t || 'Next chapter'), sub: c.ch ? t : '' };
+            flashT = setTimeout(() => { rd.flash = null; }, 2600);
+        };
+        const openChapter = async (c, manga = selectedAnime.value, { auto = false } = {}) => {
             if (!canReadInApp(c)) { cantReadHere(c); return; }
             addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
             freeBlobs();
@@ -6813,6 +6894,7 @@ createApp({
                 if (rd.chapter?.id !== c.id) return;
                 rd.referer = r.referer; rd.pages = [...r.pages]; rd.segs = [{ ch: c, start: 0, count: r.pages.length }];
                 preload(0); prefetchNext();
+                if (auto) flashChapter(c);
                 if (soloEntry(manga?.id)?.progress >= Math.floor(chNum(c))) rd.marked = true;
                 nextTick(() => { const el = document.querySelector('.reader-strip'); if (el) el.scrollTop = 0; });
             } catch (err) { if (rd.chapter?.id === c.id) rd.error = friendlyErr(err); }
@@ -6841,7 +6923,7 @@ createApp({
             if (next === rd.pages.length && d > 0) {
                 if (PREFS.reader.autoMark && !rd.local && !rd.marked) markChapterRead();
                 const c = !rd.local && rdNeighbour(1);
-                if (c) openChapter(c, rd.manga);   // straight on to the next chapter (fetched ahead, so it's instant)
+                if (c) openChapter(c, rd.manga, { auto: true });   // straight on to the next chapter (fetched ahead, so it's instant)
             }
         };
         const rdTap = (e) => {   // tap the left / right third to turn pages, the middle to show/hide the bars
@@ -6873,7 +6955,7 @@ createApp({
             let k = 0; imgs.forEach((im, n) => { if (im.offsetTop - el.scrollTop < el.clientHeight / 2) k = n; });
             rd.i = k;
             const seg = rdSegOf(k);
-            if (seg && seg.ch.id !== rd.chapter?.id) { rd.chapter = seg.ch; rd.marked = rdMarked.has(seg.ch.id) || (soloEntry(rd.manga?.id)?.progress || 0) >= Math.floor(chNum(seg.ch)); }
+            if (seg && seg.ch.id !== rd.chapter?.id) { if (rd.segs.indexOf(seg) > 0 && chNum(seg.ch) > chNum(rd.chapter)) flashChapter(seg.ch); rd.chapter = seg.ch; rd.marked = rdMarked.has(seg.ch.id) || (soloEntry(rd.manga?.id)?.progress || 0) >= Math.floor(chNum(seg.ch)); }
             // every chapter above the one you're in is finished
             if (PREFS.reader.autoMark && !rd.local) for (const s of rd.segs || []) { if (s === seg) break; if (!rdMarked.has(s.ch.id)) markChapterRead(s.ch); }
             const nearEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight * 2.5;
@@ -7000,6 +7082,9 @@ createApp({
         const openWatch = () => {
             const a = selectedAnime.value; if (!a || !playKind.value) return;
             if (!readSrc.value || !readTabs.value.some(t => t.id === readSrc.value)) readSrc.value = readTabs.value[0]?.id || null;
+            // the source picked doesn't have this title but another one does → start on that one
+            const here = availRows.value.find(r => r.id === readSrc.value), yes = availRows.value.find(r => r.st === 'yes');
+            if (here && here.st === 'no' && yes && readTabs.value.some(t => t.id === yes.id)) readSrc.value = yes.id;
             if (a.type === 'TV' && !isMovie.value) {
                 const seasons = seasonsOf(a);
                 if (!seasons.some(x => x.n === wp.season) || wp.id !== a.id) wp.season = seasons.length ? seasonForAbs(a, myProgress(a) + 1) : 1;
@@ -8565,7 +8650,7 @@ createApp({
 
         return {
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
-            regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, music, musicLiked, musicRecent, openMusic,
+            regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, availRows, openOnSource, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
             plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,

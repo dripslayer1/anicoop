@@ -488,3 +488,19 @@ Some sites need their own extension code ("Not readable here: this site needs it
   (a home PC or a cheap / free cloud server) with a login set in its settings (Settings → Server → Basic
   authentication), reached over https. Enter that login in anicoop's Mihon server box.
 * Sites behind Cloudflare's "checking your browser" page may still refuse the server.
+
+## v9.4 — chapter banner, quick actions row, playlist adding, source check
+
+**Update:** re-upload the folder (no database or Edge Function change).
+
+* **Reading:** chapters still flow into each other; now a "Chapter N" banner shows when a new one starts, and in
+  Webtoon mode the divider between chapters is a clear "Chapter N" label with "previous chapter saved as read".
+* **Card quick actions:** hovering a card's + opens a compact row of round buttons just above it, inside the card
+  (a caption names the one you're on). Its first button is Play, so the card's play button is never out of reach.
+* **Playlists:** "Add songs" in an open playlist searches your songs and any song (Apple + Spotify); each row has
+  Listen and one-click Add, and the panel stays open so you can add several.
+* **Discography:** every release has a ▶ on its cover that plays it (the rest of its songs queued) without opening
+  its track list.
+* **On your sources:** opening a manga, anime or show checks your installed sources and shows which have it
+  (✓ = click to read / watch there). Read / Watch starts on a source that has it.
+* **Header:** a thin line between the feedback icon and the music icon.
