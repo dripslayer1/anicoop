@@ -385,6 +385,51 @@ const ytmSearch = async (body: Record<string, any>) => {
     return json(text);
 };
 
+// ---------- chat: emoji (emoji-api.com) and GIFs (GIPHY, or Tenor) ----------
+// The keys stay here as Edge Function secrets (EMOJI_API_KEY, GIPHY_API_KEY or TENOR_API_KEY), never in the website's code.
+const emojiList = async () => {
+    const key = Deno.env.get('EMOJI_API_KEY') || '';
+    if (!key) return json({ error: 'EMOJI_API_KEY is not set in the Edge Function secrets' }, 500);
+    const ck = 'emoji\nall';
+    const hit = cache.get(ck); if (hit && Date.now() - hit.at < 24 * 3600e3) return json(hit.body);
+    let r: Response;
+    try { r = await fetch(`https://emoji-api.com/emojis?access_key=${encodeURIComponent(key)}`); }
+    catch (err) { return json({ error: 'Could not reach emoji-api.com: ' + ((err as Error).message || 'network error') }, 502); }
+    if (!r.ok) return json({ error: `emoji-api.com answered ${r.status}` }, 502);
+    const all = await r.json();
+    // compact: character, name, group — about a third of the original size
+    const items = (Array.isArray(all) ? all : []).filter((e: any) => e?.character && !/skin-tone|:.*tone/i.test(e.slug || ''))
+        .map((e: any) => ({ c: e.character, n: String(e.unicodeName || e.slug || '').replace(/^E\d+(\.\d+)?\s+/, ''), g: e.group || 'other' }));
+    const text = JSON.stringify({ items });
+    cache.set(ck, { at: Date.now(), body: text });
+    return json(text);
+};
+const gifSearch = async (body: Record<string, any>) => {
+    const q = String(body.q || '').trim().slice(0, 100);
+    const giphy = Deno.env.get('GIPHY_API_KEY') || '', tenor = Deno.env.get('TENOR_API_KEY') || '';
+    if (!giphy && !tenor) return json({ error: 'No GIF key: add GIPHY_API_KEY to the Edge Function secrets' }, 500);
+    const ck = 'gif\n' + q;
+    const hit = cache.get(ck); if (hit && Date.now() - hit.at < CACHE_MS * 3) return json(hit.body);
+    let items: any[] = [];
+    try {
+        if (giphy) {
+            const u = q ? `https://api.giphy.com/v1/gifs/search?api_key=${giphy}&q=${encodeURIComponent(q)}&limit=30&rating=pg-13&lang=en`
+                : `https://api.giphy.com/v1/gifs/trending?api_key=${giphy}&limit=30&rating=pg-13`;
+            const d = await (await fetch(u)).json();
+            items = (d?.data || []).map((g: any) => ({ id: g.id, preview: g.images?.fixed_width_small?.url || g.images?.fixed_width?.url, url: g.images?.downsized?.url || g.images?.original?.url, title: g.title || '' }));
+        } else {
+            const u = q ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif`
+                : `https://tenor.googleapis.com/v2/featured?key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif`;
+            const d = await (await fetch(u)).json();
+            items = (d?.results || []).map((g: any) => ({ id: g.id, preview: g.media_formats?.tinygif?.url, url: g.media_formats?.gif?.url || g.media_formats?.tinygif?.url, title: g.content_description || '' }));
+        }
+    } catch (err) { return json({ error: 'GIF search failed: ' + ((err as Error).message || 'network error') }, 502); }
+    const text = JSON.stringify({ items: items.filter(x => x.url && x.preview), by: giphy ? 'GIPHY' : 'Tenor' });
+    if (cache.size > 800) cache.clear();
+    cache.set(ck, { at: Date.now(), body: text });
+    return json(text);
+};
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
     if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -396,6 +441,8 @@ Deno.serve(async (req) => {
     if (endpoint === 'fetch') return siteFetch(body);
     if (endpoint === 'yt') return ytSearch(body);
     if (endpoint === 'ytm') return ytmSearch(body);
+    if (endpoint === 'emoji') return emojiList();
+    if (endpoint === 'gif') return gifSearch(body);
     if (endpoint === 'tmdb') return tmdb(body);
     if (endpoint === 'spotify') return spotify(body);
 
