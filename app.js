@@ -1438,12 +1438,20 @@ const songApi = {
             // only a genre: Apple's genre index. Otherwise the words go in one search and the genre is checked on the results.
             const genreOnly = !q && !words.length && genres.length;
             const term = [q, ...words, genreOnly ? genres[0] : !q && !words.length ? `${decades[0] || ''}s hits` : ''].filter(Boolean).join(' ') || genres[0];
-            const [d, artist] = await Promise.all([
+            const [d, artist, spotify] = await Promise.all([
                 itunes('search', { term, media: 'music', entity: 'song', limit: per, offset, country, ...(genreOnly ? { attribute: 'genreIndex' } : {}) }),
                 // an artist's name? then their whole catalogue comes first (a normal search only finds some of their songs)
                 q && page === 1 ? songApi.findArtist(q, country) : null,
+                // Spotify's search too: it has artists and songs Apple's search misses
+                q && page === 1 ? spotifyCall({ kind: 'search', q: [q, ...words].join(' '), limit: 30 }).then(r => (r.items || []).map(t => normSong(t))).catch(() => []) : [],
             ]);
             let items = (d.results || []).map(normApple);
+            if (spotify.length) {
+                const nq = String(q).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+                const byArtist = spotify.filter(x => (x.artists || []).some(a => String(a).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '') === nq));
+                // the search is an artist's name Apple didn't recognise: Spotify's songs by that artist go first
+                items = !artist && byArtist.length ? [...byArtist, ...items, ...spotify] : [...items, ...spotify];
+            }
             if (artist) {
                 songSearchArtist.value = artist;
                 const all = (await itunes('lookup', { id: artist.id, entity: 'song', limit: 200, country }).catch(() => null))?.results || [];
@@ -1461,7 +1469,8 @@ const songApi = {
     // the artist a search means, if it clearly names one ("taylor swift" → Taylor Swift, not a song called that)
     async findArtist(q, country = 'us') {
         const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-        const d = await itunes('search', { term: q, media: 'music', entity: 'musicArtist', limit: 5, country }).catch(() => null);
+        // 25 names, not 5: a short name ("RILEY") is often below other artists whose names only start with it
+        const d = await itunes('search', { term: q, media: 'music', entity: 'musicArtist', limit: 25, country }).catch(() => null);
         const a = (d?.results || []).find(x => norm(x.artistName) === norm(q)) || ((d?.results || [])[0] && norm(d.results[0].artistName).startsWith(norm(q)) && norm(q).length >= 4 ? d.results[0] : null);
         return a ? { id: a.artistId, name: a.artistName, genre: a.primaryGenreName || null } : null;
     },
@@ -3751,7 +3760,8 @@ createApp({
         const saveEntry = async (form) => {
             const anime = form.anime;
             if (!anime || isSaving.value) return false;
-            const episodes = anime.episodes || null;
+            if (form.status === 'COMPLETED' || form.status === 'REPEATING') await fillTotal(anime);
+            const episodes = totalOf(anime);
             let progress = clamp(Math.floor(Number(form.progress) || 0), 0, episodes || 99999);
             if (form.status === 'COMPLETED' && episodes) progress = episodes;
             const fields = { status: form.status, score: clamp(Number(form.score) || 0, 0, 10), progress, repeats: [...(form.repeats || [])] };
@@ -3914,6 +3924,37 @@ createApp({
             const songs = has ? p.songs.filter(s => s.id !== song.id) : [...(p.songs || []), slimAnime(song)];
             if (await savePlaylist(p, { songs })) showToast(has ? `Removed from “${p.name}”` : `Added to “${p.name}”`);
         };
+        // ---------- the music panel: songs from anywhere (reading, watching, any page) without leaving it ----------
+        // Search (Apple + Spotify), your playlists, your liked songs and what you played lately. It opens on top of
+        // everything, the reader and the video player included.
+        const music = reactive({ open: false, tab: 'search', q: '', results: [], loading: false, error: '', pl: null });
+        let musicTok = 0;
+        const runMusicSearch = debounce(async () => {
+            const q = music.q.trim(), tok = ++musicTok;
+            if (!q) { music.results = []; music.loading = false; return; }
+            music.loading = true; music.error = '';
+            try {
+                const [apple, sp] = await Promise.all([
+                    itunes('search', { term: q, media: 'music', entity: 'song', limit: 25 }).then(d => (d.results || []).map(normApple)).catch(() => []),
+                    spotifyCall({ kind: 'search', q, limit: 20 }).then(r => (r.items || []).map(t => normSong(t))).catch(() => []),
+                ]);
+                if (tok !== musicTok) return;
+                const nq = q.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const byArtist = [...apple, ...sp].filter(x => (x.artists || []).some(a => String(a).toLowerCase().replace(/[^a-z0-9]/g, '') === nq));
+                music.results = dedupeSongs([...byArtist, ...apple, ...sp]).slice(0, 40);
+                if (!music.results.length) music.error = 'No songs found.';
+            } catch (err) { if (tok === musicTok) music.error = err.message || 'Search failed'; }
+            finally { if (tok === musicTok) music.loading = false; }
+        }, 350);
+        watch(() => music.q, runMusicSearch);
+        const musicLiked = computed(() => soloList.value.filter(i => typeOf(i) === 'SONG' && i.status !== 'DROPPED').map(i => i.anime));
+        const musicRecent = computed(() => { const seen = new Set(); return histList.value.filter(h => h.type === 'SONG' && h.media && !seen.has(h.id) && seen.add(h.id)).map(h => h.media).slice(0, 40); });
+        const openMusic = (tab = null) => {
+            music.open = true; if (tab) music.tab = tab;
+            if (!playlists.value.length && !plMissing.value) fetchPlaylists();
+            nextTick(() => { if (music.tab === 'search') document.getElementById('music-q')?.focus(); });
+        };
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && music.open && !plPicker.open) { e.stopImmediatePropagation(); music.open = false; } }, true);
         // the site-wide "Add to playlist" picker (see plPicker): placed next to what you clicked, inside the screen
         const placePlPicker = () => {
             const el = document.getElementById('pl-picker'); if (!el || !plPicker.open) return;
@@ -4949,10 +4990,21 @@ createApp({
             quickSolo(a, action);
             if (action !== 'EP') closeSheet();
         };
+        // "Completed" counts everything: AniList's episodes / chapters, else MangaDex's latest chapter (ongoing manga),
+        // TMDB's episode count (shows listed without one), 1 for a movie
+        const totalOf = (a) => a?.episodes || a?.chapters || (a?.type === 'MANGA' ? Math.floor(parseFloat(lastChapterOf(a)) || 0) : 0) || (a?.type === 'TV' && a?.format === 'MOVIE' ? 1 : 0) || null;
+        const fillTotal = async (a) => {
+            if (!a || totalOf(a)) return;
+            try {
+                if (a.type === 'TV' && a.extId) { const d = await tmdbCall(`tv/${a.extId}`); if (d?.number_of_episodes) a.episodes = d.number_of_episodes; }
+                else if (a.type === 'MANGA') { needMangaInfo(a); for (let i = 0; i < 25 && !mangaInfo[a.id]?.at; i++) await sleep(200); }
+            } catch {}
+        };
         const soloNext = (anime, action) => {
             const idx = soloList.value.findIndex(i => i.anime?.id === anime.id);
             const entry = idx !== -1 ? { ...soloList.value[idx] } : { anime: normMedia(anime), status: 'PLANNING', score: 0, progress: 0 };
-            const eps = anime.episodes || anime.chapters || entry.anime?.episodes || null;
+            const eps = totalOf(anime) || totalOf(entry.anime);
+            if (eps && action === 'COMPLETED' && entry.anime && !entry.anime.episodes && entry.anime.type === 'TV') entry.anime = { ...entry.anime, episodes: eps };
             entry.repeats = [...(entry.repeats || [])];
             if (action === 'EP' && entry.status === 'REPEATING') {   // +1 on a rewatch counts on that rewatch's counter
                 const n = entry.repeats.length ? entry.repeats.length - 1 : (entry.repeats.push(0), 0);
@@ -4979,6 +5031,7 @@ createApp({
         };
         const quickSolo = async (anime, action) => {
             if (action === 'REMOVE') { removeEverywhere(anime); return; }
+            if (action === 'COMPLETED' || action === 'REPEATING') await fillTotal(anime);
             const { entry, error } = soloNext(anime, action);
             if (error === LILBRO) { triggerLilBro(anime); return; }
             if (error) { showToast(error, 'error'); return; }
@@ -5026,7 +5079,7 @@ createApp({
                 if (activeTab.value === 'coop' && !selectedAnime.value) {
                     const rows = coopList.value.filter(i => selected.value.has(i.anime.id) && (listFilterGroup.value === 'ALL' || i.squadId === listFilterGroup.value));
                     for (const r of rows) {
-                        const progress = status === 'COMPLETED' && r.anime.episodes ? r.anime.episodes : r.progress;
+                        const progress = status === 'COMPLETED' && totalOf(r.anime) ? totalOf(r.anime) : r.progress;
                         await upsertSquadEntry(r.squadId, r.anime, { status, progress, score: r.score });
                         logActivity(r.anime, { status: r.status, progress: r.progress }, { status, progress }, r.squadId);
                     }
@@ -5037,7 +5090,7 @@ createApp({
                         if (status === 'REPEATING') return soloNext(a, 'REPEATING').entry || null;   // titles with 5 rewatches already are skipped
                         const cur = soloEntry(a.id);
                         const eps = a.episodes || cur?.anime?.episodes;
-                        return { anime: normMedia(cur?.anime || a), status, score: cur?.score || 0, progress: status === 'COMPLETED' && eps ? eps : (cur?.progress || 0) };
+                        return { anime: normMedia(cur?.anime || a), status, score: cur?.score || 0, progress: status === 'COMPLETED' && (eps || totalOf(cur?.anime || a)) ? (eps || totalOf(cur?.anime || a)) : (cur?.progress || 0) };
                     }).filter(Boolean);
                     if (!entries.length) { showToast('Nothing to change', 'error'); return; }
                     const befores = entries.map(e => soloEntry(e.anime.id));
@@ -5080,7 +5133,9 @@ createApp({
 
         // ---------- random picker ----------
         const randomOpen = ref(false);
-        const randomFilter = ref({ status: '', genre: '', squad: '' });
+        // "all" = the whole catalogue (Browse's own filters: genre, release status, format, country)
+        // "lists" = only what's on your lists (your list status, genre, squad)
+        const randomFilter = ref({ from: 'all', status: '', genre: '', squad: '', wgenre: '', wstatus: '', wformat: '', wcountry: '' });
         const randomPick = ref(null);
         const randomRolling = ref(false);
         const randomSpinKey = ref(0);
@@ -5097,7 +5152,24 @@ createApp({
                 (randomScope.value !== 'coop' || !f.squad || i.squadId === f.squad));
         });
         // No filters set → don't limit the roll to what's on your lists; pull from all of AniList instead.
-        const randomWide = computed(() => !randomFilter.value.status && !randomFilter.value.genre && !randomFilter.value.squad);
+        const randomWide = computed(() => randomFilter.value.from === 'all');
+        const randomStatusOpts = computed(() => mediaType.value === 'SONG' ? [] : mediaType.value === 'GAME'
+            ? [{ v: 'FINISHED', l: 'Released' }, { v: 'NOT_YET_RELEASED', l: 'Upcoming' }, { v: 'EARLY', l: 'Early access' }]
+            : [{ v: 'RELEASING', l: mediaType.value === 'MANGA' ? 'Publishing' : 'Airing / ongoing' }, { v: 'FINISHED', l: 'Finished' }, { v: 'NOT_YET_RELEASED', l: 'Upcoming' }]);
+        const randomFormatOpts = computed(() => mediaType.value === 'TV' ? quickFormats.filter(x => x.v) : mediaType.value === 'ANIME' || mediaType.value === 'MANGA' ? formatOptions.value : []);
+        const randomWideFiltered = computed(() => { const f = randomFilter.value; return !!(f.wgenre || f.wstatus || f.wformat || f.wcountry); });
+        // a random title from Browse with these filters: a random page, then a random title on it (the first pages if it's empty)
+        const rollWideFiltered = async () => {
+            const t = mediaType.value, w = randomFilter.value;
+            const f = { ...defaultFilters(), genre: w.wgenre, status: w.wstatus, format: w.wformat, country: w.wcountry };
+            const pages = t === 'SONG' ? 3 : t === 'GAME' ? 8 : 12;
+            for (const p of [1 + Math.floor(Math.random() * pages), 1 + Math.floor(Math.random() * 2), 1]) {
+                const { items } = await browseShared(t, f, p);
+                const pool = (items || []).filter(x => notHidden(x) && x.id !== randomPick.value?.anime?.id);
+                if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+            }
+            return null;
+        };
         const randomWideType = computed(() => mediaType.value || 'ANIME');
         const fetchRandomWide = async () => {
             const type = randomWideType.value;
@@ -5115,20 +5187,20 @@ createApp({
         watch(randomFilter, () => { randomPick.value = null; }, { deep: true });
         const openRandom = () => {
             const inList = randomScope.value !== 'all';
-            randomFilter.value = { status: inList && listFilterStatus.value !== 'ALL' ? listFilterStatus.value : '', genre: '', squad: randomScope.value === 'coop' && listFilterGroup.value !== 'ALL' ? listFilterGroup.value : '' };
+            randomFilter.value = { from: inList ? 'lists' : 'all', status: inList && listFilterStatus.value !== 'ALL' ? listFilterStatus.value : '', genre: '', squad: randomScope.value === 'coop' && listFilterGroup.value !== 'ALL' ? listFilterGroup.value : '', wgenre: '', wstatus: '', wformat: '', wcountry: '' };
             randomPick.value = null;
             randomOpen.value = true;
         };
         const openRandomSoon = () => setTimeout(openRandom, 320);
-        const clearRandomFilters = () => { randomFilter.value = { status: '', genre: '', squad: '' }; };
+        const clearRandomFilters = () => { randomFilter.value = { from: randomFilter.value.from, status: '', genre: '', squad: '', wgenre: '', wstatus: '', wformat: '', wcountry: '' }; };
         const rollRandom = async () => {
             if (randomRolling.value) return;
             if (randomWide.value) {
                 randomRolling.value = true;
                 randomPick.value = null;
                 try {
-                    const media = await fetchRandomWide();
-                    if (!media) { showToast('Could not fetch a random pick — try again', 'error'); return; }
+                    const media = randomWideFiltered.value ? await rollWideFiltered() : await fetchRandomWide();
+                    if (!media) { showToast(randomWideFiltered.value ? 'Nothing found with those filters' : 'Could not fetch a random pick — try again', 'error'); return; }
                     const m = normMedia(media);
                     const cur = myEntry(m.id);
                     randomPick.value = { anime: m, status: cur?.status, progress: cur?.progress, group: cur?.group };
@@ -6589,7 +6661,9 @@ createApp({
             const seen = new Set();
             return chapterList.value.filter(c => canReadInApp(c) && !Number.isNaN(chNum(c)) && !seen.has(chNum(c)) && seen.add(chNum(c))).sort((a, b) => chNum(a) - chNum(b));
         });
-        const rdNeighbour = (d) => { const list = rdChapters.value; const k = list.findIndex(c => chNum(c) === chNum(rd.chapter)); return k === -1 ? null : list[k + d] || null; };
+        const rdNeighbourOf = (ch, d) => { const list = rdChapters.value; const k = list.findIndex(c => chNum(c) === chNum(ch)); return k === -1 ? null : list[k + d] || null; };
+        const rdNeighbour = (d) => rdNeighbourOf(rd.chapter, d);
+        const rdMarked = new Set();   // chapters marked read in this reading session
         const defaultMode = (m) => PREFS.reader.modes?.[m?.id] || (['KR', 'CN', 'TW'].includes(m?.countryOfOrigin) ? 'vertical' : 'rtl');
         const setReadMode = (mode) => { rd.mode = mode; if (rd.manga?.id) PREFS.reader = { ...PREFS.reader, modes: { ...(PREFS.reader.modes || {}), [rd.manga.id]: mode } }; };
         const preload = (from) => rd.pages.slice(from, from + 3).forEach(u => { const im = new Image(); im.decoding = 'async'; im.referrerPolicy = 'no-referrer'; im.src = u; });
@@ -6616,41 +6690,61 @@ createApp({
             const worker = async () => { while (order.length && rd.chapter === chapter) await viaProxy(order.shift()); };
             await Promise.all([worker(), worker(), worker()]);
         };
+        // a chapter's page list, fetched once and kept for a while: the next chapter is fetched ahead while you read,
+        // so it opens (or, in webtoon mode, appears under this one) without waiting
+        const pageCache = new Map();
+        const chapterPages = (c) => {
+            if (pageCache.has(c.id)) return pageCache.get(c.id);
+            const job = (async () => {
+                if (c.src) {   // website source: read the chapter page, pull out the image list
+                    const s = siteSources.value.find(x => x.id === c.src);
+                    if (!s) throw new Error('That source was removed.');
+                    const urls = await sourceApi.pages(s, c.link);
+                    if (!urls.length) throw new Error(`No pages found on ${s.name}. The site may have changed its layout — try another source, or edit this source’s selectors.`);
+                    return { pages: urls, referer: s.baseUrl };
+                }
+                let d;
+                try { d = await mangaDex({ kind: 'pages', chapter: c.id }); }
+                catch (err) { throw new Error(err.status === 400 ? 'Update the “igdb” Edge Function in Supabase to read in the app (see README).' : (err.message || 'Could not load this chapter')); }
+                if (d?.error) throw new Error(d.error);
+                const saver = PREFS.reader.saver && d.saver?.length;
+                return { pages: (saver ? d.saver : d.data).map(f => `${d.base}/${saver ? 'data-saver' : 'data'}/${d.hash}/${f}`), referer: null };
+            })();
+            job.catch(() => pageCache.delete(c.id));
+            pageCache.set(c.id, job);
+            if (pageCache.size > 10) pageCache.delete(pageCache.keys().next().value);
+            return job;
+        };
+        const prefetchNext = () => {
+            const last = rd.segs?.length ? rd.segs[rd.segs.length - 1].ch : rd.chapter;
+            const c = !rd.local && rdNeighbourOf(last, 1); if (!c) return;
+            chapterPages(c).then(r => r.pages.slice(0, 2).forEach(u => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = u; })).catch(() => {});
+        };
         const openChapter = async (c, manga = selectedAnime.value) => {
             if (!canReadInApp(c)) { cantReadHere(c); return; }
             addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
             freeBlobs();
-            Object.assign(rd, { open: true, manga, chapter: c, pages: [], i: 0, mode: defaultMode(manga), loading: true, error: '', local: false, marked: false, ui: true, source: c.src || null, referer: null, proxyAll: false });
+            const keepMode = rd.open && rd.manga?.id === manga?.id ? rd.mode : defaultMode(manga);
+            Object.assign(rd, { open: true, manga, chapter: c, pages: [], segs: [], appending: false, i: 0, mode: keepMode, loading: true, error: '', local: false, marked: false, ui: true, source: c.src || null, referer: null, proxyAll: false });
+            rdMarked.clear();
             pageRetried.clear();   // new chapter: every page may be retried once again
-            if (c.src) {   // website source: read the chapter page, pull out the image list
-                const s = siteSources.value.find(x => x.id === c.src);
-                try {
-                    if (!s) throw new Error('That source was removed.');
-                    const urls = await sourceApi.pages(s, c.link);
-                    if (rd.chapter?.id !== c.id) return;
-                    if (!urls.length) throw new Error(`No pages found on ${s.name}. The site may have changed its layout — try another source, or edit this source’s selectors.`);
-                    rd.referer = s.baseUrl; rd.pages = urls; preload(0);
-                } catch (err) { rd.error = friendlyErr(err); }
-                finally { rd.loading = false; }
-                return;
-            }
             try {
-                const d = await mangaDex({ kind: 'pages', chapter: c.id });
+                const r = await chapterPages(c);
                 if (rd.chapter?.id !== c.id) return;
-                if (d?.error) { rd.error = d.error; return; }
-                const files = PREFS.reader.saver && d.saver?.length ? d.saver : d.data;
-                rd.pages = files.map(f => `${d.base}/${PREFS.reader.saver && d.saver?.length ? 'data-saver' : 'data'}/${d.hash}/${f}`);
-                preload(0);
-            } catch (err) { rd.error = err.status === 400 ? 'Update the “igdb” Edge Function in Supabase to read in the app (see README).' : (err.message || 'Could not load this chapter'); }
-            finally { rd.loading = false; }
+                rd.referer = r.referer; rd.pages = [...r.pages]; rd.segs = [{ ch: c, start: 0, count: r.pages.length }];
+                preload(0); prefetchNext();
+                if (soloEntry(manga?.id)?.progress >= Math.floor(chNum(c))) rd.marked = true;
+                nextTick(() => { const el = document.querySelector('.reader-strip'); if (el) el.scrollTop = 0; });
+            } catch (err) { if (rd.chapter?.id === c.id) rd.error = friendlyErr(err); }
+            finally { if (rd.chapter?.id === c.id) rd.loading = false; }
         };
         const closeReader = () => { rd.open = false; freeBlobs(); rd.pages = []; };
         // mark the chapter read (only moves your progress forward; never back)
         const markChapterRead = async (c = rd.chapter, manga = rd.manga) => {
             const n = Math.floor(chNum(c)); if (!manga || Number.isNaN(n) || n <= 0) return;
+            rdMarked.add(c.id); if (c === rd.chapter || c?.id === rd.chapter?.id) rd.marked = true;
             const cur = soloEntry(manga.id)?.progress || 0;
-            if (n <= cur) { rd.marked = true; return; }
-            rd.marked = true;
+            if (n <= cur) return;
             await setProgressTo(manga, n);
         };
         // reader's button: read ⇄ unread
@@ -6664,7 +6758,11 @@ createApp({
             if (!rd.pages.length) return;
             const next = clamp(rd.i + d, 0, rd.pages.length);   // index == length → the "chapter finished" page
             rd.i = next; preload(next + 1);
-            if (next === rd.pages.length && PREFS.reader.autoMark && !rd.local && !rd.marked) markChapterRead();
+            if (next === rd.pages.length && d > 0) {
+                if (PREFS.reader.autoMark && !rd.local && !rd.marked) markChapterRead();
+                const c = !rd.local && rdNeighbour(1);
+                if (c) openChapter(c, rd.manga);   // straight on to the next chapter (fetched ahead, so it's instant)
+            }
         };
         const rdTap = (e) => {   // tap the left / right third to turn pages, the middle to show/hide the bars
             const x = e.clientX / window.innerWidth;
@@ -6673,13 +6771,37 @@ createApp({
             rdGo(forward ? 1 : -1);
         };
         const rdChapterGo = (d) => { const c = rdNeighbour(d); if (c) openChapter(c, rd.manga); };
-        // vertical (webtoon) mode: reaching the bottom counts as finishing the chapter
+        // vertical (webtoon) mode: one endless strip. Near the bottom, the next chapter is added under this one; once you
+        // scroll past a chapter's last page it counts as read, and the top bar follows the chapter you're in.
+        const rdSegOf = (n) => { const segs = rd.segs || []; for (let k = segs.length - 1; k >= 0; k--) if (n >= segs[k].start) return segs[k]; return null; };
+        const rdSeg = computed(() => rdSegOf(rd.i));
+        const appendNext = async () => {
+            const segs = rd.segs || []; const last = segs[segs.length - 1]; if (!last || rd.appending || rd.local) return;
+            const c = rdNeighbourOf(last.ch, 1); if (!c) return;
+            rd.appending = true; const manga = rd.manga;
+            try {
+                const r = await chapterPages(c);
+                if (!rd.open || rd.manga !== manga || rd.mode !== 'vertical' || rd.segs[rd.segs.length - 1] !== last) return;
+                rd.segs.push({ ch: c, start: rd.pages.length, count: r.pages.length });
+                rd.pages.push(...r.pages);
+                addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
+                prefetchNext();
+            } catch {} finally { rd.appending = false; }
+        };
         const onVerticalScroll = (e) => {
-            const el = e.target; const imgs = el.querySelectorAll('img');
+            const el = e.target; const imgs = el.querySelectorAll('img.rd-img');
             let k = 0; imgs.forEach((im, n) => { if (im.offsetTop - el.scrollTop < el.clientHeight / 2) k = n; });
             rd.i = k;
-            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40 && rd.pages.length && PREFS.reader.autoMark && !rd.local && !rd.marked) markChapterRead();
+            const seg = rdSegOf(k);
+            if (seg && seg.ch.id !== rd.chapter?.id) { rd.chapter = seg.ch; rd.marked = rdMarked.has(seg.ch.id) || (soloEntry(rd.manga?.id)?.progress || 0) >= Math.floor(chNum(seg.ch)); }
+            // every chapter above the one you're in is finished
+            if (PREFS.reader.autoMark && !rd.local) for (const s of rd.segs || []) { if (s === seg) break; if (!rdMarked.has(s.ch.id)) markChapterRead(s.ch); }
+            const nearEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight * 2.5;
+            if (nearEnd && rd.pages.length) appendNext();
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40 && rd.pages.length && PREFS.reader.autoMark && !rd.local && seg && !rdMarked.has(seg.ch.id)) markChapterRead(seg.ch);
         };
+        // switching away from webtoon with several chapters in the strip: just the one you're in
+        watch(() => rd.mode, (m, old) => { if (old === 'vertical' && m !== 'vertical' && (rd.segs || []).length > 1 && rd.chapter) { const c = rd.chapter; openChapter(c, rd.manga); } });
         window.addEventListener('keydown', (e) => {
             if (!rd.open) return;
             if (e.key === 'Escape') closeReader();
@@ -7171,8 +7293,9 @@ createApp({
         const adminMenu = ref(false);
 
         // ---------- CHAT ----------
-        // GIF search needs a free Tenor API key (Google Cloud → Tenor API). Leave empty to use uploads + links only.
-        const TENOR_KEY = '';
+        // GIFs (GIPHY, or Tenor) and the emoji list (emoji-api.com) come through the Edge Function, which keeps the keys.
+        // Without the keys, GIF uploads / links still work and the emoji panel shows a built-in set.
+        const TENOR_KEY = true;   // (the GIF search box always shows; it says what's missing if the key isn't set)
         const makeSticker = (emoji, text, c1, c2) => 'data:image/svg+xml;utf8,' + encodeURIComponent(
             `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs>`
             + `<g transform="rotate(-6 100 100)"><rect x="18" y="26" width="164" height="148" rx="38" fill="#fff"/><rect x="26" y="34" width="148" height="132" rx="31" fill="url(#g)"/>`
@@ -7197,7 +7320,7 @@ createApp({
         const chatPanel = ref('');               // '' | 'stickers' | 'gif'
         const chatSearch = ref('');
         const chatSearchBusy = ref(false);
-        const gifState = reactive({ q: '', results: [], loading: false, link: '' });
+        const gifState = reactive({ q: '', results: [], loading: false, link: '', error: '', by: '' });
         const chatScroll = ref(null);
         const chatFile = ref(null);
         const incomingRequests = computed(() => chats.value.filter(c => c.status === 'request' && c.requested_by !== uid()));
@@ -7385,17 +7508,53 @@ createApp({
         const sendSticker = (st) => { chatPanel.value = ''; sendAny({ kind: 'sticker', payload: { id: st.id } }); };
         const sendGif = (url, kind = 'gif') => { chatPanel.value = ''; gifState.link = ''; sendAny({ kind, payload: { url } }); };
         const sendGifLink = () => { const u = gifState.link.trim(); if (!/^https?:\/\/\S+$/i.test(u)) { showToast('Paste a full link (https://…)', 'error'); return; } sendGif(u, /\.gif(\?|$)/i.test(u) || /tenor|giphy/i.test(u) ? 'gif' : 'image'); };
+        const gifCall = async (q) => {
+            const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'gif', q } });
+            if (error) { let m = ''; try { m = (await error.context.json())?.error || ''; } catch {} throw new Error(/not allowed/i.test(m) ? 'GIF search needs the updated Edge Function (see README)' : m || 'GIF search failed'); }
+            return typeof data === 'string' ? JSON.parse(data) : data;
+        };
         const searchGifs = debounce(async () => {
-            const q = gifState.q.trim();
-            if (!TENOR_KEY || !q) { gifState.results = []; return; }
-            gifState.loading = true;
-            try {
-                const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${TENOR_KEY}&client_key=anicoop&limit=24&contentfilter=medium&media_filter=tinygif,gif`);
-                const json = await res.json();
-                gifState.results = (json.results || []).map(r => ({ id: r.id, preview: r.media_formats?.tinygif?.url, url: r.media_formats?.gif?.url || r.media_formats?.tinygif?.url })).filter(g => g.url);
-            } catch { gifState.results = []; }
-            finally { gifState.loading = false; }
+            const q = gifState.q.trim(), tok = ++gifTok;
+            gifState.loading = true; gifState.error = '';
+            try { const d = await gifCall(q); if (tok !== gifTok) return; gifState.results = d.items || []; gifState.by = d.by || ''; }
+            catch (err) { if (tok === gifTok) { gifState.results = []; gifState.error = err.message; } }
+            finally { if (tok === gifTok) gifState.loading = false; }
         }, 400);
+        let gifTok = 0;
+        // opening the GIF panel shows what's trending right away
+        watch(chatPanel, (p) => { if (p === 'gif' && !gifState.results.length && !gifState.loading) searchGifs(); if (p === 'emoji') loadEmojis(); });
+        // ---- emoji ----
+        const EMOJI_KEY = 'anicoop_emojis_v1', EMOJI_RECENT = 'anicoop_emoji_recent';
+        const EMOJI_GROUPS = [['smileys-emotion', '😀', 'Smileys'], ['people-body', '👋', 'People'], ['animals-nature', '🐶', 'Nature'], ['food-drink', '🍔', 'Food'],
+            ['travel-places', '✈️', 'Travel'], ['activities', '⚽', 'Activities'], ['objects', '💡', 'Objects'], ['symbols', '❤️', 'Symbols'], ['flags', '🏳️', 'Flags']];
+        const BUILTIN_EMOJI = '😀 😃 😄 😁 😆 😅 😂 🤣 🥲 😊 😇 🙂 😉 😍 🥰 😘 😋 😛 😜 🤪 😎 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫡 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 💀 ☠️ 👻 👽 🤖 💩 😺 😸 😹 😻 😼 😽 🙀 😿 😾 👋 🤚 ✋ 👌 🤌 🤏 ✌️ 🤞 🫶 🤟 🤘 🤙 👈 👉 👆 👇 👍 👎 ✊ 👊 👏 🙌 👐 🤲 🙏 💪 🧠 👀 👁️ 👅 👄 ❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❤️‍🔥 💕 💞 💓 💗 💖 💘 💯 💢 💥 💫 💦 💨 🔥 ✨ ⭐ 🌟 🎉 🎊 🏆 🥇 🎮 🎧 🎵 🎶 📺 🎬 📚 🍿 🍕 🍔 🍜 🍣 🍩 ☕ 🍺 🐐 🐱 🐶 🦊 🐸 🌸 🌈 ☀️ 🌙 ⚡ ❄️ 🚀 ✅ ❌ ❓ ❗ ‼️ ⚠️ 🔞'.split(' ').map(c => ({ c, n: '', g: 'smileys-emotion' }));
+        const emoji = reactive({ list: [], q: '', group: 'smileys-emotion', recent: readJSON(EMOJI_RECENT) || [], loaded: false, note: '' });
+        const loadEmojis = async () => {
+            if (emoji.loaded) return;
+            const c = readJSON(EMOJI_KEY);
+            if (c?.list?.length && Date.now() - c.at < 14 * 86400e3) { emoji.list = c.list; emoji.loaded = true; return; }
+            emoji.list = BUILTIN_EMOJI;
+            try {
+                const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'emoji' } });
+                if (error) throw error;
+                const d = typeof data === 'string' ? JSON.parse(data) : data;
+                if (d?.items?.length) { emoji.list = d.items; emoji.loaded = true; try { localStorage.setItem(EMOJI_KEY, JSON.stringify({ at: Date.now(), list: d.items })); } catch {} }
+            } catch { emoji.note = 'Showing the basic set: the full emoji list needs the updated Edge Function and its EMOJI_API_KEY secret.'; }
+        };
+        const emojiShown = computed(() => {
+            const q = emoji.q.trim().toLowerCase();
+            if (q) return emoji.list.filter(e => e.n.toLowerCase().includes(q)).slice(0, 240);
+            return emoji.list.filter(e => e.g === emoji.group);
+        });
+        // put the emoji where the cursor is in the message box (and remember it under "Recent")
+        let chatCaret = null;
+        const noteCaret = (e) => { chatCaret = e.target.selectionStart; };
+        const insertEmoji = (c) => {
+            const d = chatDraft.value, at = chatCaret == null ? d.length : Math.min(chatCaret, d.length);
+            chatDraft.value = d.slice(0, at) + c + d.slice(at); chatCaret = at + c.length;
+            emoji.recent = [c, ...emoji.recent.filter(x => x !== c)].slice(0, 24);
+            try { localStorage.setItem(EMOJI_RECENT, JSON.stringify(emoji.recent)); } catch {}
+        };
         watch(() => gifState.q, searchGifs);
         const onChatFile = async (e) => {
             const f = e.target.files?.[0]; e.target.value = '';
@@ -8326,13 +8485,13 @@ createApp({
 
         return {
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
-            regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew,
+            regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, music, musicLiked, musicRecent, openMusic,
             plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
             gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
             siteSources, srcForm, SOURCE_TEMPLATES, installRepoItem, repoLangs, repoShown, repoState, addSource, testSource, removeSource, loadRepo, repoInstalled, readSrc, srcView, readTabs, currentSite, chapterList, loadSourceFor, chooseMatch, changeMatch, onPageError,
-            EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
+            EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdSeg, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
             moreWatch, reader, readInfo, readLangs, readSources, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,
@@ -8355,7 +8514,7 @@ createApp({
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
             titleOf, initialOf, timeAgo, personOf,
             quickMenuFor, soloEntry, myEntry, onPlusClick, quickSolo, sheetAnime, closeSheet, sheetAction,
-            randomOpen, randomFilter, randomPick, randomRolling, randomSpinKey, randomGenres, randomPool, randomSourceLabel, randomWide, randomWideType, openRandom, openRandomSoon, rollRandom, clearRandomFilters,
+            randomOpen, randomFilter, randomStatusOpts, randomFormatOpts, randomWideFiltered, randomPick, randomRolling, randomSpinKey, randomGenres, randomPool, randomSourceLabel, randomWide, randomWideType, openRandom, openRandomSoon, rollRandom, clearRandomFilters,
             avatarInput, avatarUploading, changeProfilePic, onAvatarFile, removeProfilePic,
             cropper, cropImgStyle, cropDown, cropMove, cropUp, cropWheel, closeCropper, applyCrop, CROP_VIEW,
             profileEdit, openProfileEdit, saveProfileEdit,
@@ -8370,7 +8529,7 @@ createApp({
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
             STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
             incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendSticker, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
-            msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, TENOR_KEY, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,
+            msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, TENOR_KEY, emoji, EMOJI_GROUPS, emojiShown, insertEmoji, noteCaret, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,
             statColumns, myRecent, viewedRecent,
             // v7
             confirmBox, closeConfirm,

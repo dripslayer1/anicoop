@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.1">
+    <link rel="stylesheet" href="app.css?v=9.2">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.1" defer></script>
+    <script src="app.js?v=9.2" defer></script>
 </head>
 <body>
 
@@ -123,6 +123,8 @@
                 <div class="flex items-center gap-2">
                     <button @click.stop="openSettings()" class="icon-btn !w-9 !h-9" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                     <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
+                    <span class="hdr-space" aria-hidden="true"></span>
+                    <button @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
                     <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                         <i class="fa-solid fa-bell text-sm"></i>
                         <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
@@ -209,7 +211,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.2</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -257,7 +259,9 @@
                     <div class="hdr-side flex items-center justify-end gap-2">
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
-                        <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
+                        <span class="hdr-space hdr-extra" aria-hidden="true"></span>
+                        <button @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
+                    <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                             <i class="fa-solid fa-bell text-sm"></i>
                             <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
                         </button>
@@ -2151,17 +2155,31 @@
                                         <i class="fa-solid fa-reply"></i><span class="truncate flex-grow">Replying to: {{ msgPreview(chatReplyTo) }}</span>
                                         <button @click="chatReplyTo = null" class="text-mute hover:text-ink"><i class="fa-solid fa-xmark"></i></button>
                                     </div>
+                                    <div v-if="chatPanel === 'emoji'" class="chat-panel emoji-panel">
+                                        <input v-model="emoji.q" placeholder="Search emoji…" class="field !py-2 !rounded-xl !text-sm">
+                                        <div v-if="!emoji.q" class="emoji-tabs">
+                                            <button v-for="g in EMOJI_GROUPS" :key="g[0]" @click="emoji.group = g[0]" :class="{ on: emoji.group === g[0] }" :title="g[2]">{{ g[1] }}</button>
+                                        </div>
+                                        <template v-if="emoji.recent.length && !emoji.q"><p class="emoji-label">Recent</p><div class="emoji-grid !max-h-none"><button v-for="c in emoji.recent" :key="'r' + c" @click="insertEmoji(c)">{{ c }}</button></div></template>
+                                        <p v-if="!emoji.q && emoji.recent.length" class="emoji-label">{{ (EMOJI_GROUPS.find(g => g[0] === emoji.group) || [])[2] }}</p>
+                                        <div class="emoji-grid"><button v-for="e in emojiShown" :key="e.c" @click="insertEmoji(e.c)" :title="e.n">{{ e.c }}</button></div>
+                                        <p v-if="emoji.q && !emojiShown.length" class="text-xs text-mute mt-2">No emoji called that.</p>
+                                        <p v-if="emoji.note" class="text-[10px] text-mute mt-2">{{ emoji.note }}</p>
+                                    </div>
                                     <div v-if="chatPanel === 'stickers'" class="chat-panel">
                                         <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">
                                             <button v-for="st in STICKERS" :key="st.id" @click="sendSticker(st)" class="rounded-xl hover:bg-overlay p-1 transition-colors" :title="st.label"><img :src="st.url" class="w-full aspect-square" alt=""></button>
                                         </div>
                                     </div>
                                     <div v-if="chatPanel === 'gif'" class="chat-panel">
-                                        <input v-if="TENOR_KEY" v-model="gifState.q" placeholder="Search GIFs (Tenor)" class="field !py-2 !rounded-xl">
-                                        <div v-if="gifState.results.length" class="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mt-2 max-h-56 overflow-y-auto">
+                                        <input v-model="gifState.q" placeholder="Search GIFs…" class="field !py-2 !rounded-xl">
+                                        <p v-if="gifState.loading && !gifState.results.length" class="text-xs text-mute mt-2"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Loading GIFs…</p>
+                                        <p v-else-if="gifState.error" class="text-xs text-sub mt-2">{{ gifState.error }}</p>
+                                        <div v-if="gifState.results.length" class="gif-grid mt-2">
                                             <button v-for="g in gifState.results" :key="g.id" @click="sendGif(g.url)" class="rounded-lg overflow-hidden bg-raised"><img :src="g.preview" class="w-full h-24 object-cover" loading="lazy" decoding="async" alt=""></button>
                                         </div>
-                                        <div class="flex flex-wrap gap-2" :class="{ 'mt-2': TENOR_KEY }">
+                                        <p v-if="gifState.results.length && gifState.by" class="text-[10px] text-mute mt-1 text-right">Powered by {{ gifState.by }}</p>
+                                        <div class="flex flex-wrap gap-2 mt-2">
                                             <button @click="chatFile?.click()" class="btn-ghost !py-2 !px-3.5 !text-xs"><i class="fa-solid fa-upload"></i> Upload a GIF / picture</button>
                                             <form class="flex gap-1.5 flex-grow min-w-[220px]" @submit.prevent="sendGifLink">
                                                 <input v-model="gifState.link" placeholder="…or paste a GIF link (Tenor, Giphy, .gif)" class="field !py-2 !rounded-xl !text-xs">
@@ -2185,10 +2203,11 @@
                                     </div>
                                     <input ref="chatFile" type="file" accept="image/*" class="hidden" @change="onChatFile">
                                     <div class="flex items-end gap-2">
-                                        <button @click="chatPanel = chatPanel === 'stickers' ? '' : 'stickers'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0" :class="{ '!bg-ink !text-inv': chatPanel === 'stickers' }" title="Stickers"><i class="fa-solid fa-note-sticky text-sm"></i></button>
+                                        <button @click="chatPanel = chatPanel === 'emoji' ? '' : 'emoji'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0" :class="{ '!bg-ink !text-inv': chatPanel === 'emoji' }" title="Emoji"><i class="fa-regular fa-face-smile text-sm"></i></button>
+                                        <button @click="chatPanel = chatPanel === 'stickers' ? '' : 'stickers'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0 hidden sm:flex" :class="{ '!bg-ink !text-inv': chatPanel === 'stickers' }" title="Stickers"><i class="fa-solid fa-note-sticky text-sm"></i></button>
                                         <button @click="chatPanel = chatPanel === 'gif' ? '' : 'gif'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0 !font-mono !text-[10px] !font-bold" :class="{ '!bg-ink !text-inv': chatPanel === 'gif' }" title="GIFs + pictures">GIF</button>
                                         <button @click="chatPanel = ''; picker.target === 'chat' ? (picker.target = null) : chatPickerOpen()" class="icon-btn !w-10 !h-10 shrink-0" :class="{ '!bg-ink !text-inv': picker.target === 'chat' }" title="Recommend an anime"><i class="fa-solid fa-film text-sm"></i></button>
-                                        <textarea v-model="chatDraft" rows="1" maxlength="4000" placeholder="Message…" class="field !py-2.5 !rounded-2xl resize-none max-h-32" @keydown.enter.exact.prevent="sendText"></textarea>
+                                        <textarea v-model="chatDraft" @click="noteCaret" @keyup="noteCaret" @select="noteCaret" @blur="noteCaret" rows="1" maxlength="4000" placeholder="Message…" class="field !py-2.5 !rounded-2xl resize-none max-h-32" @keydown.enter.exact.prevent="sendText"></textarea>
                                         <button @click="sendText" :disabled="!chatDraft.trim() || chatSending" class="btn-primary !w-11 !h-11 !p-0 shrink-0" title="Send"><i :class="chatSending ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'" class="fa-solid"></i></button>
                                     </div>
                                 </div>
@@ -2255,17 +2274,31 @@
                                         <i class="fa-solid fa-reply"></i><span class="truncate flex-grow">Replying to: {{ msgPreview(chatReplyTo) }}</span>
                                         <button @click="chatReplyTo = null" class="text-mute hover:text-ink"><i class="fa-solid fa-xmark"></i></button>
                                     </div>
+                                    <div v-if="chatPanel === 'emoji'" class="chat-panel emoji-panel">
+                                        <input v-model="emoji.q" placeholder="Search emoji…" class="field !py-2 !rounded-xl !text-sm">
+                                        <div v-if="!emoji.q" class="emoji-tabs">
+                                            <button v-for="g in EMOJI_GROUPS" :key="g[0]" @click="emoji.group = g[0]" :class="{ on: emoji.group === g[0] }" :title="g[2]">{{ g[1] }}</button>
+                                        </div>
+                                        <template v-if="emoji.recent.length && !emoji.q"><p class="emoji-label">Recent</p><div class="emoji-grid !max-h-none"><button v-for="c in emoji.recent" :key="'r' + c" @click="insertEmoji(c)">{{ c }}</button></div></template>
+                                        <p v-if="!emoji.q && emoji.recent.length" class="emoji-label">{{ (EMOJI_GROUPS.find(g => g[0] === emoji.group) || [])[2] }}</p>
+                                        <div class="emoji-grid"><button v-for="e in emojiShown" :key="e.c" @click="insertEmoji(e.c)" :title="e.n">{{ e.c }}</button></div>
+                                        <p v-if="emoji.q && !emojiShown.length" class="text-xs text-mute mt-2">No emoji called that.</p>
+                                        <p v-if="emoji.note" class="text-[10px] text-mute mt-2">{{ emoji.note }}</p>
+                                    </div>
                                     <div v-if="chatPanel === 'stickers'" class="chat-panel">
                                         <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">
                                             <button v-for="st in STICKERS" :key="st.id" @click="sendSticker(st)" class="rounded-xl hover:bg-overlay p-1 transition-colors" :title="st.label"><img :src="st.url" class="w-full aspect-square" alt=""></button>
                                         </div>
                                     </div>
                                     <div v-if="chatPanel === 'gif'" class="chat-panel">
-                                        <input v-if="TENOR_KEY" v-model="gifState.q" placeholder="Search GIFs (Tenor)" class="field !py-2 !rounded-xl">
-                                        <div v-if="gifState.results.length" class="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mt-2 max-h-56 overflow-y-auto">
+                                        <input v-model="gifState.q" placeholder="Search GIFs…" class="field !py-2 !rounded-xl">
+                                        <p v-if="gifState.loading && !gifState.results.length" class="text-xs text-mute mt-2"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Loading GIFs…</p>
+                                        <p v-else-if="gifState.error" class="text-xs text-sub mt-2">{{ gifState.error }}</p>
+                                        <div v-if="gifState.results.length" class="gif-grid mt-2">
                                             <button v-for="g in gifState.results" :key="g.id" @click="sendGif(g.url)" class="rounded-lg overflow-hidden bg-raised"><img :src="g.preview" class="w-full h-24 object-cover" loading="lazy" decoding="async" alt=""></button>
                                         </div>
-                                        <div class="flex flex-wrap gap-2" :class="{ 'mt-2': TENOR_KEY }">
+                                        <p v-if="gifState.results.length && gifState.by" class="text-[10px] text-mute mt-1 text-right">Powered by {{ gifState.by }}</p>
+                                        <div class="flex flex-wrap gap-2 mt-2">
                                             <button @click="chatFile?.click()" class="btn-ghost !py-2 !px-3.5 !text-xs"><i class="fa-solid fa-upload"></i> Upload a GIF / picture</button>
                                             <form class="flex gap-1.5 flex-grow min-w-[220px]" @submit.prevent="sendGifLink">
                                                 <input v-model="gifState.link" placeholder="…or paste a GIF link (Tenor, Giphy, .gif)" class="field !py-2 !rounded-xl !text-xs">
@@ -2289,10 +2322,11 @@
                                     </div>
                                     <input ref="chatFile" type="file" accept="image/*" class="hidden" @change="onChatFile">
                                     <div class="flex items-end gap-2">
-                                        <button @click="chatPanel = chatPanel === 'stickers' ? '' : 'stickers'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0" :class="{ '!bg-ink !text-inv': chatPanel === 'stickers' }" title="Stickers"><i class="fa-solid fa-note-sticky text-sm"></i></button>
+                                        <button @click="chatPanel = chatPanel === 'emoji' ? '' : 'emoji'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0" :class="{ '!bg-ink !text-inv': chatPanel === 'emoji' }" title="Emoji"><i class="fa-regular fa-face-smile text-sm"></i></button>
+                                        <button @click="chatPanel = chatPanel === 'stickers' ? '' : 'stickers'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0 hidden sm:flex" :class="{ '!bg-ink !text-inv': chatPanel === 'stickers' }" title="Stickers"><i class="fa-solid fa-note-sticky text-sm"></i></button>
                                         <button @click="chatPanel = chatPanel === 'gif' ? '' : 'gif'; picker.target = null" class="icon-btn !w-10 !h-10 shrink-0 !font-mono !text-[10px] !font-bold" :class="{ '!bg-ink !text-inv': chatPanel === 'gif' }" title="GIFs + pictures">GIF</button>
                                         <button @click="chatPanel = ''; picker.target === 'chat' ? (picker.target = null) : chatPickerOpen()" class="icon-btn !w-10 !h-10 shrink-0" :class="{ '!bg-ink !text-inv': picker.target === 'chat' }" title="Recommend an anime"><i class="fa-solid fa-film text-sm"></i></button>
-                                        <textarea v-model="chatDraft" rows="1" maxlength="4000" placeholder="Message the group…" class="field !py-2.5 !rounded-2xl resize-none max-h-32" @keydown.enter.exact.prevent="sendText"></textarea>
+                                        <textarea v-model="chatDraft" @click="noteCaret" @keyup="noteCaret" @select="noteCaret" @blur="noteCaret" rows="1" maxlength="4000" placeholder="Message the group…" class="field !py-2.5 !rounded-2xl resize-none max-h-32" @keydown.enter.exact.prevent="sendText"></textarea>
                                         <button @click="sendText" :disabled="!chatDraft.trim() || chatSending" class="btn-primary !w-11 !h-11 !p-0 shrink-0" title="Send"><i :class="chatSending ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'" class="fa-solid"></i></button>
                                     </div>
                                 </div>
@@ -2704,6 +2738,7 @@
             </div>
             <div class="pbar-side">
                 <button @click="srcBadge" class="pbar-src" :class="{ on: player.mode === 'yt', warn: player.full && player.mode === 'preview' }" :title="player.mode === 'yt' ? 'Full song from YouTube Music (click for 30-second previews only)' : player.full && player.mode === 'preview' ? '30-second preview: ' + (player.why || 'the full song didn’t play') + '. Click to try the full song again.' : 'Previews only (click for full songs)'">{{ player.mode === 'yt' ? 'Full' : player.mode === 'preview' ? '0:30' : player.full ? 'Full' : '0:30' }}</button>
+                <button @click="openMusic()" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: music.open }" title="Music: search, playlists, liked"><i class="fa-solid fa-music"></i></button>
                 <button @click="openPlPicker(player.song, $event)" class="pbar-btn pbar-opt pbar-q-btn" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i></button>
                 <button v-if="player.mode === 'yt'" @click="player.video = !player.video" class="pbar-btn pbar-opt" :class="{ on: player.video }" :title="player.video ? 'Hide the video' : 'Show the video'"><i class="fa-solid fa-film"></i></button>
                 <div class="relative">
@@ -2727,6 +2762,74 @@
                 <button @click="hidePlayer" class="pbar-btn" title="Hide the player (the music keeps playing)"><i class="fa-solid fa-chevron-down"></i></button>
             </div>
         </div></transition>
+        <!-- the music panel: search songs, your playlists, liked and recent songs, from anywhere (even while reading) -->
+        <transition name="music">
+            <div v-if="music.open && currentUser" class="music-panel" role="dialog" aria-label="Music">
+                <div class="flex items-center gap-2 px-4 pt-4 pb-2">
+                    <span class="w-8 h-8 rounded-full bg-[#1DB954] text-black flex items-center justify-center shrink-0"><i class="fa-solid fa-music text-sm"></i></span>
+                    <p class="font-display font-bold text-ink text-lg flex-grow">Music</p>
+                    <button v-if="player.song && player.hidden" @click="showPlayer" class="text-xs font-bold text-sub hover:text-ink mr-1">Show player</button>
+                    <button @click="music.open = false" class="icon-btn !w-8 !h-8" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button>
+                </div>
+                <div class="seg mx-4 mb-2 !flex">
+                    <button v-for="t in [['search', 'Search'], ['playlists', 'Playlists'], ['liked', 'Liked'], ['recent', 'Recent']]" :key="t[0]" @click="music.tab = t[0]; music.pl = null" :class="{ 'is-on': music.tab === t[0] }" class="seg-btn flex-1 !px-1.5">{{ t[1] }}</button>
+                </div>
+                <div class="music-body">
+                    <template v-if="music.tab === 'search'">
+                        <div class="relative mb-2"><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-mute text-xs"></i><input id="music-q" v-model="music.q" placeholder="Songs or artists…" class="field !py-2.5 !pl-9 !rounded-xl !text-sm"></div>
+                        <p v-if="music.loading && !music.results.length" class="mu-note"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Searching…</p>
+                        <p v-else-if="!music.q.trim()" class="mu-note">Find any song and play it without leaving what you're doing.</p>
+                        <p v-else-if="music.error" class="mu-note">{{ music.error }}</p>
+                        <div v-for="(x, k) in music.results" :key="'s' + x.id" class="mu-row" :class="{ on: isPlaying(x) }" @click="playPreview(x, music.results)">
+                                <span class="mu-art"><img v-if="x.coverImage?.large" :src="x.coverImage.large" alt="" loading="lazy"><i v-else class="fa-solid fa-music"></i><span class="mu-play"><i class="fa-solid" :class="player.loading && player.song?.id === x.id ? 'fa-circle-notch fa-spin' : isPlaying(x) ? 'fa-pause' : 'fa-play'"></i></span></span>
+                                <span class="min-w-0 flex-grow"><span class="mu-t block truncate text-[13px] font-semibold text-ink">{{ x.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (x.artists || []).join(', ') }}</span></span>
+                                <button @click.stop="openPlPicker(x, $event)" class="vol-btn !w-8 !h-8 shrink-0" title="Add to playlist"><i class="fa-solid fa-circle-plus text-[13px]"></i></button>
+                            </div>
+                    </template>
+                    <template v-else-if="music.tab === 'playlists'">
+                        <template v-if="music.pl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <button @click="music.pl = null" class="vol-btn !w-8 !h-8" title="Back"><i class="fa-solid fa-arrow-left text-xs"></i></button>
+                                <p class="font-semibold text-ink text-sm truncate flex-grow">{{ music.pl.name }}</p>
+                                <button v-if="(music.pl.songs || []).length" @click="playPreview(music.pl.songs[0], music.pl.songs)" class="sp-play !w-8 !h-8 !text-[11px]" title="Play"><i class="fa-solid fa-play"></i></button>
+                            </div>
+                            <p v-if="!(music.pl.songs || []).length" class="mu-note">This playlist is empty. Add songs with the ⊕ button next to any song.</p>
+                            <div v-for="(x, k) in music.pl.songs" :key="'p' + k + x.id" class="mu-row" :class="{ on: isPlaying(x) }" @click="playPreview(x, music.pl.songs)">
+                                <span class="mu-art"><img v-if="x.coverImage?.large" :src="x.coverImage.large" alt="" loading="lazy"><i v-else class="fa-solid fa-music"></i><span class="mu-play"><i class="fa-solid" :class="player.loading && player.song?.id === x.id ? 'fa-circle-notch fa-spin' : isPlaying(x) ? 'fa-pause' : 'fa-play'"></i></span></span>
+                                <span class="min-w-0 flex-grow"><span class="mu-t block truncate text-[13px] font-semibold text-ink">{{ x.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (x.artists || []).join(', ') }}</span></span>
+                                <button @click.stop="openPlPicker(x, $event)" class="vol-btn !w-8 !h-8 shrink-0" title="Add to playlist"><i class="fa-solid fa-circle-plus text-[13px]"></i></button>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <p v-if="plMissing" class="mu-note">Playlists need the latest database update: run the whole supabase_setup.sql in Supabase again.</p>
+                            <button v-for="p in playlists" :key="p.id" @click="music.pl = p" class="mu-row w-full text-left">
+                                <span class="mu-art"><img v-if="plCovers(p)[0]" :src="plCovers(p)[0]" alt=""><i v-else class="fa-solid fa-list"></i></span>
+                                <span class="min-w-0 flex-grow"><span class="block truncate text-[13px] font-semibold text-ink">{{ p.name }}</span><span class="block text-[11px] text-sub">{{ (p.songs || []).length }} songs</span></span>
+                                <i class="fa-solid fa-chevron-right text-mute text-xs"></i>
+                            </button>
+                            <p v-if="!playlists.length && !plMissing" class="mu-note">No playlists yet.</p>
+                            <button v-if="!plMissing" @click="createPlaylist()" class="btn-ghost !py-2 !px-3.5 !text-xs mt-2"><i class="fa-solid fa-plus"></i> New playlist</button>
+                        </template>
+                    </template>
+                    <template v-else-if="music.tab === 'liked'">
+                        <p v-if="!musicLiked.length" class="mu-note">Songs you like show up here.</p>
+                        <div v-for="(x, k) in musicLiked" :key="'l' + x.id" class="mu-row" :class="{ on: isPlaying(x) }" @click="playPreview(x, musicLiked)">
+                                <span class="mu-art"><img v-if="x.coverImage?.large" :src="x.coverImage.large" alt="" loading="lazy"><i v-else class="fa-solid fa-music"></i><span class="mu-play"><i class="fa-solid" :class="player.loading && player.song?.id === x.id ? 'fa-circle-notch fa-spin' : isPlaying(x) ? 'fa-pause' : 'fa-play'"></i></span></span>
+                                <span class="min-w-0 flex-grow"><span class="mu-t block truncate text-[13px] font-semibold text-ink">{{ x.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (x.artists || []).join(', ') }}</span></span>
+                                <button @click.stop="openPlPicker(x, $event)" class="vol-btn !w-8 !h-8 shrink-0" title="Add to playlist"><i class="fa-solid fa-circle-plus text-[13px]"></i></button>
+                            </div>
+                    </template>
+                    <template v-else>
+                        <p v-if="!musicRecent.length" class="mu-note">Songs you play show up here.</p>
+                        <div v-for="(x, k) in musicRecent" :key="'r' + x.id" class="mu-row" :class="{ on: isPlaying(x) }" @click="playPreview(x, musicRecent)">
+                                <span class="mu-art"><img v-if="x.coverImage?.large" :src="x.coverImage.large" alt="" loading="lazy"><i v-else class="fa-solid fa-music"></i><span class="mu-play"><i class="fa-solid" :class="player.loading && player.song?.id === x.id ? 'fa-circle-notch fa-spin' : isPlaying(x) ? 'fa-pause' : 'fa-play'"></i></span></span>
+                                <span class="min-w-0 flex-grow"><span class="mu-t block truncate text-[13px] font-semibold text-ink">{{ x.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (x.artists || []).join(', ') }}</span></span>
+                                <button @click.stop="openPlPicker(x, $event)" class="vol-btn !w-8 !h-8 shrink-0" title="Add to playlist"><i class="fa-solid fa-circle-plus text-[13px]"></i></button>
+                            </div>
+                    </template>
+                </div>
+            </div>
+        </transition>
         <!-- "Add to playlist": one picker for any song, opened from cards, song rows, the player bar or a song page -->
         <template v-if="plPicker.open && plPicker.song && currentUser">
             <div class="pl-pick-back" @click="closePlPicker"></div>
@@ -3718,14 +3821,24 @@
                         </div>
                         <button @click="randomOpen = false" class="icon-btn !w-9 !h-9"><i class="fa-solid fa-xmark"></i></button>
                     </div>
-                    <div class="grid grid-cols-2 gap-2.5">
+                    <div class="seg w-full mb-3">
+                        <button @click="randomFilter.from = 'all'" :class="{ 'is-on': randomFilter.from === 'all' }" class="seg-btn flex-1"><i class="fa-solid fa-earth-americas mr-1.5"></i>Everything</button>
+                        <button @click="randomFilter.from = 'lists'" :class="{ 'is-on': randomFilter.from === 'lists' }" class="seg-btn flex-1"><i class="fa-solid fa-list mr-1.5"></i>My lists</button>
+                    </div>
+                    <div v-if="randomWide" class="grid grid-cols-2 gap-2.5">
+                        <div class="chip-wrap" :class="{ 'col-span-2': !randomStatusOpts.length }"><select v-model="randomFilter.wgenre" :class="{ 'is-on': randomFilter.wgenre }" class="chip w-full"><option value="">Any genre</option><option v-for="g in genreOptions" :key="g.v" :value="g.v">{{ g.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div v-if="randomStatusOpts.length" class="chip-wrap"><select v-model="randomFilter.wstatus" :class="{ 'is-on': randomFilter.wstatus }" class="chip w-full"><option value="">Any status</option><option v-for="o in randomStatusOpts" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div v-if="randomFormatOpts.length" class="chip-wrap"><select v-model="randomFilter.wformat" :class="{ 'is-on': randomFilter.wformat }" class="chip w-full"><option value="">{{ section === 'movies' ? 'Movies & shows' : 'Any format' }}</option><option v-for="o in randomFormatOpts" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div v-if="section === 'manga'" class="chip-wrap"><select v-model="randomFilter.wcountry" :class="{ 'is-on': randomFilter.wcountry }" class="chip w-full"><option v-for="o in countryOptions" :key="o.v" :value="o.v">{{ o.v ? o.l : 'Manga, manhwa & manhua' }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                    </div>
+                    <div v-if="!randomWide" class="grid grid-cols-2 gap-2.5">
                         <div class="chip-wrap"><select v-model="randomFilter.status" :class="{ 'is-on': randomFilter.status }" class="chip w-full"><option value="">Any status</option><option v-for="s in statusPick()" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                         <div class="chip-wrap"><select v-model="randomFilter.genre" :class="{ 'is-on': randomFilter.genre }" class="chip w-full"><option value="">Any genre</option><option v-for="g in randomGenres" :key="g" :value="g">{{ g }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                         <div v-if="randomSourceLabel === 'squad lists' && squads.length" class="chip-wrap col-span-2"><select v-model="randomFilter.squad" :class="{ 'is-on': randomFilter.squad }" class="chip w-full"><option value="">Any squad</option><option v-for="s in squads" :key="s.id" :value="s.id">{{ s.name }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                     </div>
                     <div class="flex items-center justify-between mt-3 mb-5">
-                        <p class="label">{{ randomWide ? 'from all ' + (({ MANGA: 'manga', GAME: 'games' })[randomWideType] || 'anime') : randomPool.length + ' match' + (randomPool.length === 1 ? '' : 'es') }}</p>
-                        <button @click="clearRandomFilters" :disabled="!randomFilter.status && !randomFilter.genre && !randomFilter.squad" class="text-xs font-bold text-sub hover:text-ink disabled:opacity-30 transition-colors"><i class="fa-solid fa-filter-circle-xmark mr-1"></i>Clear filters</button>
+                        <p class="label">{{ randomWide ? 'from all ' + (({ MANGA: 'manga', GAME: 'games', TV: 'movies & shows', SONG: 'songs' })[randomWideType] || 'anime') : randomPool.length + ' match' + (randomPool.length === 1 ? '' : 'es') }}</p>
+                        <button @click="clearRandomFilters" :disabled="randomWide ? !randomWideFiltered : (!randomFilter.status && !randomFilter.genre && !randomFilter.squad)" class="text-xs font-bold text-sub hover:text-ink disabled:opacity-30 transition-colors"><i class="fa-solid fa-filter-circle-xmark mr-1"></i>Clear</button>
                     </div>
                     <div class="h-64 flex items-center justify-center mb-5">
                         <transition name="roll" mode="out-in">
@@ -3742,7 +3855,7 @@
                             </div>
                             <div v-else key="empty" class="text-center text-sub text-sm">
                                 <i class="fa-solid fa-dice text-5xl text-line2 mb-4 block"></i>
-                                {{ randomWide || randomPool.length ? 'Hit Roll.' : 'Nothing in your list matches.' }}
+                                {{ randomWide || randomPool.length ? 'Hit Roll.' : 'Nothing on your lists matches.' }}
                             </div>
                         </transition>
                     </div>
@@ -3913,6 +4026,7 @@
                     <p class="text-white font-semibold text-sm truncate">{{ vp.anime ? titleOf(vp.anime) : '' }}</p>
                     <p class="text-white/60 text-xs truncate">{{ vp.label }}<span v-if="vp.ep?.title && vp.ep.title !== vp.label && !vp.local"> · {{ vp.ep.title }}</span></p>
                 </div>
+                <button @click="openMusic()" class="yt-btn" title="Music" aria-label="Music"><i class="fa-solid fa-music"></i></button>
                 <button v-if="vp.abs && !vp.local" @click="markEpisodeWatched" :disabled="vp.marked" class="vp-btn" :class="{ on: vp.marked }"><i class="fa-solid fa-check"></i><span class="hidden sm:inline">{{ vp.marked ? 'Watched' : 'Mark watched' }}</span></button>
             </div>
             <div class="vp-stage">
@@ -4131,6 +4245,7 @@
                 <div class="reader-seg">
                     <button v-for="m in [{ v: 'rtl', l: 'Manga ←' }, { v: 'ltr', l: '→ Comic' }, { v: 'vertical', l: 'Webtoon ↓' }]" :key="m.v" @click="setReadMode(m.v)" :class="{ on: rd.mode === m.v }">{{ m.l }}</button>
                 </div>
+                <button @click="openMusic()" class="yt-btn" title="Music" aria-label="Music"><i class="fa-solid fa-music"></i></button>
                 <button v-if="!rd.local && rd.chapter?.ch && rd.manga" @click="toggleReaderMark()" class="reader-mark" :class="{ done: rd.marked }" :title="rd.marked ? 'Mark this chapter unread' : 'Mark this chapter read'"><i class="fa-solid" :class="rd.marked ? 'fa-check-double' : 'fa-check'"></i><span class="hidden sm:inline">{{ rd.marked ? 'Read · undo' : 'Mark read' }}</span></button>
             </div>
 
@@ -4142,11 +4257,16 @@
 
             <!-- webtoon: one long strip -->
             <div v-else-if="rd.mode === 'vertical'" class="reader-strip" @scroll.passive="onVerticalScroll" @click="rd.ui = !rd.ui">
-                <img v-for="(p, n) in rd.pages" :key="n" :src="p" :loading="n < 3 ? 'eager' : 'lazy'" decoding="async" referrerpolicy="no-referrer" @error="onPageError(n)" alt="">
-                <div class="reader-end" @click.stop>
+                <template v-for="(p, n) in rd.pages" :key="n">
+                    <div v-if="n && (rd.segs || []).some(s => s.start === n)" class="reader-divider" @click.stop><i class="fa-solid fa-check text-volt"></i> Chapter {{ (rd.segs.find(s => s.start === n) || {}).ch?.ch }}</div>
+                    <img class="rd-img" :src="p" :loading="n < 3 ? 'eager' : 'lazy'" decoding="async" referrerpolicy="no-referrer" @error="onPageError(n)" alt="">
+                </template>
+                <div v-if="rd.appending" class="reader-end" @click.stop><i class="fa-solid fa-circle-notch fa-spin text-2xl text-white/70"></i></div>
+                <div v-else class="reader-end" @click.stop>
                     <p class="text-white font-semibold"><i class="fa-solid fa-check text-volt mr-2"></i>End of chapter{{ rd.chapter?.ch ? ' ' + rd.chapter.ch : '' }}</p>
                     <button v-if="!rd.local && rdNeighbour(1)" @click="rdChapterGo(1)" class="btn-primary !py-2.5 !text-xs">Next: chapter {{ rdNeighbour(1).ch }} <i class="fa-solid fa-arrow-right"></i></button>
-                    <button v-else @click="closeReader" class="btn-ghost !py-2.5 !text-xs">Close</button>
+                    <p v-else-if="!rd.local" class="text-xs text-white/60">That’s the latest chapter on this source.</p>
+                    <button v-if="rd.local || !rdNeighbour(1)" @click="closeReader" class="btn-ghost !py-2.5 !text-xs">Close</button>
                 </div>
             </div>
 
@@ -4163,7 +4283,7 @@
 
             <div v-if="rd.pages.length" class="reader-bottom">
                 <button v-if="!rd.local" @click="rdChapterGo(-1)" :disabled="!rdNeighbour(-1)" class="yt-btn" title="Previous chapter"><i class="fa-solid fa-backward-step"></i></button>
-                <span class="font-mono text-[11px] text-white/80 w-16 text-center shrink-0">{{ Math.min(rd.i + 1, rd.pages.length) }} / {{ rd.pages.length }}</span>
+                <span class="font-mono text-[11px] text-white/80 w-16 text-center shrink-0">{{ rd.mode === 'vertical' && rdSeg ? Math.min(rd.i - rdSeg.start + 1, rdSeg.count) + ' / ' + rdSeg.count : Math.min(rd.i + 1, rd.pages.length) + ' / ' + rd.pages.length }}</span>
                 <input v-if="rd.mode !== 'vertical'" type="range" min="0" :max="rd.pages.length" :value="rd.i" @input="rd.i = Number($event.target.value)" class="reader-range" :class="{ rtl: rd.mode === 'rtl' }" aria-label="Page">
                 <span v-else class="flex-grow"></span>
                 <button v-if="!rd.local" @click="rdChapterGo(1)" :disabled="!rdNeighbour(1)" class="yt-btn" title="Next chapter"><i class="fa-solid fa-forward-step"></i></button>

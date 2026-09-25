@@ -369,3 +369,28 @@ to search YouTube reliably. No database change.
   hover, so the card's play button stays clickable.
 * **Songs:** the "+1 Play" row is gone from the card menu.
 * **Random pick:** only uses titles (and genres) from the section you're in; on Browse it used to mix every section.
+
+## v9.2 — continuous reading, music panel, random pick, emoji & GIFs
+
+**Update:**
+1. Re-upload the folder.
+2. Supabase → Edge Functions → `igdb` → paste the new `supabase/functions/igdb/index.ts` → Deploy.
+3. Supabase → Edge Functions → **Secrets** → add:
+   * `EMOJI_API_KEY` = your emoji-api.com key (the full emoji list in chat)
+   * `GIPHY_API_KEY` = a free GIPHY key (developers.giphy.com → Create an App → API). `TENOR_API_KEY` works too.
+   Without them, chat shows a basic emoji set, and GIF uploads / links still work.
+
+* **Continuous reading (manga & manhwa):** the next chapter's pages are fetched while you read. In Manga / Comic mode,
+  turning past the last page opens the next chapter straight away; in Webtoon mode it's added under the one you're
+  reading, with a small "Chapter N" divider. Every finished chapter is saved as read.
+* **Music panel** (♪ in the header, the manga reader, the video player and the song bar): search songs, your
+  playlists, liked and recent songs, and play them without leaving what you're doing. It opens on top of everything.
+* **Random pick:** "Everything" (the whole catalogue) or "My lists". Everything has Browse's filters for the section
+  you're in: genre (songs get all their genres), status (airing / publishing / finished / upcoming; games: released /
+  upcoming / early access), format, and manga / manhwa / manhua.
+* **Completed counts everything:** a manga without a final count uses MangaDex's latest chapter; a show listed without
+  an episode count gets it from TMDB; a movie counts as 1.
+* **Song search** also asks Spotify, so artists Apple's search misses (e.g. RILEY) show up; Apple's artist lookup
+  checks 25 names instead of 5.
+* **Chat:** emoji picker (search, categories, recent) and GIF search with trending GIFs.
+* **Header:** a little space again between the feedback icon and notifications.
