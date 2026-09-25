@@ -1,4 +1,72 @@
-# anicoop — how to open it, put it online and install it as an app## Open it on your PC right now (quick test)Double-click `index.html`. It opens in your browser and you can log in and use everything.Two things only work once it's online (step 2): installing it as an app, and some YouTube trailers.YouTube needs a real website address to play trailers, so some won't play from a file on your PC.**Want the full app on your PC without putting it online?** If you have VS Code:1. Install the "Live Server" extension.2. Open this folder in VS Code and click **Go Live** in the bottom-right corner.3. It opens at `http://127.0.0.1:5500`, where trailers play and the Install button works.anicoop is an installable web app (a PWA). You put this folder online once, and after that you and your friends open the link and tap Install. You get an app icon, it opens in its own window, it starts fast and it updates itself.## 1\. Set up the database (skip this if you already did it)Supabase → SQL Editor → paste all of `supabase\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_setup.sql` → Run.## 2\. Put it online for free (about 2 minutes)The easiest way is Netlify Drop:1. Go to https://app.netlify.com/drop and log in. It's free.2. Drag this whole **anicoop** folder onto the page.3. You get a link like `https://something.netlify.app`. You can rename the site in Site settings.Other free hosts work too: GitHub Pages, Cloudflare Pages or Vercel. It has to be served over **https** or it can't be installed.## 3\. Tell Supabase about the new linkSupabase → Authentication → URL Configuration:* **Site URL**: your new link* **Redirect URLs**: add your new linkWithout this, the confirmation links in sign-up emails still point to the old address.## 4\. Install it (each friend does this once)After installing, anicoop gets its own icon in the Start menu, on the desktop and in the taskbar. It opens in its own window like any other program.|Device|How||-|-||Windows / Mac (Chrome or Edge)|Open the link. Click the Install icon on the right side of the address bar, or use the "Install anicoop" pop-up in the app.||Android (Chrome)|Open the link, then tap ⋮ → **Install app** (or use the pop-up).||iPhone / iPad (Safari)|Open the link, then tap Share → **Add to Home Screen**.|## Updating the app laterChange the files, then drag the folder onto Netlify again. In `sw.js`, change `VERSION` (for example to `anicoop-v2.0.1`). Everyone's app picks up the new version the next time they open it.## Changing styles`app.css` is pre-built from `src/input.css` with Tailwind. After editing classes, rebuild it:```npx tailwindcss@3 -c src/tailwind.config.js -i src/input.css -o app.css --minify```## Files* `index.html` – page layout* `app.js` – all the app logic* `app.css` – compiled styles* `sw.js` + `manifest.webmanifest` + `icons/` – what makes it an installable app* `supabase\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_setup.sql` – database setup
+# anicoop — how to open it, put it online and install it as an app
+
+## Open it on your PC right now (quick test)
+
+Double-click `index.html`. It opens in your browser and you can log in and use everything.
+Two things only work once it's online (step 2): installing it as an app, and some YouTube trailers.
+YouTube needs a real website address to play trailers, so some won't play from a file on your PC.
+
+**Want the full app on your PC without putting it online?** If you have VS Code:
+
+1. Install the "Live Server" extension.
+2. Open this folder in VS Code and click **Go Live** in the bottom-right corner.
+3. It opens at `http://127.0.0.1:5500`, where trailers play and the Install button works.
+
+anicoop is an installable web app (a PWA). You put this folder online once, and after that you and your friends open the link and tap Install. You get an app icon, it opens in its own window, it starts fast and it updates itself.
+
+## 1\. Set up the database (skip this if you already did it)
+
+Supabase → SQL Editor → paste all of `supabase\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_setup.sql` → Run.
+
+## 2\. Put it online for free (about 2 minutes)
+
+The easiest way is Netlify Drop:
+
+1. Go to https://app.netlify.com/drop and log in. It's free.
+2. Drag this whole **anicoop** folder onto the page.
+3. You get a link like `https://something.netlify.app`. You can rename the site in Site settings.
+
+Other free hosts work too: GitHub Pages, Cloudflare Pages or Vercel. It has to be served over **https** or it can't be installed.
+
+## 3\. Tell Supabase about the new link
+
+Supabase → Authentication → URL Configuration:
+
+* **Site URL**: your new link
+* **Redirect URLs**: add your new link
+
+Without this, the confirmation links in sign-up emails still point to the old address.
+
+## 4\. Install it (each friend does this once)
+
+After installing, anicoop gets its own icon in the Start menu, on the desktop and in the taskbar. It opens in its own window like any other program.
+
+|Device|How|
+|-|-|
+|Windows / Mac (Chrome or Edge)|Open the link. Click the Install icon on the right side of the address bar, or use the "Install anicoop" pop-up in the app.|
+|Android (Chrome)|Open the link, then tap ⋮ → **Install app** (or use the pop-up).|
+|iPhone / iPad (Safari)|Open the link, then tap Share → **Add to Home Screen**.|
+
+## Updating the app later
+
+Change the files, then drag the folder onto Netlify again. In `sw.js`, change `VERSION` (for example to `anicoop-v2.0.1`). Everyone's app picks up the new version the next time they open it.
+
+## Changing styles
+
+`app.css` is pre-built from `src/input.css` with Tailwind. After editing classes, rebuild it:
+
+```
+npx tailwindcss@3 -c src/tailwind.config.js -i src/input.css -o app.css --minify
+```
+
+## Files
+
+* `index.html` – page layout
+* `app.js` – all the app logic
+* `app.css` – compiled styles
+* `sw.js` + `manifest.webmanifest` + `icons/` – what makes it an installable app
+* `supabase\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_setup.sql` – database setup
+
 
 ## Games section (IGDB / Twitch) — one-time setup
 
@@ -394,3 +462,29 @@ to search YouTube reliably. No database change.
   checks 25 names instead of 5.
 * **Chat:** emoji picker (search, categories, recent) and GIF search with trending GIFs.
 * **Header:** a little space again between the feedback icon and notifications.
+
+## v9.3 — Mihon server: AllManga, Bato, Webtoons, Tappytoon (and any other Mihon extension)
+
+**Update:** re-upload the folder (no database or Edge Function change).
+
+Some sites need their own extension code ("Not readable here: this site needs its own Android extension code"). A
+**Mihon server** runs those real Mihon extensions on a computer, and anicoop reads through it.
+
+### Set it up once (about 10 minutes)
+1. Download **Suwayomi-Server** from https://github.com/Suwayomi/Suwayomi-Server/releases (latest release).
+   On Windows take the Windows `.zip` (Java is included), unzip it, and run `Suwayomi Launcher`.
+2. It opens its own page in your browser at **http://localhost:4567**.
+3. There: **Settings → Browse → Extension repositories** (called **Extension stores** in newer versions) → add
+   `https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json`
+4. **Browse → Extensions** → install **AllManga**, **Bato.to**, **Webtoons.com** and **Tappytoon** (or any other).
+   Tappytoon's paid chapters need you to log in to Tappytoon in that source's settings; free chapters work without.
+5. In anicoop: a manga's **Read** window → **Extensions** → **Mihon server** → address `http://localhost:4567` →
+   **Connect** → **Add** the sources you want. If Chrome asks to let the site "access other apps and services on this
+   device", click **Allow**.
+
+### Good to know
+* The server has to be running while you read (it's on your computer). The address and login stay in your browser.
+* To use it from your phone or from friends' devices, the server has to run on a computer that's always on
+  (a home PC or a cheap / free cloud server) with a login set in its settings (Settings → Server → Basic
+  authentication), reached over https. Enter that login in anicoop's Mihon server box.
+* Sites behind Cloudflare's "checking your browser" page may still refuse the server.

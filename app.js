@@ -817,11 +817,64 @@ const archiveApi = {
     },
     async videos(link) { return [{ name: 'Internet Archive', ...videoOf(link, IA) }]; },
 };
+/* ------------------------------------------------------------------
+   Mihon server (Suwayomi-Server): runs the real Mihon extensions on a computer you control, so sites that need their
+   own extension code (AllManga, Bato, Webtoons, Tappytoon…) work here too. The website talks to the server directly
+   (its GraphQL API). The address and optional login stay in this browser only — never in your synced settings.
+   ------------------------------------------------------------------ */
+const MIHON_KEY = 'anicoop_mihon_v1';
+const mihonCfg = reactive({ url: '', user: '', pass: '', ...(readJSON(MIHON_KEY) || {}) });
+const saveMihonCfg = () => { try { localStorage.setItem(MIHON_KEY, JSON.stringify({ url: mihonCfg.url, user: mihonCfg.user, pass: mihonCfg.pass })); } catch {} };
+const mihonBase = () => String(mihonCfg.url || '').trim().replace(/\/+$/, '');
+const mihonAuth = () => mihonCfg.user ? { Authorization: 'Basic ' + btoa(unescape(encodeURIComponent(`${mihonCfg.user}:${mihonCfg.pass}`))) } : {};
+const mihonApi = {
+    async gql(query, variables = {}) {
+        if (!mihonBase()) throw new Error('Connect your Mihon server first (Extensions → Mihon server).');
+        let r;
+        try { r = await fetch(mihonBase() + '/api/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json', ...mihonAuth() }, body: JSON.stringify({ query, variables }) }); }
+        catch { throw new Error(`Can’t reach your Mihon server at ${mihonBase()}. Is it running, and did the browser ask to allow access to it?`); }
+        if (r.status === 401) throw new Error('Your Mihon server wants a username and password (Extensions → Mihon server).');
+        const j = await r.json().catch(() => null);
+        if (!j) throw new Error(`Your Mihon server answered ${r.status}.`);
+        if (j.errors?.length) throw new Error(j.errors[0].message || 'The Mihon server returned an error');
+        return j.data;
+    },
+    // the extensions' sources installed on the server (not its built-in "Local source")
+    async sources() {
+        const d = await this.gql('query { sources { nodes { id name lang displayName iconUrl isNsfw } } }');
+        return (d?.sources?.nodes || []).filter(x => String(x.id) !== '0');
+    },
+    abs: (u) => !u ? null : /^https?:/i.test(u) ? u : mihonBase() + (u.startsWith('/') ? '' : '/') + u,
+    async search(srcId, q) {
+        const d = await this.gql('mutation ($s: LongString!, $q: String) { fetchSourceManga(input: { source: $s, type: SEARCH, page: 1, query: $q }) { mangas { id title thumbnailUrl } } }', { s: String(srcId), q });
+        return (d?.fetchSourceManga?.mangas || []).map(m => ({ title: m.title, url: 'mihon:' + m.id, cover: mihonCfg.user ? null : this.abs(m.thumbnailUrl) }));
+    },
+    async chapters(s, mangaUrl) {
+        const id = Number(String(mangaUrl).replace('mihon:', ''));
+        const d = await this.gql('mutation ($id: Int!) { fetchChapters(input: { mangaId: $id }) { chapters { id name chapterNumber scanlator uploadDate sourceOrder } } }', { id });
+        return (d?.fetchChapters?.chapters || []).map(c => {
+            const n = c.chapterNumber >= 0 ? String(c.chapterNumber).replace(/\.0$/, '') : chapNo(c.name);
+            return { id: 'mihon:' + c.id, link: 'mihon:' + c.id, ch: n, title: c.name, num: null, at: c.uploadDate ? new Date(Number(c.uploadDate)).toISOString().slice(0, 10) : null, src: s.id, group: c.scanlator || s.name, url: null };
+        });
+    },
+    async pages(chapterUrl) {
+        const id = Number(String(chapterUrl).replace('mihon:', ''));
+        const d = await this.gql('mutation ($id: Int!) { fetchChapterPages(input: { chapterId: $id }) { pages } }', { id });
+        const urls = (d?.fetchChapterPages?.pages || []).map(u => this.abs(u));
+        if (!mihonCfg.user) return urls;
+        // with a login, images need it too: fetched here (4 at a time) and shown from memory
+        const out = new Array(urls.length); let k = 0;
+        const worker = async () => { while (k < urls.length) { const n = k++; const r = await fetch(urls[n], { headers: mihonAuth() }); out[n] = URL.createObjectURL(await r.blob()); } };
+        await Promise.all([worker(), worker(), worker(), worker()]);
+        return out;
+    },
+};
 const sourceApi = {
     async search(s, q) {
         const def = srcDef(s).search; const base = s.baseUrl.replace(/\/+$/, '');
         // Generic sites: find which search address the site uses (?s=, /search?q=, …) and remember it on the source
         if (s.id === 'archive') return archiveApi.search(q);
+        if (s.template === 'mihon') return mihonApi.search(s.srcId, q);
         const video = isVideoSrc(s);
         if ((s.template === 'generic' || s.template === 'genericvideo') && !s.selectors?.search?.url) {
             const run = async (p) => {
@@ -854,6 +907,7 @@ const sourceApi = {
     },
     async chapters(s, mangaUrl) {
         if (s.id === 'archive') return archiveApi.episodes(mangaUrl);
+        if (s.template === 'mihon') return mihonApi.chapters(s, mangaUrl);
         const def = srcDef(s).chapters; const base = s.baseUrl.replace(/\/+$/, '');
         const read = (doc) => def.item ? [...doc.querySelectorAll(def.item)].map(el => {
             const name = cleanChapterName(pick(el, def.name, base)); const link = pick(el, def.link, base);
@@ -899,6 +953,7 @@ const sourceApi = {
         return out;
     },
     async pages(s, chapterUrl) {
+        if (s.template === 'mihon') return mihonApi.pages(chapterUrl);
         const def = srcDef(s).pages;
         const html = (await siteFetch(chapterUrl, { referer: s.baseUrl })).body;
         const doc = htmlDoc(html, chapterUrl);
@@ -957,7 +1012,7 @@ const findTitleOn = async (s, a, { deep = true } = {}) => {
         if (hit) return { match: hit, results };
     }
     // not listed under any of its names: the site may use another one, so check the top results' own "Alternative names"
-    if (deep) for (const r of (first || []).slice(0, 3)) {
+    if (deep && s.template !== 'mihon') for (const r of (first || []).slice(0, 3)) {
         try { const alts = await altNamesOn(s, r.url); if (alts.some(x => names.some(y => sameTitle(x, y)))) return { match: r, results: first }; } catch {}
     }
     return { match: null, results: first || [] };
@@ -6386,7 +6441,7 @@ createApp({
         // Sites behind Cloudflare's bot check can't be read from a server (Mihon solves that check inside the phone's browser).
         const CF_MSG = 'Protected by Cloudflare’s bot check. Only the Mihon app can pass it, so it can’t be read here.';
         const SELF_MSG = 'Self-hosted: this source runs on your own computer (e.g. Komga / Jellyfin), not on the internet.';
-        const UNSUP_MSG = (k) => k === 'manga' ? 'Not readable here: this site needs its own Android extension code' : 'Can’t play here: this site needs its own Android extension code';
+        const UNSUP_MSG = (k) => k === 'manga' ? 'Not readable here: this site needs its own Android extension code (it can work through a Mihon server, see above)' : 'Can’t play here: this site needs its own Android extension code';
         const isPrivateHost = (u) => { try { return /^(localhost|127\.|10\.|0\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(new URL(u).hostname); } catch { return true; } };
         const friendlyErr = (err) => /cloudflare|blocked the request/i.test(err?.message || '') ? CF_MSG
             : /answered 5\d\d|could not reach|network/i.test(err?.message || '') ? 'The site is down or unreachable right now.' : (err?.message || 'Could not reach the site');
@@ -6552,6 +6607,31 @@ createApp({
         const saveMatches = debounce(() => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(srcMatches)); } catch {} }, 500);
         const readSrc = ref(null);
         const srcView = reactive({ loading: false, error: '', results: [], chapters: [], picking: false, q: '', match: null, key: '' });
+        // ---- Mihon server (Suwayomi): the extensions installed there become sources here ----
+        const mihonUi = reactive({ url: mihonCfg.url, user: mihonCfg.user, pass: mihonCfg.pass, busy: false, msg: '', ok: false, list: [], q: '' });
+        const connectMihon = async () => {
+            let u = mihonUi.url.trim(); if (u && !/^https?:\/\//i.test(u)) u = 'http://' + u;
+            try { if (u) new URL(u); } catch { mihonUi.msg = 'Enter the server’s address, e.g. http://localhost:4567'; mihonUi.ok = false; return; }
+            Object.assign(mihonCfg, { url: u, user: mihonUi.user.trim(), pass: mihonUi.pass }); mihonUi.url = u; saveMihonCfg();
+            if (!u) { mihonUi.list = []; mihonUi.msg = ''; mihonUi.ok = false; return; }
+            mihonUi.busy = true; mihonUi.msg = '';
+            try {
+                mihonUi.list = await mihonApi.sources(); mihonUi.ok = true;
+                mihonUi.msg = mihonUi.list.length ? `Connected · ${mihonUi.list.length} source${mihonUi.list.length === 1 ? '' : 's'} on the server` : 'Connected, but the server has no extensions yet: install them in the server’s own page (Browse → Extensions).';
+                // sources added earlier keep working with the new address
+            } catch (err) { mihonUi.ok = false; mihonUi.list = []; mihonUi.msg = err.message; }
+            finally { mihonUi.busy = false; }
+        };
+        const mihonAdded = (x) => (PREFS.sources || []).some(s => s.template === 'mihon' && String(s.srcId) === String(x.id));
+        const toggleMihonSource = (x) => {
+            if (mihonAdded(x)) { PREFS.sources = PREFS.sources.filter(s => !(s.template === 'mihon' && String(s.srcId) === String(x.id))); showToast(`${x.displayName || x.name} removed`); return; }
+            if (x.isNsfw && !adultOn.value) { showToast('That source is 18+: turn on the 18+ filter first', 'error'); return; }
+            PREFS.sources = [...(PREFS.sources || []), { id: 'm' + x.id, name: String(x.displayName || x.name).slice(0, 40), baseUrl: 'Mihon server', template: 'mihon', srcId: String(x.id), lang: x.lang, kind: 'manga', nsfw: !!x.isNsfw }];
+            showToast(`${x.displayName || x.name} added`);
+        };
+        const mihonShown = computed(() => { const q = mihonUi.q.trim().toLowerCase(); return mihonUi.list.filter(x => !q || `${x.displayName} ${x.name}`.toLowerCase().includes(q)).filter(x => !x.isNsfw || adultOn.value); });
+        watch(() => extOpen.value && extKind.value === 'manga', (on) => { if (on && mihonCfg.url && !mihonUi.list.length && !mihonUi.busy) connectMihon(); });
+
         // ---- player links (anime, movies & TV): an address with blanks the app fills in for the episode you pick ----
         // e.g. https://player.example/embed/{tmdb}/{season}/{episode}. Nothing is searched or scraped: the address plays as it is.
         const playerLinks = computed(() => PREFS.players || []);
@@ -8486,6 +8566,7 @@ createApp({
         return {
             repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, music, musicLiked, musicRecent, openMusic,
+            mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
             plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
             wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
