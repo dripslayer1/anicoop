@@ -515,3 +515,14 @@ Some sites need their own extension code ("Not readable here: this site needs it
   of them each playlist already has and adds the rest.
 * **Read / Watch window:** each source tab shows whether it has this title: ✓ green = has it, spinner = checking,
   faded ✗ = doesn't have it.
+
+## v9.6 — Mihon sources without the 18+ switch, automatic play counts
+
+**Update:** re-upload the folder (no database or Edge Function change).
+
+* **Mihon server:** its sources show and can be added whatever the 18+ setting (the server is yours). Sources marked
+  18+ there still carry the 18+ tag. Website sources and repositories keep the 18+ rule.
+* **Plays count themselves:** a song counts as played after 30 seconds of listening (15 s for a 30-second preview).
+  The count goes on the song's "Plays" in your list and shows on song rows (▶ 12) and next to songs in the Songs
+  rankings on profiles (yours and friends'). Songs that aren't on your list keep their plays in this browser, and
+  they're added when you add the song.

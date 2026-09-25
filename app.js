@@ -1777,7 +1777,7 @@ const TrackRow = {
         <span v-if="album" class="tr-album" :title="song.album">{{ (song.album || '').replace(/ - (Single|EP)$/, '') }}</span>
         <span class="tr-year">{{ song.seasonYear || '' }}</span>
         <span class="tr-len">{{ song.durationMs ? fmtDuration(song.durationMs) : '' }}</span>
-        <span v-if="entry" class="tr-status" :style="{ '--dot': STATUS_COLORS[entry.status] }"><span class="qa-dot"></span><span class="tr-status-l">{{ LABEL_SETS.SONG.short[entry.status] || entry.status }}</span></span>
+        <span v-if="entry" class="tr-status" :style="{ '--dot': STATUS_COLORS[entry.status] }"><span class="qa-dot"></span><span class="tr-status-l">{{ LABEL_SETS.SONG.short[entry.status] || entry.status }}</span><span v-if="entry.progress" class="tr-plays" :title="entry.progress + ' play' + (entry.progress === 1 ? '' : 's')"><i class="fa-solid fa-play"></i>{{ entry.progress }}</span></span>
         <span v-if="!selectable" class="tr-acts">
             <button @click.stop="openPlPicker(song, $event)" class="tr-add" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i></button>
             <button @click.stop="entry ? $emit('edit') : $emit('action', 'COMPLETED')" class="tr-add" :title="entry ? 'Edit' : 'Like'"><i class="fa-solid" :class="entry ? 'fa-pen' : 'fa-heart'"></i></button>
@@ -4244,7 +4244,7 @@ createApp({
         };
         const sameSong = (a, b) => !!a && !!b && (a.id === b.id || (!!b.pending && a.title?.romaji === b.title?.romaji));
         const startSong = async (s) => {
-            const tok = ++playTok; loadStart = Date.now();
+            const tok = ++playTok; loadStart = Date.now(); newListen();
             stopEngines();
             Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null, status: '', why: '' });
             let song = s;
@@ -4326,7 +4326,7 @@ createApp({
             return player.repeat === 'all' || !auto ? 0 : -1;
         };
         const nextSong = (auto = false) => {
-            if (auto && player.repeat === 'one') { seekTo(0); if (player.mode === 'yt') ytP?.playVideo(); else audio.play().catch(() => {}); return; }
+            if (auto && player.repeat === 'one') { newListen(); seekTo(0); if (player.mode === 'yt') ytP?.playVideo(); else audio.play().catch(() => {}); return; }
             const i = nextIndex(auto);
             if (i < 0 || (!auto && player.queue.length < 2 && player.repeat !== 'all')) { if (auto) { player.playing = false; player.t = 0; } else seekTo(player.dur - 0.5); return; }
             playQueueAt(i);
@@ -4356,6 +4356,27 @@ createApp({
         const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
         // lock screen / keyboard media keys
+        // ---- plays: a song counts as played after 30 seconds of listening (half of a 30-second preview) ----
+        // It goes on the song's entry in your list (the "Plays" number); songs not on your list keep their count
+        // in this browser and it's added when you add the song.
+        const PLAYS_KEY = 'anicoop_pending_plays';
+        const pendingPlays = reactive(readJSON(PLAYS_KEY) || {});
+        const savePending = () => { try { localStorage.setItem(PLAYS_KEY, JSON.stringify(pendingPlays)); } catch {} };
+        let listenSecs = 0, playCounted = false;
+        const newListen = () => { listenSecs = 0; playCounted = false; };
+        const countPlay = async (song) => {
+            if (!song?.id || !uid()) return;
+            const e = soloEntry(song.id);
+            if (!e) { pendingPlays[song.id] = (pendingPlays[song.id] || 0) + 1; savePending(); return; }
+            const entry = { ...e, progress: (e.progress || 0) + 1 };
+            setSoloLocal(entry);
+            try { await upsertSolo(entry); } catch { setSoloLocal(e); }
+        };
+        setInterval(() => {
+            if (!player.playing || !player.song || playCounted) return;
+            listenSecs++;
+            if (listenSecs >= Math.min(30, Math.max(10, (player.dur || 30) / 2))) { playCounted = true; countPlay(player.song); }
+        }, 1000);
         const setMediaSession = (s) => {
             if (!('mediaSession' in navigator)) return;
             try {
@@ -5120,6 +5141,7 @@ createApp({
         const soloNext = (anime, action) => {
             const idx = soloList.value.findIndex(i => i.anime?.id === anime.id);
             const entry = idx !== -1 ? { ...soloList.value[idx] } : { anime: normMedia(anime), status: 'PLANNING', score: 0, progress: 0 };
+            if (idx === -1 && anime.type === 'SONG' && pendingPlays[anime.id]) { entry.progress = pendingPlays[anime.id]; delete pendingPlays[anime.id]; savePending(); }   // plays counted before you added it
             const eps = totalOf(anime) || totalOf(entry.anime);
             if (eps && action === 'COMPLETED' && entry.anime && !entry.anime.episodes && entry.anime.type === 'TV') entry.anime = { ...entry.anime, episodes: eps };
             entry.repeats = [...(entry.repeats || [])];
@@ -6407,7 +6429,7 @@ createApp({
         // ---- website sources: add / remove / install from a repository ----
         const siteSources = computed(() => PREFS.sources || []);
         const kindOf = (s) => s?.kind || 'manga';
-        const kindSources = (k) => siteSources.value.filter(s => kindOf(s) === k && (!s.nsfw || adultOn.value));
+        const kindSources = (k) => siteSources.value.filter(s => kindOf(s) === k && (!s.nsfw || adultOn.value || s.template === 'mihon'));   // Mihon server sources ignore the 18+ switch
         const extSources = computed(() => kindSources(extKind.value));
         const srcForm = reactive({ name: '', baseUrl: '', template: 'auto', selectors: '', busy: false, msg: '', repo: '', repoItems: [], repoName: '', repoBusy: false, repoMsg: '', repoQ: '', repoLang: 'all', repoKind: null });
         const makeSource = (x) => {
@@ -6697,11 +6719,10 @@ createApp({
         const mihonAdded = (x) => (PREFS.sources || []).some(s => s.template === 'mihon' && String(s.srcId) === String(x.id));
         const toggleMihonSource = (x) => {
             if (mihonAdded(x)) { PREFS.sources = PREFS.sources.filter(s => !(s.template === 'mihon' && String(s.srcId) === String(x.id))); showToast(`${x.displayName || x.name} removed`); return; }
-            if (x.isNsfw && !adultOn.value) { showToast('That source is 18+: turn on the 18+ filter first', 'error'); return; }
             PREFS.sources = [...(PREFS.sources || []), { id: 'm' + x.id, name: String(x.displayName || x.name).slice(0, 40), baseUrl: 'Mihon server', template: 'mihon', srcId: String(x.id), lang: x.lang, kind: 'manga', nsfw: !!x.isNsfw }];
             showToast(`${x.displayName || x.name} added`);
         };
-        const mihonShown = computed(() => { const q = mihonUi.q.trim().toLowerCase(); return mihonUi.list.filter(x => !q || `${x.displayName} ${x.name}`.toLowerCase().includes(q)).filter(x => !x.isNsfw || adultOn.value); });
+        const mihonShown = computed(() => { const q = mihonUi.q.trim().toLowerCase(); return mihonUi.list.filter(x => !q || `${x.displayName} ${x.name}`.toLowerCase().includes(q)); });   // (the server is yours: its sources show whatever the 18+ setting)
         watch(() => extOpen.value && extKind.value === 'manga', (on) => { if (on && mihonCfg.url && !mihonUi.list.length && !mihonUi.busy) connectMihon(); });
 
         // ---- player links (anime, movies & TV): an address with blanks the app fills in for the episode you pick ----

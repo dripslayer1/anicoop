@@ -1538,3 +1538,7 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 .src-tab.av-checking .av-badge { color: rgb(var(--c-mute)); }
 .src-tab.av-no:not(.on), .src-tab.av-error:not(.on) { opacity: .55; }
 .src-tab.av-no .av-badge, .src-tab.av-error .av-badge { background: rgb(var(--c-overlay)); color: rgb(var(--c-mute)); }
+/* v9.6 how many times you played a song */
+.tr-plays { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-family: "Geist Mono", monospace; font-size: 10px; color: rgb(var(--c-mute)); }
+.tr-plays i, .rank-plays i { font-size: 7px; }
+.rank-plays { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 3px 8px; border-radius: 999px; font-family: "Geist Mono", monospace; font-size: 11px; font-weight: 700; color: rgb(var(--c-sub)); background: rgb(var(--c-overlay) / .8); }

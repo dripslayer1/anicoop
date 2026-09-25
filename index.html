@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.5">
+    <link rel="stylesheet" href="app.css?v=9.6">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.5" defer></script>
+    <script src="app.js?v=9.6" defer></script>
 </head>
 <body>
 
@@ -211,7 +211,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.6</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -1305,7 +1305,8 @@
                                         <span class="flex-grow min-w-0 text-ink font-semibold text-sm truncate">{{ titleOf(item.anime) }}</span>
                                         <span v-if="(item.anime.genres || []).length" class="rank-genres">{{ item.anime.genres.slice(0, 3).join(' · ') }}</span>
                                         <span v-if="item.anime.seasonYear" class="rank-year">{{ item.anime.seasonYear }}</span>
-                                        <span class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}</span>
+                                        <span v-if="item.anime.type === 'SONG'" class="rank-plays" :title="(item.progress || 0) + ' plays'"><i class="fa-solid fa-play"></i>{{ item.progress || 0 }}</span>
+                                    <span class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}</span>
                                     </div>
                                     <button v-if="cat.items.length > shownOf('them:' + cat.id)" @click="showMoreRank('them:' + cat.id)" class="w-full py-3 text-xs font-bold text-sub hover:text-ink hover:bg-raised transition-colors border-t border-line"><i class="fa-solid fa-chevron-down mr-1.5"></i>Show 10 more · {{ cat.items.length - shownOf('them:' + cat.id) }} left</button>
                                     <p v-if="!cat.items.length" class="p-10 text-center text-mute text-sm">No scored {{ cat.noun }} yet.</p>
@@ -2614,6 +2615,7 @@
                                     <span class="flex-grow min-w-0 text-ink font-semibold text-sm truncate">{{ titleOf(item.anime) }}</span>
                                     <span v-if="(item.anime.genres || []).length" class="rank-genres">{{ item.anime.genres.slice(0, 3).join(' · ') }}</span>
                                     <span v-if="item.anime.seasonYear" class="rank-year">{{ item.anime.seasonYear }}</span>
+                                    <span v-if="item.anime.type === 'SONG'" class="rank-plays" :title="(item.progress || 0) + ' plays'"><i class="fa-solid fa-play"></i>{{ item.progress || 0 }}</span>
                                     <span class="rating mine shrink-0"><i v-if="!/POINT_[35]$/.test(PREFS.scoreFormat)" class="fa-solid fa-star star"></i> {{ formatScore(item.score) }}</span>
                                 </div>
                             </div>
