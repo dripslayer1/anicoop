@@ -504,3 +504,14 @@ Some sites need their own extension code ("Not readable here: this site needs it
 * **On your sources:** opening a manga, anime or show checks your installed sources and shows which have it
   (✓ = click to read / watch there). Read / Watch starts on a source that has it.
 * **Header:** a thin line between the feedback icon and the music icon.
+
+## v9.5 — card menus, multi-select playlists, source badges
+
+**Update:** re-upload the folder (no database or Edge Function change).
+
+* **Card menus:** songs keep the row of round buttons (now always one line, above the +); every other section has
+  the Solo list menu back, with "Play trailer" at the top so the card's play button is always one click away.
+* **Select several songs → Add to playlist:** the Select bar (Songs) has "Add to playlist"; the picker shows how many
+  of them each playlist already has and adds the rest.
+* **Read / Watch window:** each source tab shows whether it has this title: ✓ green = has it, spinner = checking,
+  faded ✗ = doesn't have it.
