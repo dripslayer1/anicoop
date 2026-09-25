@@ -1,12 +1,12 @@
 # anicoop: handover
 
-For the next agent/session taking over. Last updated at v10.0 (2026-09-26), when the v10.0 PR was opened.
+For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when the v10.1 PR was opened.
 
 > **v9.9 session (new account, working on the owner's own Windows PC):** the repo lives at
 > `C:\Users\drips\Downloads\anicoop\anicoop`. Node.js LTS and GitHub CLI were installed there this session; `gh` is logged
 > in as dripslayer1. New PowerShell windows may not see them on PATH yet: use `& "C:\Program Files\GitHub CLI\gh.exe"`
 > and `C:\Program Files\nodejs\node.exe`, or reload PATH from the registry first. There is **no Python** on this PC.
-> What v9.9 and v10.0 changed is in §2; how testing works on this PC is in §5.
+> What v9.9, v10.0 and v10.1 changed is in §2; how testing works on this PC is in §5.
 
 ---
 
@@ -26,15 +26,16 @@ For the next agent/session taking over. Last updated at v10.0 (2026-09-26), when
   6. Check that the footer shows the new version.
 
 **Status**
-- PRs #3–#15 (v8.8 → v9.9 + handovers) are **merged into `main`**.
-- **v10.0 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's 17-item list + MyAnimeList sync). **SQL 8f**
-  (`account_links.refresh_token`). The Edge Function changed (GIF paging `next`, the `mal` endpoint) and needs the
-  secrets `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` from a MAL API client (README v10 has the owner's steps).
+- PRs #3–#16 (v8.8 → v10.0 + handovers) are **merged into `main`**. v10.0 needed SQL 8f (`account_links.refresh_token`),
+  the Edge Function redeploy (GIF paging, `mal` endpoint) and the `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` secrets; the
+  owner registered the MAL API client ("anicoop", published) — whether they finished the rest is unconfirmed.
+- **v10.1 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's next 18-item list). **No SQL, no Edge Function
+  change.** Check whether it was merged before starting the next change.
   Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const VERSION = 'anicoop-v10.0'`
-- `index.html`: every `?v=10.0` cache-buster, plus the footer `<span>v10.0</span>` (around line 215)
+- `sw.js`: `const VERSION = 'anicoop-v10.1'`
+- `index.html`: every `?v=10.1` cache-buster, plus the footer `<span>v10.1</span>` (around line 215)
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
 ---
@@ -192,12 +193,44 @@ These are cumulative; the README has one section per version.
     progress, whole-number score, rewatch counts. Tested with a faked link (payloads, refresh, 404 on delete) and the
     Edge Function locally against the real MAL (it answers invalid_token / client auth failed as expected); **the real
     sign-in is untested** until the owner registers the MAL client.
+- **v10.1** (18 items, #3 = no change: YouTube background play is Premium-only):
+  - **Two old bugs found:** (1) `buildForm` had `score` / `progress` inside a `//` comment since the first upload, so a
+    title's page showed "–" and Save on that page wrote 0 for both. (2) `.btn, .icon-btn … { position: relative }` came
+    after Tailwind's `.absolute`, so every `absolute … icon-btn` (Settings X, the editor's X, …) fell back into the flow
+    and `right-4` pushed it half outside the left edge. Now `:where(.btn, .icon-btn, .toggle, .clear-btn)`. Pop-ups also
+    can't scroll sideways (`.modal-card:not(.overflow-y-auto) { overflow: clip }`).
+  - **Feed tier lists:** `feedTierType` (composer.type when the composer is open, else `feedFilter.type`; MANHWA → MANGA)
+    drives `tierType` on the feed; `openTierMaker` switches `section` to that type (so genres / labels match) and a
+    Manhwa tier list gets `extra.country = 'KR'`. `.feed-types` moved above the composer.
+  - **Header search:** `hs` + `toggleHeaderSearch` / `runHeaderSearch` / `pickHeaderResult` / `headerSearchAll`
+    (`.hs-panel`, fixed under the header, one panel for both headers). `openSearch()` (v10) is what Enter uses.
+  - **Marks:** `FLAG_OF = { REWISH: 'rewish', ROTATION: 'rotation' }`, `REWISH_TYPES` = ANIME, TV, MANGA, GAME (labels per
+    section: Wanna Rewatch / Reread / Replay), `ROTATION_TYPES` = GAME ("In Rotation", `media_data.rot`, cyan).
+    `toggleFlag(anime, key)`; `quickSolo` hands REWISH / ROTATION to it, so the + menu (`QuickAdd`: all 5 statuses + the
+    marks, labelled by the title's own section via `labelOf`) and the phone sheet (`.sheet-chip`) just emit them.
+    `extraLists` feeds `listStatusOpts` and `filteredGroupedList`.
+  - **Rankings:** `rankScore` / `openRankScore` / `saveRankScore` (row wrapped in `<template v-for>` with a
+    `.rank-score-edit` row under it; the drag code only counts `.rank-row`).
+  - **Lists genre filter:** `listFilterGenre`, `listGenres` (in `baseListItems`, cleared by `clearListFilters`).
+  - **Compare:** `.compare-bar` is sticky (top 72px); a row click toggles selection, cover / name buttons open the page.
+  - **Trailer:** `ytVol` / `setYtVol` (localStorage `anicoop_trailer_vol`, sent once the player answers), `ytQuality` →
+    `ytNative.on` reloads the embed with `controls=1&start=<t>` (YouTube ignores `setPlaybackQuality` since 2019).
+  - **Series count removed** (owner's request): `withSeries` returns the cards unchanged; franchiseLinks / ensureFranchise
+    are gone (their localStorage keys are deleted on load).
+  - **Countdown:** `activeTab = 'countdown'` (not in `tabs`; Anime → Countdown button). `cd`, `loadCountdown` (one AniList
+    query: trending RELEASING, NOT_YET_RELEASED by popularity, `airingSchedules(airingAt_greater: now)`),
+    `loadCountdownMine` (`mediaId_in` your watching / planning / paused anime), `cdCols`, `cdParts` (ticks with `cdNow`
+    every second only while the page is open).
+  - **Home P1 / P2:** `.hero-orb` boxes placed at the path's ends in percent (40,40 and 496,568 of the 560×600 SVG, which
+    stretches: `preserveAspectRatio="none"`), labels absolutely beside them.
+  - **Decor settings:** each decoration block is `.decor-sec` with a `.decor-head` row (current choice in `.decor-now`)
+    and `.decor-body` shown when `decorOpen` matches (one at a time).
 
 ---
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** the v10.0 PR is open. The owner has to merge it and redeploy the Edge Function (GIF paging).
+**Stopped at:** the v10.1 PR is open (no SQL, no Edge Function change). v10.0 is merged.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

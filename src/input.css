@@ -708,7 +708,10 @@ body, .font-sans { font-family: Geist, system-ui, sans-serif; }
 .btn:active, .chip:active, .toggle:active, .clear-btn:active, .seg-btn:active, .genre-toggle:active, .watch-link:active, .active-chip:active { transform: scale(.95); box-shadow: none; }
 .icon-btn:active { transform: scale(.9); }
 /* a quick ripple of accent light on click */
-.btn, .icon-btn, .toggle, .clear-btn { position: relative; overflow: hidden; isolation: isolate; }
+/* (v10.1 :where has no weight, so a button placed with .absolute / .fixed stays there: every "X" in a corner used to be
+   pulled back to relative and sat half outside its window's left edge) */
+:where(.btn, .icon-btn, .toggle, .clear-btn) { position: relative; }
+.btn, .icon-btn, .toggle, .clear-btn { overflow: hidden; isolation: isolate; }
 .btn::after, .icon-btn::after, .toggle::after, .clear-btn::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle at center, rgb(var(--c-volt) / .35), transparent 70%); opacity: 0; transform: scale(.3); transition: opacity .45s, transform .45s var(--ease); pointer-events: none; z-index: -1; }
 .btn:active::after, .icon-btn:active::after, .toggle:active::after, .clear-btn:active::after { opacity: 1; transform: scale(1.4); transition: 0s; }
 .icon-btn .notif-dot { z-index: 1; }
@@ -1848,3 +1851,93 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
   .home-hdr .home-icons { gap: 2px; }
   .home-hdr .icon-btn { width: 32px !important; height: 32px !important; }
 }
+
+/* ================= v10.1 ================= */
+/* GIF picker: "Show 30 more" under the grid */
+.gif-more-btn { display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 8px; padding: 8px 0; border-radius: 12px; border: 1px dashed rgb(var(--c-line2)); font-size: 12px; font-weight: 700; color: rgb(var(--c-sub)); }
+@media (hover: hover) { .gif-more-btn:hover { color: rgb(var(--c-ink)); border-color: rgb(var(--c-ink) / .4); } }
+.gif-more-btn:disabled { opacity: .6; }
+
+/* Home: P1 / P2 dots centred on the ends of the line (margins, not transform: the intro animates transform) */
+.hero-orb { width: 52px; height: 52px; margin: -26px 0 0 -26px; display: flex; align-items: center; justify-content: center; }
+.hero-orb-name { position: absolute; top: 50%; left: 100%; margin-left: 10px; transform: translateY(-50%); white-space: nowrap; line-height: 1; }
+.hero-orb-name.is-left { left: auto; right: 100%; margin: 0 10px 0 0; }
+
+/* header search box (drops down from the 🔍) */
+.hs-panel { position: fixed; z-index: 75; top: 70px; right: 16px; width: min(440px, calc(100vw - 16px)); border-radius: 18px; border: 1px solid rgb(var(--c-line2)); background: rgb(var(--c-surface) / .98); box-shadow: 0 24px 60px -12px rgba(0,0,0,.85); padding: 10px; }
+.hs-panel.on-home { top: 78px; }
+.hs-row { display: flex; align-items: center; gap: 10px; padding: 0 10px 0 14px; height: 44px; border-radius: 999px; background: rgb(var(--c-base)); border: 1px solid rgb(var(--c-line)); }
+.hs-row:focus-within { border-color: rgb(var(--c-lilac) / .7); }
+.hs-row input { flex: 1 1 auto; min-width: 0; background: transparent; outline: none; color: rgb(var(--c-ink)); font-size: 14px; }
+.hs-results { margin-top: 8px; max-height: min(60vh, 460px); overflow-y: auto; overscroll-behavior: contain; }
+.hs-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px; border-radius: 12px; text-align: left; }
+@media (hover: hover) { .hs-item:hover { background: rgb(var(--c-raised)); } }
+.hs-item img { width: 36px; height: 50px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: rgb(var(--c-raised)); }
+.hs-item img.is-square { height: 36px; }
+.hs-note { font-size: 12px; color: rgb(var(--c-mute)); padding: 8px 8px 2px; }
+.hs-all { width: 100%; margin-top: 4px; padding: 9px 0; border-radius: 12px; font-size: 12px; font-weight: 700; color: rgb(var(--c-sub)); }
+@media (hover: hover) { .hs-all:hover { background: rgb(var(--c-raised)); color: rgb(var(--c-ink)); } }
+@media (max-width: 767px) { .hs-panel, .hs-panel.on-home { top: 66px; right: 8px; } .hs-row input { font-size: 16px; } }
+
+/* phone "+" sheet: On Hold / Dropped and the marks as chips */
+.sheet-chip { flex: 1 1 calc(50% - 8px); display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 10px; border-radius: 16px; font-size: 12px; font-weight: 600; }
+
+/* the marks' buttons on a title page take their own colour (In rotation is cyan) */
+.rewish-btn > i:first-child { color: var(--mk, #ec4899); }
+@media (hover: hover) { .rewish-btn:hover { border-color: var(--mk, #ec4899); } }
+.rewish-btn.on { background: color-mix(in srgb, var(--mk, #ec4899) 14%, transparent); border-color: color-mix(in srgb, var(--mk, #ec4899) 60%, transparent); }
+
+/* profile rankings: tap your score to change it */
+.rank-score-btn { position: relative; cursor: pointer; }
+.rank-score-pen { font-size: 8px; margin-left: 5px; opacity: .45; }
+@media (hover: hover) { .rank-score-btn:hover { box-shadow: 0 0 0 1px rgb(var(--c-volt) / .6); } .rank-score-btn:hover .rank-score-pen { opacity: 1; } }
+.rank-score-btn.on { box-shadow: 0 0 0 1px rgb(var(--c-volt)); }
+.rank-score-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px 12px 16px; background: rgb(var(--c-raised) / .6); border-bottom: 1px solid rgb(var(--c-line)); }
+
+/* Lists: the genre filter (phones: next to Sort, and the Solo / Squads switch gets the next row) */
+@media (max-width: 767px) {
+  .list-aside .la-genre .chip { height: 40px; }
+  .list-aside:has(.la-genre) .la-list { grid-column: 1 / -1; }
+}
+
+/* compare lists: the "Select all / Add to my list" bar stays in view while you scroll (under the header) */
+.compare-bar { position: sticky; top: 72px; z-index: 20; background: rgb(var(--c-surface) / .97); backdrop-filter: blur(8px); box-shadow: 0 10px 28px -14px rgba(0,0,0,.9); }
+
+/* trailer: volume slider (widens on hover on computers) + the "Simple controls" way back from YouTube's own controls */
+.yt-vol { display: flex; align-items: center; gap: 2px; }
+.yt-vol-range { -webkit-appearance: none; appearance: none; width: 84px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fff var(--v), rgba(255,255,255,.3) var(--v)); outline: none; cursor: pointer; }
+.yt-vol-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.yt-vol-range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; }
+@media (hover: hover) and (min-width: 640px) { .yt-vol-range { width: 0; opacity: 0; transition: width .2s, opacity .2s; } .yt-vol:hover .yt-vol-range, .yt-vol:focus-within .yt-vol-range { width: 84px; opacity: 1; } }
+.yt-back { position: absolute; top: 10px; left: 10px; z-index: 5; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; font-weight: 700; }
+
+/* pop-up windows never scroll sideways (a slightly-too-wide row used to let the window slide, and the X slid off with it) */
+.modal-card:not(.overflow-y-auto) { overflow: clip; }   /* clip, not hidden: a focused field can't scroll the window sideways either */
+.modal-card.overflow-y-auto { overflow-x: hidden; }
+.modal-card .overflow-y-auto { overflow-x: hidden; }
+.modal-card .squad-chip { max-width: 100%; }
+
+/* anime countdown: three columns (one at a time on phones), cards with a ticking timer */
+.cd-cols { display: grid; gap: 20px; align-items: start; }
+@media (min-width: 1024px) { .cd-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .cd-col:not(.is-on) { display: none; } }
+.cd-card { display: flex; gap: 14px; width: 100%; padding: 12px; border-radius: 18px; background: rgb(var(--c-surface)); border: 1px solid rgb(var(--c-line)); text-align: left; transition: border-color .15s, background-color .15s; }
+@media (hover: hover) { .cd-card:hover { border-color: rgb(var(--c-line2)); background: rgb(var(--c-raised)); } }
+.cd-card > img { width: 76px; height: 108px; border-radius: 12px; object-fit: cover; flex-shrink: 0; background: rgb(var(--c-raised)); }
+.cd-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cd-timer { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: auto; padding-top: 10px; }
+.cd-timer > span { display: flex; flex-direction: column; align-items: center; padding: 5px 0; border-radius: 10px; background: rgb(var(--c-raised)); }
+.cd-card:hover .cd-timer > span { background: rgb(var(--c-overlay)); }
+.cd-timer b { font-family: "Geist Mono", monospace; font-size: 15px; font-weight: 700; color: rgb(var(--c-ink)); line-height: 1.2; }
+.cd-timer i { font-style: normal; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--c-mute)); }
+
+/* Settings → Profile: each decoration is a small row (its current choice on the right); tap it to open the options */
+.set-block.decor-sec { padding: 0; overflow: hidden; }
+.decor-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; text-align: left; }
+@media (hover: hover) { .decor-head:hover { background: rgb(var(--c-raised) / .6); } }
+.decor-ic { width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--c-raised)); color: rgb(var(--c-lilac)); font-size: 14px; }
+.decor-now { display: block; font-size: 12px; color: rgb(var(--c-sub)); margin-top: 1px; }
+.decor-chev { font-size: 11px; color: rgb(var(--c-mute)); transition: transform .2s; }
+.decor-sec.open .decor-chev { transform: rotate(180deg); color: rgb(var(--c-ink)); }
+.decor-sec.open .decor-ic { background: rgb(var(--c-lilac)); color: rgb(var(--c-onaccent)); }
+.decor-body { padding: 0 16px 16px; border-top: 1px solid rgb(var(--c-line)); padding-top: 14px; }
