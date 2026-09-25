@@ -1,6 +1,6 @@
 /* anicoop service worker — makes the app installable, fast to open and usable offline.
    When you change app files, bump VERSION so everyone gets the update automatically. */
-const VERSION = 'anicoop-v9.9';
+const VERSION = 'anicoop-v10.0';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon.svg'];
 const CDN = /^(https:\/\/(unpkg\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com))/;
 const IMAGES = /^https:\/\/(s4\.anilist\.co|images\.igdb\.com)\//;

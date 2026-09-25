@@ -1,12 +1,12 @@
 # anicoop: handover
 
-For the next agent/session taking over. Last updated at v9.9 (2026-09-25), when the v9.9 PR was opened.
+For the next agent/session taking over. Last updated at v10.0 (2026-09-26), when the v10.0 PR was opened.
 
 > **v9.9 session (new account, working on the owner's own Windows PC):** the repo lives at
 > `C:\Users\drips\Downloads\anicoop\anicoop`. Node.js LTS and GitHub CLI were installed there this session; `gh` is logged
 > in as dripslayer1. New PowerShell windows may not see them on PATH yet: use `& "C:\Program Files\GitHub CLI\gh.exe"`
 > and `C:\Program Files\nodejs\node.exe`, or reload PATH from the registry first. There is **no Python** on this PC.
-> What v9.9 changed is in §2; how testing works on this PC is in §5.
+> What v9.9 and v10.0 changed is in §2; how testing works on this PC is in §5.
 
 ---
 
@@ -26,14 +26,15 @@ For the next agent/session taking over. Last updated at v9.9 (2026-09-25), when 
   6. Check that the footer shows the new version.
 
 **Status**
-- PRs #3–#14 (v8.8 → v9.8 + handovers) are **merged into `main`**.
-- **v9.9 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's 18-item list). It **needs SQL** (section
-  "8e. v9.9" — a new `handle_new_user()`), and the OAuth providers must be switched on in Supabase (README v9.9 has the
-  steps). Check whether it was merged before starting the next change.
+- PRs #3–#15 (v8.8 → v9.9 + handovers) are **merged into `main`**.
+- **v10.0 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's 17-item list + MyAnimeList sync). **SQL 8f**
+  (`account_links.refresh_token`). The Edge Function changed (GIF paging `next`, the `mal` endpoint) and needs the
+  secrets `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` from a MAL API client (README v10 has the owner's steps).
+  Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const VERSION = 'anicoop-v9.8'`
-- `index.html`: every `?v=9.8` cache-buster, plus the footer `<span>v9.8</span>` (around line 214)
+- `sw.js`: `const VERSION = 'anicoop-v10.0'`
+- `index.html`: every `?v=10.0` cache-buster, plus the footer `<span>v10.0</span>` (around line 215)
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
 ---
@@ -140,17 +141,72 @@ These are cumulative; the README has one section per version.
   - **Keys:** `skipSong`, Shift+N/P, Ctrl+←/→, `MediaTrackNext/Previous`. On desktop only, a looping silent WAV
     (`keysAnchor`) restarts after YouTube starts, so the OS media keys reach our `mediaSession` handlers instead of
     YouTube's iframe. This is **not verified with real hardware keys** — ask the owner.
+- **v10.0** (17 items):
+  - **Removed** the v9.9 OAuth buttons (`OAUTH_PROVIDERS` / `signInWith` are gone; SQL 8e `handle_new_user()` stays, it's
+    harmless and still names accounts made with them).
+  - **GIFs:** `gifMore` on the grid's scroll asks the Edge Function for `{ endpoint: 'gif', q, next }`; the function
+    returns `next` (GIPHY offset / Tenor `pos`). An old function returns no `next` → no paging.
+  - **Tier maker:** `tier.what` (CHARACTER / MEDIA) is a switch at the top for every section; `TIER_SOURCES` depends on
+    it. TV characters = `tvApi.details(id).cast` (actor photo, `sub` = actor). Songs rank **artists** (`kind: 'ARTIST'`,
+    `deezerArtists` via `siteFetch`; feed click → `openArtistByName`). `loadTierMine` with CHARACTER = main characters of
+    your best-rated titles (AniList `id_in`, `gameApi.characters`, TMDB casts, or your most-played artists). Posted items
+    keep `gameId`.
+  - **Background music:** `bgPaused` (YouTube paused by the phone while hidden) → `resumeAfterPhone` on
+    `visibilitychange`/`pageshow`; lock-screen `play`/`pause` are `playOnly`/`pauseOnly` (not a toggle); `seekto` +
+    `setPositionState`. A one-time tip (`PREFS.bgTipSeen`). True background play of YouTube's iframe is impossible on
+    phone browsers (see Dead ends).
+  - **Header search:** `openSearch()` → Browse of the current section, focuses `#browse-search`. `.hdr-search` button
+    in both headers; header icons shrink under 400px.
+  - **Selection bar:** `batchShown` (only on browse / solo / coop / top, never over a title page, entity, profile or
+    Settings), `batchMin` (the "N selected" pill, `.batch-pill`), and the selection is cleared after a batch status /
+    squad add.
+  - **Add buttons:** `quickAdd(m, st)`, `addStatuses(m)`, `addOn(m, st)`, `ADD_ICONS` (`.qadd` / `.qadd-btn`) on the random
+    pick(s), "If you like this"/"Recommended", related titles (now a `div role=button`) and franchise rows.
+  - **Random pick:** `randomCount` (1–4, in `PREFS.randomCount`), `randomMore`, `randomPicks`; `.rand-grid` cards.
+  - **Wanna Rewatch** (ANIME, TV): not a status but a flag `rewish` on the solo entry, saved as `media_data.rw`
+    (`entryData` / `listRow` / `withRepeats` keep it). `toggleRewish`, `isRewish`, `REWISH_TYPES`; pseudo-status
+    `REWISH` in `STATUS_LABELS`/`STATUS_COLORS`, `listStatusOpts`, `filteredGroupedList` (its own group), starting a
+    rewatch clears it.
+  - **Series count:** `franchiseLinks` is now `anicoop_franchise_v2` (cleared every 14 days, `FR_AT_KEY`). After the
+    list's own titles, `ensureFranchise` follows `frontier()` (unfetched neighbours of groups with your titles) up to 6
+    steps / 1500 ids, and `franchiseGroups()` unions **every** known link, so seasons join through titles not on the
+    list. Missing AniList answers are no longer stored as `[]`.
+  - **18+ privacy:** `adultAllowed` moved up next to `secSolo` (TDZ). `isAdultMedia` = `isAdult`/`adult` flag (now kept by
+    `slimAnime`), genre "Hentai", or `adultIds[id]` (AniList `isAdult: true` lookups via `checkAdultIds`, cached in
+    `anicoop_adult_ids_v1`; popular 18+ anime are NOT tagged Hentai, so the lookup matters). Filtered: `secSolo`,
+    `secCoop`, `uniqueItems`, `viewedUser.entries` (raw in `viewedUser.all`; stats are counted locally when something
+    was hidden), `feedShown`, profile activity (`activityOk`; new list activities get `extra.adult`).
+  - **P1** label left of its dot (container `left-[-16px]` so the dot stays at the end of the trail).
+  - **Page scrollbar:** 14px track with a rounded thumb on `html` only (`scrollbar-width/color: auto` there, or Chrome
+    ignores `::-webkit-scrollbar`).
+  - **Decor:** 8 more `EFFECTS` (`FX_COUNT` sets particles per effect) and 8 more `NAME_STYLES` (CSS at the end of
+    `input.css`).
+  - **MyAnimeList sync** (mirrors the AniList sync): MAL has no CORS and its token exchange needs the client secret, so
+    the Edge Function's `mal` endpoint does `config` / `token` / `refresh` / `api` (only `users/@me` and
+    `anime|manga/<id>/my_list_status`, GET/PATCH/DELETE, whitelisted form fields). OAuth = authorization code + PKCE
+    **plain** (`connectMal`, verifier + state in localStorage `anicoop_mal_pkce`; the `?code=&state=` return is read at
+    setup and stripped; `loadMalLink` exchanges it). Tokens live in `account_links` (provider `mal`, new column
+    `refresh_token`); `malApi` refreshes 2 days before expiry or after a 401. `malEnqueue` is called next to
+    `alEnqueue` in `upsertSolo` / `deleteSolo` (imports are suppressed by `alSuppress`); `malIdsFor` maps AniList ids to
+    `[idMal, type]` (localStorage `anicoop_malids_v1`); `malForm` maps statuses (REPEATING = completed + is_rewatching),
+    progress, whole-number score, rewatch counts. Tested with a faked link (payloads, refresh, 404 on delete) and the
+    Edge Function locally against the real MAL (it answers invalid_token / client auth failed as expected); **the real
+    sign-in is untested** until the owner registers the MAL client.
 
 ---
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** the v9.9 PR is open. The owner has to merge it, run SQL 8e, and switch on the OAuth providers they want.
+**Stopped at:** the v10.0 PR is open. The owner has to merge it and redeploy the Edge Function (GIF paging).
 
 **Next steps**
-0. **When the owner reports back on v9.9,** check these first: whether the media keys ⏭ ⏮ work with full songs (the
-   `keysAnchor` trick); whether OAuth sign-in works (Site URL / Redirect URLs in Supabase must include the Pages
-   address); and whether the phone header looks right on their phone.
+0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
+   problem" line in Settings → Linked accounts shows MAL's answer); GIF paging after the function redeploy; the lock-screen play button
+   / coming back resumes full songs on their phone; the new decorations look right; and the media keys ⏭ ⏮ (v9.9, still
+   unconfirmed).
+   A friend's question (answered, no code change): MAL shows 304 completed, anicoop fewer/more — 5 recap TV specials
+   aren't on AniList at all, and the profile "Completed" box counts every section (anime + manga + games + TV), while
+   its click opens only the completed anime. Offered to make it anime-only or relabel it; the owner hasn't decided.
 1. **Older checks from v9.8:**
    - Phone layout. `src/input.css` has the new `@media (max-width: 767px)` blocks at the end, marked with `v9.8` comments. The title-page reorder uses `display: contents` on `.det-left` and `.det-main` (classes in `index.html` around lines 506–600).
    - Background music on a locked phone: `app.js`, the `onStateChange` handler inside `ytPlayer()`, which uses `userPausedAt`. Some mobile browsers still force-pause YouTube, and that can't be fully fixed from a web page.
@@ -219,6 +275,10 @@ These are cumulative; the README has one section per version.
 - **A website can't auto-start Suwayomi.** Advice given: add it to Windows startup (`shell:startup`), or host it on an always-on device. Installing anicoop as a web app doesn't change that; only a real desktop app (Electron/Tauri) could.
 - A **real Suwayomi can't be run in the sandbox,** because GitHub release downloads return 403. A fake GraphQL server (`scratchpad/fakesuwa.mjs`) plus a sparse clone of the Suwayomi source was used to check the schema.
 - **YouTube, cdnjs and most external APIs are unreachable from the sandbox.** Full-song playback can't be verified here.
+- **Full songs with the phone locked:** phone browsers pause the video inside YouTube's iframe when the page is hidden
+  (a programmatic `playVideo()` stays paused until a real media-control tap). Getting the audio any other way means
+  extracting / proxying YouTube streams (against YouTube's terms) or unofficial decrypted catalogues — don't. v10 does
+  what's allowed: lock-screen play resumes, coming back resumes, previews play in the background.
 
 ---
 

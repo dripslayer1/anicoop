@@ -1576,6 +1576,13 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
+-- 8f. v10 — MYANIMELIST SYNC
+-- MAL sign-ins last about a month; the refresh token gets a new one without signing in again.
+-- (account_links already allows provider 'mal', and each person can only read their own row.)
+-- ---------------------------------------------------------------------
+alter table public.account_links add column if not exists refresh_token text;
+
+-- ---------------------------------------------------------------------
 -- 10. Tell the Supabase API about new columns right away (avoids "not in the schema cache" errors)
 -- ---------------------------------------------------------------------
 notify pgrst, 'reload schema';

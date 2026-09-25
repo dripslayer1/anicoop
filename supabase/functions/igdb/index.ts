@@ -404,27 +404,82 @@ const emojiList = async () => {
     cache.set(ck, { at: Date.now(), body: text });
     return json(text);
 };
+// v10 MyAnimeList account link. MAL's sign-in and list API can't be called from a browser (no CORS), and its sign-in
+// needs the app's Client Secret, so both go through here. Secrets: MAL_CLIENT_ID, MAL_CLIENT_SECRET (see README v10).
+// The user's own MAL token comes with each request (it's kept in their own account_links row); nothing is stored here.
+//   action "config"  → { client_id }                       (the id is public: it's in the sign-in link anyway)
+//   action "token"   → { code, verifier, redirect }        (sign-in: code → tokens)
+//   action "refresh" → { refresh_token }                  (a new token before the old one runs out)
+//   action "api"     → { token, method, path, form }       (only users/@me and anime|manga/<id>/my_list_status)
+const MAL_ID = clean(Deno.env.get('MAL_CLIENT_ID'));
+const MAL_SECRET = clean(Deno.env.get('MAL_CLIENT_SECRET'));
+const MAL_PATH = /^(users\/@me|(anime|manga)\/\d{1,9}\/my_list_status)$/;
+const MAL_FIELDS = new Set(['status', 'score', 'num_watched_episodes', 'num_chapters_read', 'num_volumes_read', 'is_rewatching', 'is_rereading', 'num_times_rewatched', 'num_times_reread']);
+const malCall = async (body: Record<string, any>) => {
+    if (!MAL_ID) return json({ error: 'MyAnimeList isn’t set up yet: add MAL_CLIENT_ID and MAL_CLIENT_SECRET to the Edge Function secrets' }, 500);
+    const action = String(body.action || '');
+    if (action === 'config') return json({ client_id: MAL_ID });
+    const tokenCall = async (form: Record<string, string>) => {
+        const r = await fetch('https://myanimelist.net/v1/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ client_id: MAL_ID, ...(MAL_SECRET ? { client_secret: MAL_SECRET } : {}), ...form }) });
+        const text = await r.text();
+        let d: any = {}; try { d = JSON.parse(text); } catch {}
+        if (!r.ok || !d.access_token) return json({ error: d.message || d.hint || d.error || `MyAnimeList said no (${r.status})` }, 400);
+        return json({ access_token: d.access_token, refresh_token: d.refresh_token || '', expires_in: Number(d.expires_in) || 2678400 });
+    };
+    if (action === 'token') {
+        const code = String(body.code || ''), verifier = String(body.verifier || ''), redirect = String(body.redirect || '');
+        if (!code || !/^[A-Za-z0-9\-._~]{43,128}$/.test(verifier) || !/^https?:\/\//.test(redirect)) return json({ error: 'Bad sign-in request' }, 400);
+        return tokenCall({ grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: redirect });
+    }
+    if (action === 'refresh') {
+        const rt = String(body.refresh_token || '');
+        if (!rt) return json({ error: 'No refresh token' }, 400);
+        return tokenCall({ grant_type: 'refresh_token', refresh_token: rt });
+    }
+    if (action === 'api') {
+        const tok = String(body.token || ''), path = String(body.path || ''), method = String(body.method || 'GET').toUpperCase();
+        if (!tok || !MAL_PATH.test(path) || !['GET', 'PATCH', 'DELETE'].includes(method) || (path === 'users/@me' && method !== 'GET')) return json({ error: 'Not allowed' }, 400);
+        const form = new URLSearchParams();
+        Object.entries(body.form || {}).forEach(([k, v]) => { if (MAL_FIELDS.has(k) && v !== null && v !== undefined) form.set(k, String(v)); });
+        const r = await fetch('https://api.myanimelist.net/v2/' + path, {
+            method, headers: { Authorization: 'Bearer ' + tok, ...(method === 'PATCH' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+            ...(method === 'PATCH' ? { body: form } : {}),
+        });
+        const text = await r.text();
+        // the page decides what to do: 401 = sign in again / refresh, 404 on DELETE = it wasn't on the MAL list
+        return json({ status: r.status, body: text.slice(0, 4000) });
+    }
+    return json({ error: 'Not allowed' }, 400);
+};
 const gifSearch = async (body: Record<string, any>) => {
     const q = String(body.q || '').trim().slice(0, 100);
     const giphy = Deno.env.get('GIPHY_API_KEY') || '', tenor = Deno.env.get('TENOR_API_KEY') || '';
     if (!giphy && !tenor) return json({ error: 'No GIF key: add GIPHY_API_KEY to the Edge Function secrets' }, 500);
-    const ck = 'gif\n' + q;
+    // v10 more GIFs when scrolling: "next" is where the following page starts (GIPHY: a number, Tenor: its "pos" token)
+    const next = String(body.next || '').slice(0, 200);
+    const ck = 'gif\n' + q + '\n' + next;
     const hit = cache.get(ck); if (hit && Date.now() - hit.at < CACHE_MS * 3) return json(hit.body);
-    let items: any[] = [];
+    let items: any[] = [], after = '';
     try {
         if (giphy) {
-            const u = q ? `https://api.giphy.com/v1/gifs/search?api_key=${giphy}&q=${encodeURIComponent(q)}&limit=30&rating=pg-13&lang=en`
-                : `https://api.giphy.com/v1/gifs/trending?api_key=${giphy}&limit=30&rating=pg-13`;
+            const off = Math.min(4950, Math.max(0, Number(next) || 0));
+            const u = q ? `https://api.giphy.com/v1/gifs/search?api_key=${giphy}&q=${encodeURIComponent(q)}&limit=30&offset=${off}&rating=pg-13&lang=en`
+                : `https://api.giphy.com/v1/gifs/trending?api_key=${giphy}&limit=30&offset=${off}&rating=pg-13`;
             const d = await (await fetch(u)).json();
             items = (d?.data || []).map((g: any) => ({ id: g.id, preview: g.images?.fixed_width_small?.url || g.images?.fixed_width?.url, url: g.images?.downsized?.url || g.images?.original?.url, title: g.title || '' }));
+            const total = Number(d?.pagination?.total_count) || 0;
+            if (items.length && (!total || off + 30 < total)) after = String(off + 30);
         } else {
-            const u = q ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif`
-                : `https://tenor.googleapis.com/v2/featured?key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif`;
+            const pos = next ? `&pos=${encodeURIComponent(next)}` : '';
+            const u = q ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif${pos}`
+                : `https://tenor.googleapis.com/v2/featured?key=${tenor}&client_key=anicoop&limit=30&contentfilter=medium&media_filter=tinygif,gif${pos}`;
             const d = await (await fetch(u)).json();
             items = (d?.results || []).map((g: any) => ({ id: g.id, preview: g.media_formats?.tinygif?.url, url: g.media_formats?.gif?.url || g.media_formats?.tinygif?.url, title: g.content_description || '' }));
+            if (items.length && d?.next) after = String(d.next);
         }
     } catch (err) { return json({ error: 'GIF search failed: ' + ((err as Error).message || 'network error') }, 502); }
-    const text = JSON.stringify({ items: items.filter(x => x.url && x.preview), by: giphy ? 'GIPHY' : 'Tenor' });
+    const text = JSON.stringify({ items: items.filter(x => x.url && x.preview), by: giphy ? 'GIPHY' : 'Tenor', next: after });
     if (cache.size > 800) cache.clear();
     cache.set(ck, { at: Date.now(), body: text });
     return json(text);
@@ -443,6 +498,7 @@ Deno.serve(async (req) => {
     if (endpoint === 'ytm') return ytmSearch(body);
     if (endpoint === 'emoji') return emojiList();
     if (endpoint === 'gif') return gifSearch(body);
+    if (endpoint === 'mal') return malCall(body);
     if (endpoint === 'tmdb') return tmdb(body);
     if (endpoint === 'spotify') return spotify(body);
 
