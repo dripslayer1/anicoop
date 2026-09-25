@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=9.2">
+    <link rel="stylesheet" href="app.css?v=9.4">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=9.2" defer></script>
+    <script src="app.js?v=9.4" defer></script>
 </head>
 <body>
 
@@ -211,7 +211,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v9.2</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v9.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -378,7 +378,7 @@
                                             </div>
                                             <div class="disc-grid">
                                                 <button v-for="al in discReleases.slice(0, discShown)" :key="al.id" @click="openRelease(al)" class="disc-card" :class="{ on: discOpen === al.id }">
-                                                    <span class="disc-card-art"><img :src="al.cover" loading="lazy" decoding="async" alt=""><span class="disc-card-ico"><i class="fa-solid" :class="discOpen === al.id ? 'fa-chevron-up' : 'fa-list'"></i></span></span>
+                                                    <span class="disc-card-art"><img :src="al.cover" loading="lazy" decoding="async" alt=""><span class="disc-card-play" :class="{ on: releasePlaying(al) }" role="button" tabindex="0" :title="releasePlaying(al) ? 'Pause' : 'Play ' + al.name" @click.stop="playRelease(al)" @keydown.enter.stop.prevent="playRelease(al)"><i class="fa-solid" :class="releasePlaying(al) ? 'fa-pause' : 'fa-play'"></i></span><span class="disc-card-ico"><i class="fa-solid" :class="discOpen === al.id ? 'fa-chevron-up' : 'fa-list'"></i></span></span>
                                                     <span class="block mt-2.5 text-sm font-semibold text-ink truncate text-left">{{ al.name }}</span>
                                                     <span class="block text-xs text-sub text-left truncate">{{ al.id === artistDiscog.newestId ? 'Latest Release' : al.year }} · {{ al.kind }}</span>
                                                 </button>
@@ -587,6 +587,14 @@
                                 <span v-for="g in selectedAnime.genres || []" :key="g" class="px-3 py-1.5 rounded-lg bg-raised text-sub text-xs font-medium">{{ g }}</span>
                             </div>
 
+                            <!-- which of your installed sources have this title (checked when the page opens) -->
+                            <div v-if="playKind && availRows.length" class="avail-row">
+                                <span class="avail-label"><i class="fa-solid fa-puzzle-piece"></i> On your sources</span>
+                                <button v-for="r in availRows" :key="r.id" class="avail-chip" :class="r.st" :disabled="r.st !== 'yes'" @click="openOnSource(r.id)"
+                                    :title="r.st === 'yes' ? (playKind === 'manga' ? 'Read it on ' : 'Watch it on ') + r.name : r.st === 'checking' ? 'Checking ' + r.name + '…' : r.st === 'error' ? r.name + ' couldn’t be reached' : r.name + ' doesn’t have it'">
+                                    <i class="fa-solid" :class="r.st === 'yes' ? 'fa-check' : r.st === 'checking' ? 'fa-circle-notch fa-spin' : r.st === 'error' ? 'fa-triangle-exclamation' : 'fa-minus'"></i>{{ r.name }}
+                                </button>
+                            </div>
                             <div v-if="selectedAnime.type !== 'SONG' || selectedAnime.description" class="anime-desc mt-8 max-w-3xl" v-html="selectedAnime.description || 'No description available.'"></div>
 
                             <!-- movies & TV: where to watch (TMDB + JustWatch), IMDb / official site -->
@@ -2447,10 +2455,36 @@
                                                 </span>
                                             </div>
                                         </div>
-                                        <div v-if="plAddSongs.length" class="mt-4 flex items-center gap-2">
-                                            <span class="chip-wrap flex-grow"><select v-model="plAddPick" @change="addPickToPlaylist(plOpenList)" class="chip w-full"><option value="">+ Add a song from your list…</option><option v-for="e in plAddSongs" :key="e.anime.id" :value="e.anime.id">{{ e.anime.title?.romaji }} — {{ (e.anime.artists || []).join(', ') }}</option></select><i class="fa-solid fa-chevron-down"></i></span>
+                                        <div class="mt-4">
+                                            <button v-if="!plAdd.open" @click="plAdd.open = true; $nextTick(() => document.getElementById('pl-add-q')?.focus())" class="btn-primary !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-plus"></i> Add songs</button>
+                                            <div v-else class="pl-add panel !rounded-2xl p-3">
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    <div class="relative flex-grow"><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-mute text-xs"></i><input id="pl-add-q" v-model="plAdd.q" placeholder="Search your songs or any song…" class="field !py-2.5 !pl-9 !rounded-xl !text-sm"></div>
+                                                    <button @click="plAdd.open = false; plAdd.q = ''" class="btn-ghost !py-2.5 !px-3.5 !text-xs shrink-0">Done</button>
+                                                </div>
+                                                <div class="pl-add-list">
+                                                    <p v-if="plAddMine.length" class="emoji-label">{{ plAdd.q.trim() ? 'On your list' : 'Your songs' }}</p>
+                                                    <div v-for="x in plAddMine" :key="'m' + x.id" class="mu-row" @click="plAddToggle(x)">
+                                                        <span class="mu-art"><img v-if="x.coverImage?.large" :src="x.coverImage.large" alt="" loading="lazy"><i v-else class="fa-solid fa-music"></i></span>
+                                                        <span class="min-w-0 flex-grow"><span class="mu-t block truncate text-[13px] font-semibold text-ink">{{ x.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (x.artists || []).join(', ') }}</span></span>
+                                                        <button @click.stop="playPreview(x)" class="vol-btn !w-8 !h-8 shrink-0" :title="isPlaying(x) ? 'Pause' : 'Listen'"><i class="fa-solid text-[11px]" :class="isPlaying(x) ? 'fa-pause' : 'fa-play'"></i></button>
+                                                        <span class="pl-add-state" :class="{ on: inPlaylist(plOpenList, x) }"><i class="fa-solid" :class="inPlaylist(plOpenList, x) ? 'fa-check' : 'fa-plus'"></i>{{ inPlaylist(plOpenList, x) ? 'Added' : 'Add' }}</span>
+                                                    </div>
+                                                    <template v-if="plAdd.q.trim()">
+                                                        <p class="emoji-label">All songs</p>
+                                                        <p v-if="plAdd.loading && !plAdd.results.length" class="mu-note"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Searching…</p>
+                                                        <p v-else-if="!plAdd.results.length" class="mu-note">No songs found.</p>
+                                                        <div v-for="x in plAdd.results" :key="'s' + x.id" class="mu-row" @click="plAddToggle(x)">
+                                                        <span class="mu-art"><img v-if="x.coverImage?.large" :src="x.coverImage.large" alt="" loading="lazy"><i v-else class="fa-solid fa-music"></i></span>
+                                                        <span class="min-w-0 flex-grow"><span class="mu-t block truncate text-[13px] font-semibold text-ink">{{ x.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (x.artists || []).join(', ') }}</span></span>
+                                                        <button @click.stop="playPreview(x)" class="vol-btn !w-8 !h-8 shrink-0" :title="isPlaying(x) ? 'Pause' : 'Listen'"><i class="fa-solid text-[11px]" :class="isPlaying(x) ? 'fa-pause' : 'fa-play'"></i></button>
+                                                        <span class="pl-add-state" :class="{ on: inPlaylist(plOpenList, x) }"><i class="fa-solid" :class="inPlaylist(plOpenList, x) ? 'fa-check' : 'fa-plus'"></i>{{ inPlaylist(plOpenList, x) ? 'Added' : 'Add' }}</span>
+                                                    </div>
+                                                    </template>
+                                                    <p v-else-if="!plAddMine.length" class="mu-note">Search for any song to add it.</p>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <p v-else-if="!(plOpenList.songs || []).length" class="text-sm text-mute mt-4">Add songs from any song's edit window (the ✎ on a song).</p>
                                     </div>
                                 </transition>
                             </section>
@@ -4116,6 +4150,39 @@
                         </div>
                     </div>
 
+                    <!-- Mihon server (Suwayomi): real Mihon extensions for sites that need their own code -->
+                    <div v-if="extKind === 'manga'" class="mt-6">
+                        <p class="label mb-2.5">Mihon server <span v-if="mihonUi.ok" class="text-[#22c55e] normal-case tracking-normal font-sans font-semibold ml-1">● connected</span></p>
+                        <details class="ext-add" :open="!mihonUi.ok">
+                            <summary><i class="fa-solid fa-server mr-2"></i>{{ mihonUi.ok ? 'Server settings' : 'Connect a Mihon server' }}</summary>
+                            <form @submit.prevent="connectMihon" class="space-y-2.5 mt-3">
+                                <p class="text-[11px] text-sub leading-relaxed">For sites that need their own extension (AllManga, Bato, Webtoons, Tappytoon…): <b class="text-ink">Suwayomi-Server</b> runs the real Mihon extensions on a computer, and anicoop reads through it. Set it up once (see the README), then paste its address.</p>
+                                <input v-model="mihonUi.url" placeholder="Server address, e.g. http://localhost:4567" class="field !py-2.5 !text-sm font-mono" autocomplete="off">
+                                <div class="flex gap-2">
+                                    <input v-model="mihonUi.user" placeholder="Username (if set)" class="field !py-2.5 !text-sm" autocomplete="off">
+                                    <input v-model="mihonUi.pass" type="password" placeholder="Password (if set)" class="field !py-2.5 !text-sm" autocomplete="new-password">
+                                </div>
+                                <p class="text-[10px] text-mute">Saved in this browser only.</p>
+                                <button type="submit" :disabled="mihonUi.busy" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid" :class="mihonUi.busy ? 'fa-circle-notch fa-spin' : 'fa-plug'"></i> {{ mihonUi.url.trim() ? 'Connect' : 'Disconnect' }}</button>
+                            </form>
+                        </details>
+                        <p v-if="mihonUi.msg" class="text-xs mt-2" :class="mihonUi.ok ? 'text-[#22c55e]' : 'text-sub'">{{ mihonUi.msg }}</p>
+                        <template v-if="mihonUi.list.length">
+                            <input v-if="mihonUi.list.length > 8" v-model="mihonUi.q" placeholder="Filter the server’s sources…" class="field !py-2 !text-sm mt-2.5">
+                            <div class="ext-installed space-y-2 mt-2.5">
+                                <div v-for="x in mihonShown" :key="x.id" class="ext-card !py-2.5">
+                                    <img v-if="x.iconUrl && !mihonUi.user" :src="(x.iconUrl.startsWith('http') ? '' : mihonUi.url.replace(/\/+$/, '')) + x.iconUrl" class="w-9 h-9 rounded-lg shrink-0 bg-raised" alt="" @error="$event.target.style.visibility = 'hidden'">
+                                    <span v-else class="w-9 h-9 rounded-lg bg-raised text-sub flex items-center justify-center shrink-0"><i class="fa-solid fa-puzzle-piece"></i></span>
+                                    <div class="min-w-0 flex-grow">
+                                        <p class="text-ink font-semibold text-sm truncate">{{ x.displayName || x.name }} <span v-if="x.isNsfw" class="ml-1 font-mono text-[9px] font-bold text-rose-400">18+</span></p>
+                                        <p class="text-[11px] text-mute truncate">{{ (x.lang || '').toUpperCase() }} · on your Mihon server</p>
+                                    </div>
+                                    <button @click="toggleMihonSource(x)" :class="mihonAdded(x) ? 'btn-ghost' : 'btn-primary'" class="!py-2 !px-3.5 !text-xs shrink-0">{{ mihonAdded(x) ? 'Remove' : 'Add' }}</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
                     <!-- player links (anime, movies & TV) -->
                     <div v-if="extKind !== 'manga'" class="mt-6">
                         <p class="label mb-2.5">Player links <span class="text-mute">· {{ extPlayers.length }}</span></p>
@@ -4152,7 +4219,7 @@
                                 <span class="w-9 h-9 rounded-lg bg-raised text-sub flex items-center justify-center shrink-0"><i class="fa-solid fa-globe"></i></span>
                                 <div class="min-w-0 flex-grow">
                                     <p class="text-ink font-semibold text-sm truncate">{{ s.name }} <span class="font-mono text-[10px] text-mute ml-1">{{ (s.lang || 'en').toUpperCase() }}</span><span v-if="s.nsfw" class="ml-1 font-mono text-[9px] font-bold text-rose-400">18+</span></p>
-                                    <p class="text-[11px] text-mute truncate">{{ s.baseUrl }} · {{ (SOURCE_TEMPLATES[s.template] || {}).label || 'Custom' }}</p>
+                                    <p class="text-[11px] text-mute truncate">{{ s.template === 'mihon' ? 'Mihon server · real extension' : s.baseUrl + ' · ' + ((SOURCE_TEMPLATES[s.template] || {}).label || 'Custom') }}</p>
                                 </div>
                                 <button @click="removeSource(s.id)" class="btn-ghost !py-2 !px-3 !text-xs shrink-0">Remove</button>
                             </div>
@@ -4249,6 +4316,7 @@
                 <button v-if="!rd.local && rd.chapter?.ch && rd.manga" @click="toggleReaderMark()" class="reader-mark" :class="{ done: rd.marked }" :title="rd.marked ? 'Mark this chapter unread' : 'Mark this chapter read'"><i class="fa-solid" :class="rd.marked ? 'fa-check-double' : 'fa-check'"></i><span class="hidden sm:inline">{{ rd.marked ? 'Read · undo' : 'Mark read' }}</span></button>
             </div>
 
+            <transition name="rd-flash"><div v-if="rd.flash" class="reader-flash" aria-live="polite"><b>{{ rd.flash.ch }}</b><span v-if="rd.flash.sub">{{ rd.flash.sub }}</span></div></transition>
             <div v-if="rd.loading" class="absolute inset-0 flex items-center justify-center"><i class="fa-solid fa-circle-notch fa-spin text-3xl text-white/70"></i></div>
             <div v-else-if="rd.error" class="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
                 <p class="text-white/80">{{ rd.error }}</p>
@@ -4258,7 +4326,11 @@
             <!-- webtoon: one long strip -->
             <div v-else-if="rd.mode === 'vertical'" class="reader-strip" @scroll.passive="onVerticalScroll" @click="rd.ui = !rd.ui">
                 <template v-for="(p, n) in rd.pages" :key="n">
-                    <div v-if="n && (rd.segs || []).some(s => s.start === n)" class="reader-divider" @click.stop><i class="fa-solid fa-check text-volt"></i> Chapter {{ (rd.segs.find(s => s.start === n) || {}).ch?.ch }}</div>
+                    <div v-if="n && (rd.segs || []).some(s => s.start === n)" class="reader-divider" @click.stop>
+                        <span class="rd-div-line"></span>
+                        <span class="rd-div-label"><i class="fa-solid fa-book-open"></i> Chapter {{ (rd.segs.find(s => s.start === n) || {}).ch?.ch }}</span>
+                        <span class="rd-div-sub"><i class="fa-solid fa-check"></i> previous chapter saved as read</span>
+                    </div>
                     <img class="rd-img" :src="p" :loading="n < 3 ? 'eager' : 'lazy'" decoding="async" referrerpolicy="no-referrer" @error="onPageError(n)" alt="">
                 </template>
                 <div v-if="rd.appending" class="reader-end" @click.stop><i class="fa-solid fa-circle-notch fa-spin text-2xl text-white/70"></i></div>

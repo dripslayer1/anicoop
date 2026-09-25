@@ -1435,7 +1435,8 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 .tr-acts { display: inline-flex; align-items: center; gap: 4px; }
 .pl-add-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: rgb(var(--c-sub)); border: 1px solid rgb(var(--c-line2)); flex-shrink: 0; transition: color .15s, border-color .15s, background-color .15s; }
 .pl-add-btn:hover { color: rgb(var(--c-volt)); border-color: rgb(var(--c-volt) / .6); background: rgb(var(--c-volt) / .08); }
-.hdr-space { width: 13px; flex-shrink: 0; }   /* the gap between the tool icons and notifications / friends / chat */
+.hdr-space { width: 1px; height: 22px; margin: 0 6px; background: rgb(var(--c-volt) / .3); border-radius: 1px; flex-shrink: 0; }   /* the line between the tool icons and music / notifications / friends / chat */
+.theme-light .hdr-space { background: rgb(var(--c-sub) / .35); }
 
 /* v9.2 chat: emoji panel and GIF grid */
 .emoji-tabs { display: flex; gap: 2px; margin-top: 8px; overflow-x: auto; scrollbar-width: none; }
@@ -1449,7 +1450,20 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 .gif-grid > button { display: block; width: 100%; margin-bottom: 6px; border-radius: 8px; overflow: hidden; background: rgb(var(--c-raised)); break-inside: avoid; }
 .gif-grid img { width: 100%; height: auto !important; display: block; }
 /* v9.2 webtoon mode: where one chapter ends and the next begins in the endless strip */
-.reader-divider { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 22px 12px; font-family: "Geist Mono", monospace; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.75); background: #050507; }
+.reader-divider { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 34px 12px 30px; background: #050507; }
+.rd-div-line { width: min(420px, 70%); height: 1px; background: linear-gradient(90deg, transparent, rgb(var(--c-volt) / .7), transparent); }
+.rd-div-label { display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; background: rgb(var(--c-volt)); color: rgb(var(--c-onvolt)); font-family: "Geist Mono", monospace; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.rd-div-sub { font-size: 11px; color: rgba(255,255,255,.55); }
+.rd-div-sub i { color: rgb(var(--c-volt)); margin-right: 4px; }
+/* the "Chapter N" banner when a new chapter starts */
+.reader-flash { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 22px; border-radius: 16px;
+  background: rgb(10 10 12 / .88); border: 1px solid rgb(var(--c-volt) / .55); box-shadow: 0 16px 40px -12px rgb(0 0 0 / .9), 0 0 24px -10px rgb(var(--c-volt)); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); pointer-events: none; max-width: calc(100% - 32px); }
+.reader-flash b { font-family: "Geist Mono", monospace; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: rgb(var(--c-volt)); }
+.reader-flash span { font-size: 12px; color: rgba(255,255,255,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70vw; }
+.rd-flash-enter-active { transition: opacity .2s, transform .3s var(--ease); }
+.rd-flash-leave-active { transition: opacity .4s, transform .4s; }
+.rd-flash-enter-from { opacity: 0; transform: translate(-50%, -10px) scale(.95); }
+.rd-flash-leave-to { opacity: 0; transform: translate(-50%, -6px); }
 
 /* v9.2 music panel: on top of everything (reader and video player too), above the song player bar */
 .music-panel { position: fixed; z-index: 126; right: 16px; bottom: calc(var(--pbar-edge) + 12px); width: min(380px, calc(100vw - 24px)); max-height: min(620px, calc(100dvh - var(--pbar-edge) - 90px));
@@ -1466,3 +1480,47 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
 .music-enter-active, .music-leave-active { transition: opacity .18s, transform .22s var(--ease); }
 .music-enter-from, .music-leave-to { opacity: 0; transform: translateY(12px) scale(.98); }
 @media (max-width: 767px) { .music-panel { right: 12px; left: 12px; width: auto; } }
+
+/* v9.4 a card's quick actions: a compact row of round buttons just above the +, inside the card */
+.qa-bar { position: absolute; right: -4px; bottom: 48px; width: max-content; pointer-events: auto; padding: 6px 7px 7px; border-radius: 16px;
+  background: rgb(var(--c-base) / .94); border: 1px solid rgb(var(--c-line2)); box-shadow: 0 14px 34px -10px rgb(0 0 0 / .85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transform-origin: bottom right; }
+/* a bridge over the gap down to the +, so moving onto the row doesn't close it */
+.qa-bar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 10px; }
+.qa-hint { font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgb(var(--c-mute)); padding: 0 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.qa-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.qa-b { width: 32px; height: 32px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--c); background: rgb(var(--c-overlay) / .9);
+  border: 1.5px solid transparent; transition: transform .14s var(--ease), background-color .14s, border-color .14s, color .14s; flex-shrink: 0; }
+.qa-b:hover, .qa-b:focus-visible { transform: translateY(-2px) scale(1.08); border-color: var(--c); outline: none; }
+.qa-b.on { background: var(--c); color: #fff; border-color: var(--c); }
+.qa-b.danger { --c: #fb7185; }
+.qa-b.danger:hover { background: rgb(244 63 94 / .15); }
+.qa-bar-enter-active { transition: opacity .14s, transform .18s var(--ease); }
+.qa-bar-leave-active { transition: opacity .1s, transform .1s; }
+.qa-bar-enter-from, .qa-bar-leave-to { opacity: 0; transform: translateY(6px) scale(.96); }
+.qa-b[aria-label="Play"], .qa-b[aria-label="Play trailer"] { background: rgb(var(--c-volt)); color: rgb(var(--c-onvolt)); }
+.qa-bar.compact { padding: 5px; bottom: 46px; }
+.qa-bar.compact .qa-btns { gap: 4px; }
+.qa-bar.compact .qa-b { width: 29px; height: 29px; font-size: 11px; }
+/* v9.4 "Add songs" inside a playlist */
+.pl-add-list { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+.pl-add-state { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 999px; font-size: 11px; font-weight: 700; flex-shrink: 0; color: rgb(var(--c-volt)); border: 1px solid rgb(var(--c-volt) / .45); transition: background-color .12s, color .12s; }
+.mu-row:hover .pl-add-state:not(.on) { background: rgb(var(--c-volt)); color: rgb(var(--c-onvolt)); }
+.pl-add-state.on { color: #22c55e; border-color: rgb(34 197 94 / .45); }
+/* v9.4 ▶ on a release in an artist's discography: plays it without opening the track list */
+.disc-card-play { position: absolute; right: 8px; bottom: 8px; z-index: 2; width: 42px; height: 42px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 14px;
+  background: rgb(var(--c-volt)); color: rgb(var(--c-onvolt)); box-shadow: 0 10px 24px -8px rgb(0 0 0 / .8); opacity: 0; transform: translateY(8px); transition: opacity .18s, transform .22s var(--ease); cursor: pointer; }
+.disc-card-play .fa-play { margin-left: 2px; }
+.disc-card:hover .disc-card-play, .disc-card:focus-within .disc-card-play, .disc-card-play.on { opacity: 1; transform: none; }
+.disc-card-play:hover { transform: scale(1.08) !important; }
+@media (hover: none) { .disc-card-play { opacity: 1; transform: none; width: 36px; height: 36px; } }
+.disc-card-ico { left: 8px; right: auto; width: 30px; height: 30px; font-size: 11px; background: rgb(10 10 12 / .75) !important; color: #fff !important; }
+/* v9.4 title page: which of your installed sources have this title */
+.avail-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
+.avail-label { font-family: "Geist Mono", monospace; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgb(var(--c-mute)); margin-right: 4px; }
+.avail-label i { margin-right: 4px; }
+.avail-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid rgb(var(--c-line2)); color: rgb(var(--c-mute)); background: rgb(var(--c-raised) / .6); transition: background-color .15s, border-color .15s, transform .15s; }
+.avail-chip i { font-size: 10px; }
+.avail-chip.yes { color: #22c55e; border-color: rgb(34 197 94 / .5); background: rgb(34 197 94 / .08); cursor: pointer; }
+.avail-chip.yes:hover { background: rgb(34 197 94 / .18); transform: translateY(-1px); }
+.avail-chip.no, .avail-chip.error { opacity: .6; text-decoration: line-through; text-decoration-color: rgb(var(--c-mute) / .6); }
+.avail-chip:disabled { cursor: default; }
