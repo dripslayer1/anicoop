@@ -9,11 +9,11 @@ For the next agent/session taking over. Last updated at v9.8 (2026-09-25).
 **anicoop** is a social tracker for a group of friends. It covers **anime, manga/manhwa, movies & TV, games and songs**. It has solo lists, shared "squad" lists, a feed, chat, profiles, rankings, tier lists, and an in-app manga reader and video player that use extensions/sources the user installs.
 
 - **Repo:** `dripslayer1/anicoop`. Working branch: `claude/intelligent-johnson-gofau9`. The default branch is `main`.
-- **Hosting:** the owner drags the whole folder onto **Netlify Drop**. There is no build step on Netlify.
+- **Hosting:** now **GitHub Pages**, served from this public repo (the owner used Netlify Drop before). There is no build step. The repo must stay public for free GitHub Pages, so every file in it is publicly downloadable.
 - **Backend:** **Supabase** (auth, Postgres with RLS, realtime, storage), plus one Edge Function, `supabase/functions/igdb/index.ts`, which the owner deploys by hand.
 - **Owner workflow after each merged PR:**
   1. Merge the PR.
-  2. Re-upload the folder to Netlify.
+  2. GitHub Pages redeploys by itself after the merge.
   3. Deploy the Edge Function if it changed.
   4. Run any new SQL in Supabase → SQL Editor.
   5. Hard-refresh (Ctrl+Shift+R).
