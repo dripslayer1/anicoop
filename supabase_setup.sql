@@ -1546,6 +1546,36 @@ create policy "admin: song settings" on public.app_config for update to authenti
   using (key = 'songs' and public.has_perm('manage_songs')) with check (key = 'songs' and public.has_perm('manage_songs'));
 
 -- ---------------------------------------------------------------------
+-- 8e. v9.9 — SIGN IN WITH GOOGLE / DISCORD / FACEBOOK / TWITCH
+--   A new account gets a username made from its name there (or its email), cleaned up to 3–20 letters,
+--   numbers, _ or . — with numbers added if someone already has it. (Before, a taken name or an account
+--   without an email made the sign-up fail with "Database error saving new user".)
+-- ---------------------------------------------------------------------
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  m jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  base text;
+  pick text;
+  tries int := 0;
+begin
+  base := coalesce(nullif(trim(m->>'username'), ''), nullif(trim(m->>'user_name'), ''), nullif(trim(m->>'preferred_username'), ''),
+                   nullif(trim(m->'custom_claims'->>'global_name'), ''), nullif(trim(m->>'full_name'), ''), nullif(trim(m->>'name'), ''),
+                   nullif(split_part(coalesce(new.email, ''), '@', 1), ''), 'user');
+  base := left(regexp_replace(base, '[^A-Za-z0-9_.]', '', 'g'), 20);
+  if char_length(base) < 3 then base := 'user' || base; end if;
+  pick := base;
+  while exists (select 1 from public.profiles where lower(username) = lower(pick)) loop
+    tries := tries + 1;
+    pick := left(base, 16) || (1000 + floor(random() * 9000))::int::text;
+    if tries > 25 then pick := 'user' || substr(md5(new.id::text), 1, 12); exit; end if;
+  end loop;
+  insert into public.profiles (id, username) values (new.id, pick) on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
 -- 10. Tell the Supabase API about new columns right away (avoids "not in the schema cache" errors)
 -- ---------------------------------------------------------------------
 notify pgrst, 'reload schema';
