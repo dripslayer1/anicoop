@@ -27,8 +27,9 @@ For the next agent/session taking over. Last updated at v10.0 (2026-09-26), when
 
 **Status**
 - PRs #3–#15 (v8.8 → v9.9 + handovers) are **merged into `main`**.
-- **v10.0 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's 17-item list). **No SQL.** The Edge Function
-  changed (GIF paging: `next`), so the owner should redeploy it; the site works with the old one (no paging).
+- **v10.0 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's 17-item list + MyAnimeList sync). **SQL 8f**
+  (`account_links.refresh_token`). The Edge Function changed (GIF paging `next`, the `mal` endpoint) and needs the
+  secrets `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` from a MAL API client (README v10 has the owner's steps).
   Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
@@ -180,6 +181,17 @@ These are cumulative; the README has one section per version.
     ignores `::-webkit-scrollbar`).
   - **Decor:** 8 more `EFFECTS` (`FX_COUNT` sets particles per effect) and 8 more `NAME_STYLES` (CSS at the end of
     `input.css`).
+  - **MyAnimeList sync** (mirrors the AniList sync): MAL has no CORS and its token exchange needs the client secret, so
+    the Edge Function's `mal` endpoint does `config` / `token` / `refresh` / `api` (only `users/@me` and
+    `anime|manga/<id>/my_list_status`, GET/PATCH/DELETE, whitelisted form fields). OAuth = authorization code + PKCE
+    **plain** (`connectMal`, verifier + state in localStorage `anicoop_mal_pkce`; the `?code=&state=` return is read at
+    setup and stripped; `loadMalLink` exchanges it). Tokens live in `account_links` (provider `mal`, new column
+    `refresh_token`); `malApi` refreshes 2 days before expiry or after a 401. `malEnqueue` is called next to
+    `alEnqueue` in `upsertSolo` / `deleteSolo` (imports are suppressed by `alSuppress`); `malIdsFor` maps AniList ids to
+    `[idMal, type]` (localStorage `anicoop_malids_v1`); `malForm` maps statuses (REPEATING = completed + is_rewatching),
+    progress, whole-number score, rewatch counts. Tested with a faked link (payloads, refresh, 404 on delete) and the
+    Edge Function locally against the real MAL (it answers invalid_token / client auth failed as expected); **the real
+    sign-in is untested** until the owner registers the MAL client.
 
 ---
 
@@ -188,7 +200,8 @@ These are cumulative; the README has one section per version.
 **Stopped at:** the v10.0 PR is open. The owner has to merge it and redeploy the Edge Function (GIF paging).
 
 **Next steps**
-0. **When the owner reports back on v10.0,** check: GIF paging after the function redeploy; the lock-screen play button
+0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
+   problem" line in Settings → Linked accounts shows MAL's answer); GIF paging after the function redeploy; the lock-screen play button
    / coming back resumes full songs on their phone; the new decorations look right; and the media keys ⏭ ⏮ (v9.9, still
    unconfirmed).
    A friend's question (answered, no code change): MAL shows 304 completed, anicoop fewer/more — 5 recap TV specials

@@ -2512,7 +2512,7 @@ createApp({
             fetchOwnerId(); fetchPlaylists();
             startPresence(); touchLastSeen();
             fetchFollows().then(() => setTimeout(checkFollowed, 6000));
-            loadAniListLink();
+            loadAniListLink(); loadMalLink();
             setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
         };
         const clearUserData = () => {
@@ -2523,7 +2523,7 @@ createApp({
             friendsList.value = []; pendingRequests.value = []; sentRequests.value = []; friendEntries.value = [];
             notifications.value = []; daysActive.value = 0; feed.value = []; favStaff.value = []; entity.value = null; chats.value = []; chatWith.value = null; chatMessages.value = []; adultAllowed.value = false; isOwner.value = false; songsCfg.ready = false; extraProfiles.value = []; settingsLoaded = false; settingsOpen.value = false;
             selectedAnime.value = null; editForm.value = emptyForm();
-            follows.value = []; buddies.value = []; playlists.value = []; plOpen.value = null; closePlayer(); alLink.value = null; mediaLinks.value = [];
+            follows.value = []; buddies.value = []; playlists.value = []; plOpen.value = null; closePlayer(); alLink.value = null; malLink.value = null; mediaLinks.value = [];
             stopPresence(); people.value = [];
             randomOpen.value = false; quickMenuFor.value = null; selectMode.value = false; selected.value = new Map();
             currentAppView.value = 'home'; viewUserId.value = null; entity.value = null;
@@ -2625,6 +2625,7 @@ createApp({
             const { error } = await sb.from('list_entries').upsert(list.map(soloRow), { onConflict: 'user_id,media_id' });
             if (error) throw error;
             list.forEach(e => alEnqueue(e.anime.id, alSaveOp(e)));
+            list.forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: { status: e.status, score: e.score, progress: e.progress, repeats: e.repeats, anime: { episodes: e.anime?.episodes || 0 } } }));
         };
         // AniList counts a rewatch's episodes in "progress" and the finished rewatches in "repeat"
         const alSaveOp = (e) => {
@@ -2636,6 +2637,7 @@ createApp({
             const { error } = await sb.from('list_entries').delete().eq('user_id', uid()).in('media_id', list);
             if (error) throw error;
             list.forEach(id => alEnqueue(id, { kind: 'delete' }));
+            list.forEach(id => malEnqueue(id, { kind: 'delete' }));
         };
         const setSoloLocal = (entry) => {
             const idx = soloList.value.findIndex(i => i.anime.id === entry.anime.id);
@@ -9399,6 +9401,156 @@ createApp({
             showToast('Syncing to AniList in the background…');
         };
 
+        // ---------- v10 MyAnimeList account link: the same changes are copied to your MyAnimeList list ----------
+        // MAL can't be reached from a browser, so everything goes through the Edge Function (`mal`), which also keeps the
+        // app's MAL Client Secret. Your own MAL token is kept in your account_links row (only you can read it).
+        // Only anime and manga (MAL has nothing else); AniList ids are turned into MAL ids with AniList's idMal.
+        const malLink = ref(null);
+        const malSync = reactive({ pending: 0, error: '', ready: null });   // ready: null = not asked yet, true / false = MAL set up by the owner
+        const MAL_PKCE_KEY = 'anicoop_mal_pkce', MAL_CODE_KEY = 'anicoop_mal_code', MAL_IDS_KEY = 'anicoop_malids_v1';
+        const malRedirect = () => location.origin + location.pathname.replace(/index\.html$/, '');   // must match the address registered on MAL exactly
+        // MAL sends you back with ?code=…&state=… — kept for after sign-in, and taken out of the address
+        (() => { try {
+            const q = new URLSearchParams(location.search), code = q.get('code'), state = q.get('state');
+            const saved = JSON.parse(localStorage.getItem(MAL_PKCE_KEY) || 'null');
+            if (code && state && saved?.s === state) {
+                sessionStorage.setItem(MAL_CODE_KEY, JSON.stringify({ code, v: saved.v }));
+                localStorage.removeItem(MAL_PKCE_KEY);
+                q.delete('code'); q.delete('state');
+                history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+            } else if (q.get('error') && saved) { localStorage.removeItem(MAL_PKCE_KEY); sessionStorage.setItem(MAL_CODE_KEY, JSON.stringify({ denied: q.get('error_description') || q.get('error') })); history.replaceState(history.state, '', location.pathname + location.hash); }
+        } catch {} })();
+        const malFn = async (payload) => {
+            const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'mal', ...payload } });
+            if (error) {
+                let m = ''; try { m = (await error.context.json())?.error || ''; } catch {}
+                throw new Error(/not allowed/i.test(m) ? 'MyAnimeList needs the updated Edge Function (see README v10)' : m || 'MyAnimeList request failed');
+            }
+            return typeof data === 'string' ? JSON.parse(data) : data;
+        };
+        let malClientId = '';
+        const malConfig = async () => {
+            if (malClientId) return malClientId;
+            try { malClientId = (await malFn({ action: 'config' })).client_id || ''; malSync.ready = !!malClientId; }
+            catch (err) { malSync.ready = false; malSync.error = err.message; }
+            return malClientId;
+        };
+        const randomToken = (n) => { const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'; const b = crypto.getRandomValues(new Uint8Array(n)); return [...b].map(x => abc[x % abc.length]).join(''); };
+        const connectMal = async () => {
+            const id = await malConfig();
+            if (!id) { showToast(malSync.error || 'The app owner needs to finish the MyAnimeList setup first (README v10)', 'error'); return; }
+            const v = randomToken(96), s = randomToken(24);   // MAL only supports the "plain" PKCE method: the challenge is the verifier
+            try { localStorage.setItem(MAL_PKCE_KEY, JSON.stringify({ v, s, at: Date.now() })); } catch {}
+            location.href = 'https://myanimelist.net/v1/oauth2/authorize?' + new URLSearchParams({ response_type: 'code', client_id: id, code_challenge: v, code_challenge_method: 'plain', state: s, redirect_uri: malRedirect() });
+        };
+        const saveMalLink = async (row) => {
+            const { error } = await sb.from('account_links').upsert(row, { onConflict: 'user_id,provider' });
+            if (error) throw new Error(/refresh_token/.test(error.message || '') ? 'Run the v10 SQL in Supabase first (README v10)' : error.message);
+            malLink.value = row;
+        };
+        const malTokens = (t) => ({ access_token: t.access_token, refresh_token: t.refresh_token || malLink.value?.refresh_token || null, expires_at: new Date(Date.now() + (t.expires_in || 2678400) * 1000).toISOString() });
+        const loadMalLink = async () => {
+            if (!uid()) return;
+            const { data: link } = await sb.from('account_links').select('*').eq('user_id', uid()).eq('provider', 'mal').maybeSingle().then(r => r, () => ({ data: null }));
+            malLink.value = link || null;
+            let pending = null; try { pending = JSON.parse(sessionStorage.getItem(MAL_CODE_KEY) || 'null'); sessionStorage.removeItem(MAL_CODE_KEY); } catch {}
+            if (pending?.denied) { showToast('MyAnimeList wasn’t connected: ' + pending.denied, 'error'); return; }
+            if (!pending?.code) { if (!link) malConfig(); return; }
+            try {
+                const t = await malFn({ action: 'token', code: pending.code, verifier: pending.v, redirect: malRedirect() });
+                if (t.error) throw new Error(t.error);
+                const me = await malFn({ action: 'api', token: t.access_token, method: 'GET', path: 'users/@me' });
+                const who = me?.status === 200 ? JSON.parse(me.body || '{}') : {};
+                await saveMalLink({ user_id: uid(), provider: 'mal', ...malTokens(t), remote_id: who.id || null, remote_name: who.name || 'your account' });
+                showToast(`MyAnimeList connected as ${who.name || 'you'} — your changes will sync there`);
+                openSettings('import');
+            } catch (err) { showToast('Could not connect MyAnimeList: ' + (err.message || err), 'error'); }
+        };
+        const disconnectMal = async () => {
+            await sb.from('account_links').delete().eq('user_id', uid()).eq('provider', 'mal');
+            malLink.value = null; malQueue.clear(); malSync.pending = 0; malSync.error = '';
+            showToast('MyAnimeList disconnected');
+        };
+        // a fresh token a couple of days before it runs out (MAL's last about a month), or right away after a 401
+        const malRefresh = async () => {
+            const rt = malLink.value?.refresh_token;
+            if (!rt) throw Object.assign(new Error('MyAnimeList sign-in expired — connect again in Settings'), { auth: true });
+            const t = await malFn({ action: 'refresh', refresh_token: rt }).catch(() => null);
+            if (!t?.access_token) throw Object.assign(new Error('MyAnimeList sign-in expired — connect again in Settings'), { auth: true });
+            await saveMalLink({ ...malLink.value, ...malTokens(t) });
+        };
+        const malApi = async (method, path, form) => {
+            if (malLink.value?.expires_at && new Date(malLink.value.expires_at) - Date.now() < 2 * 864e5) await malRefresh();
+            let r = await malFn({ action: 'api', token: malLink.value.access_token, method, path, form });
+            if (r.status === 401) { await malRefresh(); r = await malFn({ action: 'api', token: malLink.value.access_token, method, path, form }); }
+            if (r.status === 401) throw Object.assign(new Error('MyAnimeList sign-in expired — connect again in Settings'), { auth: true });
+            return r;
+        };
+        // AniList id → [MAL id (0 = none), 'ANIME' | 'MANGA'], kept in this browser
+        const malIds = readJSON(MAL_IDS_KEY) || {};
+        const saveMalIds = debounce(() => { try { localStorage.setItem(MAL_IDS_KEY, JSON.stringify(malIds)); } catch {} }, 800);
+        const malIdsFor = async (ids) => {
+            const todo = [...new Set(ids)].filter(id => id && id < GAME_BASE && !(id in malIds));
+            for (let i = 0; i < todo.length; i += 50) {
+                const chunk = todo.slice(i, i + 50);
+                const d = await anilistRaw('query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { id idMal type } } }', { ids: chunk });
+                const got = new Map((d?.Page?.media || []).map(m => [m.id, m]));
+                chunk.forEach(id => { const m = got.get(id); if (m) malIds[id] = [m.idMal || 0, m.type]; });
+                saveMalIds();
+                if (i + 50 < todo.length) await sleep(800);
+            }
+        };
+        // anicoop → MAL: statuses, progress, score (MAL scores are whole 1–10), rewatches
+        const MAL_ANIME_ST = { WATCHING: 'watching', COMPLETED: 'completed', PAUSED: 'on_hold', DROPPED: 'dropped', PLANNING: 'plan_to_watch', REPEATING: 'completed' };
+        const MAL_MANGA_ST = { WATCHING: 'reading', COMPLETED: 'completed', PAUSED: 'on_hold', DROPPED: 'dropped', PLANNING: 'plan_to_read', REPEATING: 'completed' };
+        const malForm = (e, type) => {
+            const reps = e.repeats || [], full = e.anime?.episodes || 0;
+            const done = full ? reps.filter(n => n >= full).length : 0, now = e.status === 'REPEATING';
+            const progress = now ? (reps[reps.length - 1] || 0) : (e.progress || 0);
+            const score = clamp(Math.round(Number(e.score) || 0), 0, 10);
+            return type === 'MANGA'
+                ? { status: MAL_MANGA_ST[e.status] || 'plan_to_read', score, num_chapters_read: progress, is_rereading: now, num_times_reread: done }
+                : { status: MAL_ANIME_ST[e.status] || 'plan_to_watch', score, num_watched_episodes: progress, is_rewatching: now, num_times_rewatched: done };
+        };
+        // queue: one MAL request at a time, the newest change per title wins
+        const malQueue = new Map();
+        let malRunning = false;
+        const malEnqueue = (id, op) => {
+            if (!malLink.value || alSuppress || !id || id >= GAME_BASE) return;
+            malQueue.delete(id); malQueue.set(id, op); malSync.pending = malQueue.size; runMalQueue();
+        };
+        const runMalQueue = async () => {
+            if (malRunning) return; malRunning = true;
+            try {
+                while (malQueue.size && malLink.value) {
+                    const ids = [...malQueue.keys()];
+                    try { await malIdsFor(ids.slice(0, 200)); } catch {}
+                    const [id, op] = malQueue.entries().next().value; malQueue.delete(id); malSync.pending = malQueue.size;
+                    const [malId, type] = malIds[id] || [0, null];
+                    if (!malId) continue;   // not on MAL (some AniList-only titles): nothing to do
+                    const path = `${type === 'MANGA' ? 'manga' : 'anime'}/${malId}/my_list_status`;
+                    try {
+                        const r = op.kind === 'delete' ? await malApi('DELETE', path) : await malApi('PATCH', path, malForm(op.entry, type));
+                        if (r.status >= 400 && !(op.kind === 'delete' && r.status === 404)) throw new Error(`MyAnimeList said ${r.status}` + (r.body ? ': ' + String(r.body).slice(0, 120) : ''));
+                        malSync.error = '';
+                    } catch (err) {
+                        malSync.error = err.message || String(err);
+                        if (err.auth) { malLink.value = null; showToast(malSync.error, 'error'); break; }
+                    }
+                    await sleep(700);
+                }
+            } finally { malRunning = false; malSync.pending = malQueue.size; }
+        };
+        const pushAllToMal = async () => {
+            if (!malLink.value || malSync.pending) return;
+            const list = soloList.value.filter(e => isAniListType(typeOf(e)));
+            if (!(await askConfirm({ title: `Copy all ${list.length} anime & manga to MyAnimeList?`, body: 'Titles already there get this site’s status, progress and score. This takes about a second per title — you can keep using the app.', ok: 'Copy to MyAnimeList', danger: false }))) return;
+            list.forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: e }));
+            showToast('Syncing to MyAnimeList in the background…');
+        };
+        // opening Settings → Linked accounts asks (once) whether the owner has set MAL up, so the button can say so
+        watch(() => settingsOpen.value && settingsTab.value === 'import' && !malLink.value, (on) => { if (on && malSync.ready === null) malConfig(); });
+
         // Home: 3 random trending posters, different every time the app opens
         // The pool is cached, so the 3 posters are picked before the intro plays and never swap mid-animation;
         // a fresh pool is fetched in the background for next time.
@@ -9607,7 +9759,7 @@ createApp({
             debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, tierChars, tierWho, tierPlaceholder, tierNoun, picOf, charPicFix, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
             follows, isFollowing, toggleFollow, checkFollowed, mediaLinks, linkDraft, saveMediaLink, deleteMediaLink,
             buddyState, buddyRequests, buddyList, askBuddy, acceptBuddy, endBuddy,
-            siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList,
+            siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList, malLink, malSync, connectMal, disconnectMal, pushAllToMal,
             rankTab, RANK_CATS, myRankings, viewedRankings, shownOf, showMoreRank, rankEdit, moveRank, setRankPos, resetRankOrder, myRankOrders, rankDrag, onRankPointerDown, onRankPointerMove, onRankPointerUp, rankRowStyle,
             compareBig, compareAddable, theirList, openTheirList, theirCounts, theirGrouped, openFriendStat, setViewedSection, openFriendLists, openFriendsManage, friendsOpen, friendsQuery, friendsFiltered, friendCounts,
             groupWith, groups, groupMessages, groupUnread, groupInfo, groupMemberProfiles, openGroup, leaveGroupChat,

@@ -663,11 +663,16 @@ on says so when tapped — ask to have it removed from the page):
 > If you switched any of them on in Supabase, you can switch them off there too (Authentication → Providers); accounts
 > already made with them keep working either way.
 
-## v10.0 — more GIFs, tier lists for every section, "Wanna Rewatch", 18+ kept private, header search
+## v10.0 — MyAnimeList sync, more GIFs, tier lists for every section, "Wanna Rewatch", 18+ kept private, header search
 
-**Update:** merge the PR (GitHub Pages updates by itself). **No SQL.** For item 1 (more GIFs when scrolling), **deploy
-the Edge Function again** (Supabase → Edge Functions → `igdb` → replace the code with `supabase/functions/igdb/index.ts`
-→ Deploy). Until then, the GIF picker simply shows the first 30 like before.
+**Update:** merge the PR (GitHub Pages updates by itself), then:
+1. **Run this SQL** in Supabase → SQL Editor (it's also section "8f" in `supabase_setup.sql`; needed for item 18):
+   ```sql
+   alter table public.account_links add column if not exists refresh_token text;
+   ```
+2. **Deploy the Edge Function again** (Supabase → Edge Functions → `igdb` → replace the code with
+   `supabase/functions/igdb/index.ts` → Deploy). It adds more GIFs when scrolling (item 1) and MyAnimeList sync (item 18).
+3. For MyAnimeList sync, do the one-time **MyAnimeList setup** at the end of this section.
 
 1. **GIFs:** scrolling down in the GIF picker loads 30 more each time.
 2. **Tier lists in every section:** a switch at the top picks what you rank: **Characters** (Artists for Songs) or the
@@ -702,3 +707,24 @@ the Edge Function again** (Supabase → Edge Functions → `igdb` → replace th
 17. **Wanna Rewatch** (anime, movies & TV): a button on a title's page (and in the add buttons above) puts it on its own
     **Wanna Rewatch** list (a filter in Lists, and its own row there). The title keeps its status (Completed…); a title
     that isn't on your list yet goes in as Completed. Starting a rewatch takes it off the list.
+18. **MyAnimeList sync:** Settings → Linked accounts → **Connect MyAnimeList**. From then on, every change to your solo
+    list (add, status, episodes / chapters, score, rewatches, remove) is copied to your MyAnimeList list too, like AniList
+    sync. **Copy my whole list to MyAnimeList** sends everything once. Only anime and manga (MyAnimeList has no games,
+    movies or songs), and scores are rounded to whole numbers there. Each friend connects their own MyAnimeList.
+
+**MyAnimeList setup (once, by the owner).** MyAnimeList only lets registered apps change lists, so the site needs its own
+free "API client":
+
+1. Sign in on myanimelist.net and open **myanimelist.net/apiconfig** → **Create ID**.
+2. Fill it in:
+   * **App Type:** `web`
+   * **App Redirect URL:** your site's address exactly, e.g. `https://dripslayer1.github.io/anicoop/` (with the `/` at
+     the end)
+   * **Homepage URL:** the same address
+   * **Commercial / Non-Commercial:** Non-Commercial · **Purpose of Use:** hobbyist
+   * the name / description / contact fields can be anything (e.g. "anicoop — a list tracker for friends")
+3. Agree and **Submit**. Open the new app from the list: it shows a **Client ID** and a **Client Secret**.
+4. Supabase → **Edge Functions → Secrets** (Manage secrets) → add two secrets:
+   `MAL_CLIENT_ID` = the Client ID, `MAL_CLIENT_SECRET` = the Client Secret. (Keys stay in Supabase only — never in the
+   repo.)
+5. Done. The Connect MyAnimeList button now works for everyone (after the SQL and the Edge Function update above).

@@ -3812,10 +3812,23 @@
                                     </template>
                                 </div>
                                 <div class="set-block">
-                                    <div class="flex items-center gap-3">
-                                        <span class="w-9 h-9 rounded-xl bg-[#2e51a2] text-white font-bold text-xs flex items-center justify-center">MAL</span>
-                                        <div><p class="set-title">MyAnimeList</p><p class="set-hint">Coming soon — MyAnimeList only accepts changes from a server, not straight from a website.</p></div>
+                                    <!-- v10 MyAnimeList sync (through the Edge Function) -->
+                                    <div class="flex flex-wrap items-center gap-3">
+                                        <span class="w-9 h-9 rounded-xl bg-[#2e51a2] text-white font-bold text-[10px] flex items-center justify-center">MAL</span>
+                                        <div class="flex-grow min-w-0">
+                                            <p class="set-title">MyAnimeList</p>
+                                            <p class="set-hint">{{ malLink ? 'Linked as ' + malLink.remote_name + ' · syncing your anime & manga changes' : malSync.ready === false ? (malSync.error || 'Not available yet — the app owner needs to finish the MyAnimeList setup') : 'Not linked' }}</p>
+                                        </div>
+                                        <button v-if="!malLink" @click="connectMal" :disabled="malSync.ready === false" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid fa-link"></i> Connect MyAnimeList</button>
+                                        <button v-else @click="disconnectMal" class="btn-ghost !py-2 !px-4 !text-xs">Disconnect</button>
                                     </div>
+                                    <template v-if="malLink">
+                                        <p v-if="malSync.pending" class="text-xs text-sub mt-3"><i class="fa-solid fa-circle-notch fa-spin text-volt mr-1.5"></i>Syncing {{ malSync.pending }} change{{ malSync.pending === 1 ? '' : 's' }} to MyAnimeList…</p>
+                                        <p v-else-if="malSync.error" class="text-xs text-rose-400 mt-3"><i class="fa-solid fa-circle-exclamation mr-1.5"></i>Last sync problem: {{ malSync.error }}</p>
+                                        <p v-else class="text-xs text-[#22c55e] mt-3"><i class="fa-solid fa-check mr-1.5"></i>Up to date</p>
+                                        <button @click="pushAllToMal" :disabled="malSync.pending > 0" class="btn-ghost !py-2 !px-4 !text-xs mt-3"><i class="fa-solid fa-cloud-arrow-up"></i> Copy my whole list to MyAnimeList</button>
+                                        <p class="text-[11px] text-mute mt-2">Only anime and manga (MyAnimeList has no games, movies or songs). Scores are rounded to whole numbers there.</p>
+                                    </template>
                                 </div>
 
                                 <div class="pt-4"><p class="kicker">// bring your history</p><h3 class="mt-1 font-display font-bold text-ink text-2xl">Import lists</h3><p class="set-hint">Imports go into your solo list. Titles are matched with AniList automatically.</p></div>
