@@ -1,7 +1,7 @@
 /* ==================================================================
    anicoop v6 — app logic (Vue 3 + Supabase + AniList)
    ================================================================== */
-const { createApp, ref, shallowRef, reactive, computed, onMounted, watch, nextTick } = Vue;
+const { createApp, ref, shallowRef, reactive, computed, onMounted, watch, nextTick, markRaw } = Vue;
 
 // The publishable key is safe to expose – security comes from the RLS policies in supabase_setup.sql
 const SUPABASE_URL = 'https://trbwiqkgrifeigntvhmh.supabase.co';
@@ -44,7 +44,7 @@ const SECTIONS = {
               blurb: 'Seasonal hits, classics & your squad lists.' },
     manga:  { id: 'manga',  label: 'Manga & Manhwa', short: 'Manga', type: 'MANGA', live: true, color: '#FF4D8D', icon: 'fa-book-open',
               blurb: 'Manga, manhwa & manhua — every chapter.' },
-    movies: { id: 'movies', label: 'Movies & TV Shows', short: 'Movies & TV', type: 'TV', live: true, color: '#3b82f6', icon: 'fa-film',
+    movies: { id: 'movies', label: 'Movies & TV Shows', short: 'Movies & TV', tiny: 'Movies', type: 'TV', live: true, color: '#3b82f6', icon: 'fa-film',
               blurb: 'Films and series for movie night.' },
     games:  { id: 'games',  label: 'Games', short: 'Games', type: 'GAME', live: true, color: '#D4FF3A', icon: 'fa-gamepad',
               blurb: 'Plan to play, now playing & beaten.' },
@@ -1048,8 +1048,10 @@ const gameWhere = (f, o = {}) => {
     if (f.coop) w.push('game_modes = (3)');
     return w.join(' & ');
 };
+// v9.9 search results: the most played / rated first (IGDB can't sort a search itself). Stable, so equal ones keep their order.
+const byPopular = (rows) => rows.map((g, n) => ({ g, n })).sort((a, b) => (b.g.total_rating_count || 0) - (a.g.total_rating_count || 0) || a.n - b.n).map(x => x.g);
 // search: base games first, then their DLC / expansions
-const mainFirst = (rows) => rows.map((g, n) => ({ g, n })).sort((a, b) => ((a.g.game_type === 1 || a.g.game_type === 2) - (b.g.game_type === 1 || b.g.game_type === 2)) || a.n - b.n).map(x => x.g);
+const mainFirst =(rows) => rows.map((g, n) => ({ g, n })).sort((a, b) => ((a.g.game_type === 1 || a.g.game_type === 2) - (b.g.game_type === 1 || b.g.game_type === 2)) || a.n - b.n).map(x => x.g);
 let popularOneTrip = true;   // turned off if the deployed proxy doesn't know "popular_games" yet
 const gameApi = {
     // Browse: search, filters, sorting, or (nothing set) what people are playing right now
@@ -1058,8 +1060,8 @@ const gameApi = {
         const q = (f.search || '').trim();
         const where = gameWhere(f, o);
         if (q) {
-            const rows = await igdb('games', `search "${igdbStr(q)}"; fields ${GAME_FIELDS}; where ${where} & game_type = ${SEARCH_TYPES}; limit ${GAME_PAGE}; offset ${offset};`, { low });
-            return { items: mainFirst(rows).map(normGame), hasNextPage: rows.length === GAME_PAGE };
+            const { rows, more } = await gameApi.searchPopular(q, `${where} & game_type = ${SEARCH_TYPES}`, GAME_PAGE, offset, low);
+            return { items: rows.map(normGame), hasNextPage: more };
         }
         const sorted = f.sort === 'rating_desc' || f.sort === 'rating_asc' || f.sort === 'new';
         if (!(f.genre || f.platform || f.year || f.status || f.coop || f.tag || sorted || o.adult)) {
@@ -1102,8 +1104,21 @@ const gameApi = {
         return { fresh, soon: soon.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate)), best, coop };
     },
     async search(q, limit = 8) {
-        const rows = await igdb('games', `search "${igdbStr(q)}"; fields ${GAME_FIELDS}; where cover != null & ${CLEAN_GAMES} & themes != (${ADULT_THEME}) & game_type = ${SEARCH_TYPES}; limit ${limit};`);
-        return mainFirst(rows).map(normGame);
+        const { rows } = await gameApi.searchPopular(q, `cover != null & ${CLEAN_GAMES} & themes != (${ADULT_THEME}) & game_type = ${SEARCH_TYPES}`, limit, 0);
+        return rows.slice(0, limit).map(normGame);
+    },
+    // v9.9 searches, most popular first: titles with your words in the name, sorted by how many people rated them
+    // (IGDB's own search can't be sorted and ranks oddly: "zelda" didn't even list Breath of the Wild), then IGDB's
+    // fuzzy matches (typos, other names) after them on the first page
+    async searchPopular(q, where, limit, offset = 0, low = false) {
+        const s = igdbStr(q.trim());
+        const [named, fuzzy] = await Promise.all([
+            igdb('games', `fields ${GAME_FIELDS}; where name ~ *"${s}"* & ${where}; sort total_rating_count desc; limit ${limit}; offset ${offset};`, { low }).catch(() => null),
+            offset ? [] : igdb('games', `search "${s}"; fields ${GAME_FIELDS}; where ${where}; limit ${limit};`, { low }).catch(() => []),
+        ]);
+        if (!named && !fuzzy.length) throw new Error('Could not search games — try again.');
+        const a = named || [], seen = new Set(a.map(g => g.id));
+        return { rows: [...a, ...byPopular(mainFirst(fuzzy.filter(g => !seen.has(g.id))))], more: a.length === limit };
     },
     async details(id) {
         const rows = await igdb('games', `fields ${GAME_DETAIL_FIELDS}; where id = ${parseInt(id - GAME_BASE, 10)};`);
@@ -1131,6 +1146,15 @@ const gameApi = {
         const rows = await igdb('characters', `fields name,mug_shot.image_id,description; where games = (${parseInt(id - GAME_BASE, 10)}); limit 40;`);
         return rows.filter(c => c.name).map(c => ({ id: GAME_BASE + c.id, name: { full: c.name }, image: { large: IGDB_IMG(c.mug_shot?.image_id, 't_cover_big') }, section: 'GAME', gameId: id }));
     },
+    // v9.9 find a game character by name (tier lists, polls): the ones with a picture first
+    async searchCharacters(q, limit = 12) {
+        const rows = await igdb('characters', `search "${igdbStr(q)}"; fields name,mug_shot.image_id,games.name,games.total_rating_count; limit 30;`);
+        const game = (c) => [...(c.games || [])].sort((a, b) => (b.total_rating_count || 0) - (a.total_rating_count || 0))[0] || null;
+        const list = rows.filter(c => c.name).map(c => { const g = game(c); return { id: GAME_BASE + c.id, name: { full: c.name }, image: { large: IGDB_IMG(c.mug_shot?.image_id, 't_cover_big') }, section: 'GAME', gameId: g ? GAME_BASE + g.id : null, gameName: g?.name || '', pop: g?.total_rating_count || 0 }; });
+        // the name you typed first, then characters from well-known games (IGDB's own order puts obscure ones on top)
+        const n = q.trim().toLowerCase(), close = (c) => { const x = c.name.full.toLowerCase(); return x === n ? 2 : x.startsWith(n) || x.split(' ').includes(n) ? 1 : 0; };
+        return list.sort((a, b) => close(b) - close(a) || b.pop - a.pop).slice(0, limit);
+    },
     // a random well-known game (for Random pick with no filters)
     async random(o = {}) {
         const rows = await igdb('games', `fields ${GAME_FIELDS}; where total_rating_count > 40 & ${gameWhere({}, o)} & game_type = ${MAIN_TYPES}; sort total_rating_count desc; limit 1; offset ${Math.floor(Math.random() * 1500)};`);
@@ -1151,6 +1175,106 @@ const gameApi = {
         return out;
     },
 };
+// v9.9 game characters IGDB has no picture for: the game's Fandom wiki first (it has a page for nearly every
+// character, side ones too), then Wikipedia (the character's own article, for the famous ones).
+// Answers are kept in this browser, misses too, so each character is only looked up once.
+const CHARPIC_KEY = 'anicoop_charpics_v2';
+const charPics = readJSON(CHARPIC_KEY) || {};   // "name|game" → picture url, or '' (nothing found)
+const saveCharPics = debounce(() => { try { localStorage.setItem(CHARPIC_KEY, JSON.stringify(charPics)); } catch {} }, 1000);
+const charPicKey = (c, game) => `${c.name?.full || ''}|${c.gameName || game || ''}`.toLowerCase();
+const wikiQuery = (host, params) => fetch(`https://${host}/api.php?` + new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', ...params }))
+    .then(r => r.ok ? r.json() : null).catch(() => null);
+// which Fandom wiki a game belongs to: guessed from its names ("The Witcher 3: Wild Hunt" → witcher, "Red Dead" → reddead)
+// and checked. The answer (or "none") is remembered.
+const FANDOM_KEY = 'anicoop_fandom_v1';
+const fandomHosts = readJSON(FANDOM_KEY) || {};   // "names" → "reddead.fandom.com" | ''
+const fandomSlugs = (names) => {
+    const out = [];
+    names.filter(Boolean).forEach(n => {
+        const base = String(n).toLowerCase().replace(/\s*[:–—(].*$/, '').replace(/\s+(part\s+)?([ivx]+|\d+)$/i, '').replace(/&/g, 'and').trim();
+        const words = base.split(/\s+/).filter(Boolean), noThe = words[0] === 'the' ? words.slice(1) : words;
+        const slug = (w) => w.join('').replace(/[^a-z0-9]/g, '');
+        [slug(noThe), slug(words), noThe.length > 2 ? slug(noThe.slice(0, 2)) : ''].forEach(s => { if (s.length >= 3 && !out.includes(s)) out.push(s); });
+    });
+    return out.slice(0, 6);
+};
+const fandomFor = async (names) => {
+    const key = names.filter(Boolean).join('|').toLowerCase();
+    if (!key) return '';
+    if (key in fandomHosts) return fandomHosts[key];
+    let host = '';
+    for (const s of fandomSlugs(names)) {
+        const j = await wikiQuery(`${s}.fandom.com`, { meta: 'siteinfo' });   // a wiki that doesn't exist fails here
+        const server = j?.query?.general?.server;
+        if (server) { host = server.replace(/^https?:\/\//, '').replace(/\/.*$/, ''); break; }
+    }
+    fandomHosts[key] = host;
+    try { localStorage.setItem(FANDOM_KEY, JSON.stringify(fandomHosts)); } catch {}
+    return host;
+};
+// pictures for a list of page titles on one wiki (50 per request, following redirects) → Map title → { title, thumb, desc }
+const wikiPages = async (host, titles, extra = {}) => {
+    const found = new Map(), answered = new Set();
+    for (let i = 0; i < titles.length; i += 50) {
+        const part = titles.slice(i, i + 50);
+        const j = await wikiQuery(host, { redirects: '1', prop: 'pageimages|description', piprop: 'thumbnail', pithumbsize: '300', titles: part.join('|'), ...extra });
+        if (!j?.query) continue;
+        part.forEach(t => answered.add(t));
+        const norm = new Map((j.query.normalized || []).map(x => [x.from, x.to]));
+        const redir = new Map((j.query.redirects || []).map(x => [x.from, x.to]));
+        const pages = new Map((j.query.pages || []).filter(p => !p.missing).map(p => [p.title, p]));
+        part.forEach(t => { const k = norm.get(t) || t; const p = pages.get(redir.get(k) || k); if (p) found.set(t, { title: p.title, thumb: p.thumbnail?.source || null, desc: p.description || '' }); });
+    }
+    return { found, answered };
+};
+const firstWord = (s) => String(s || '').trim().split(/\s+/)[0].toLowerCase();
+// hints: other names the game goes by (its franchise / series), which help find its wiki
+const wikiCharPics = async (chars, game = '', hints = []) => {
+    const todo = chars.filter(c => !c.image?.large && c.name?.full && !(charPicKey(c, game) in charPics));
+    if (todo.length) {
+        const done = new Set();
+        const put = (c, url) => { charPics[charPicKey(c, game)] = url; done.add(c); };
+        // 1. the game's Fandom wiki (one wiki per game: characters from search results can come from different games)
+        const byGame = new Map();
+        todo.forEach(c => { const g = c.gameName || game; if (!byGame.has(g)) byGame.set(g, []); byGame.get(g).push(c); });
+        for (const [g, list] of byGame) {
+            const host = await fandomFor([...(g === game ? hints : []), g]);
+            if (!host) continue;
+            const { found, answered } = await wikiPages(host, [...new Set(list.map(c => c.name.full))]);
+            const left = [];
+            list.forEach(c => { const x = found.get(c.name.full); if (x?.thumb) put(c, x.thumb); else if (answered.has(c.name.full)) left.push(c); });
+            // not under that exact name ("Emhyr Var Emreis" / "Emhyr var Emreis"): the wiki's own search, a few at a time
+            const queue = left.slice(0, 16);
+            const worker = async () => {
+                while (queue.length) {
+                    const c = queue.shift();
+                    const j = await wikiQuery(host, { generator: 'search', gsrsearch: c.name.full, gsrlimit: '1', gsrnamespace: '0', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '300' });
+                    const p = (j?.query?.pages || [])[0];
+                    if (p?.thumbnail?.source && firstWord(p.title) === firstWord(c.name.full)) put(c, p.thumbnail.source);
+                }
+            };
+            await Promise.all([worker(), worker(), worker()]);
+        }
+        // 2. Wikipedia, for the rest: "Name (Game)", "Name (character)" or "Name" — the character's own article only
+        const rest = todo.filter(c => !done.has(c));
+        if (rest.length) {
+            const short = (g) => String(g || '').replace(/\s*[:–—(].*$/, '').replace(/\s+\d+$/, '').trim();   // "God of War: Ragnarök" → "God of War"
+            const asks = rest.map(c => { const n = c.name.full, g = short(c.gameName || game); return { c, n, tries: [g && `${n} (${g})`, `${n} (character)`, n].filter(Boolean) }; });
+            const { found, answered } = await wikiPages('en.wikipedia.org/w', [...new Set(asks.flatMap(a => a.tries))], { pilicense: 'any' });   // Wikipedia's API is at /w/api.php
+            asks.forEach(({ c, n, tries }) => {
+                const first = firstWord(n);
+                // not a "List of … characters" page, the name is in the title, and a plain name must be a (video game / fictional) character
+                const ok = (x, plain) => x?.thumb && !/^list of/i.test(x.title) && x.title.toLowerCase().includes(first) && (!plain || /character|video game|protagonist|antagonist|fictional|mascot/i.test(x.desc));
+                const hit = tries.map(t => ({ x: found.get(t), plain: t === n })).find(({ x, plain }) => ok(x, plain));
+                if (hit) put(c, hit.x.thumb);
+                else if (tries.every(t => answered.has(t))) put(c, '');   // a failed request isn't remembered as "no picture"
+            });
+        }
+        saveCharPics();
+    }
+    return chars.map(c => c.image?.large || !charPics[charPicKey(c, game)] ? c : { ...c, image: { large: charPics[charPicKey(c, game)] } });
+};
+
 /* ------------------------------------------------------------------
    TMDB — the Movies & TV section (through the proxy; the token stays on the server).
    Movies and shows are both media type 'TV' (format 'MOVIE' or 'TV'), so lists, squads and stats treat them as one section.
@@ -1270,7 +1394,7 @@ const normTmdbDetail = (x, kind, collection) => {
         homepage: x.homepage || null,
         relations: { edges: (collection?.parts || []).filter(p => p.id !== x.id).sort((a, b) => String(a.release_date || '9').localeCompare(String(b.release_date || '9')))
             .map(p => ({ relationType: 'COLLECTION', node: normTmdb(p, 'movie') })) },
-        collectionName: collection?.name || null,
+        collectionName: collection?.name || null, collectionId: collection?.id || null,
         similar: (x.recommendations?.results || []).filter(r => r.poster_path && notAnimeTmdb(r) && !r.adult).slice(0, 14).map(r => normTmdb(r, r.media_type || kind)),
         nextEp: next ? { season: next.season_number, episode: next.episode_number, date: next.air_date } : null,
     };
@@ -1278,6 +1402,9 @@ const normTmdbDetail = (x, kind, collection) => {
 // TMDB keywords for erotic titles: kept out of Movies & TV unless "18+ only" is on (then only these show)
 const TMDB_EROTIC = ['190370', '155477', '325693', '207767', '364719', '170827', '445', '198385', '159551'];
 const tvKeep = (o) => (x) => notAnimeTmdb(x) && (o.adult ? true : !x.adult);
+// v9.9 search results: the most popular first — how many people rated it (TMDB's own "popularity" is this week's
+// buzz, so an old cartoon could beat The Batman), then that buzz; equal ones keep TMDB's order
+const tmdbPopular = (rows) => rows.map((x, n) => ({ x, n })).sort((a, b) => (b.x.vote_count || 0) - (a.x.vote_count || 0) || (b.x.popularity || 0) - (a.x.popularity || 0) || a.n - b.n).map(r => r.x);
 const tvApi = {
     async browse(f, page = 1, o = {}) {
         const kinds = f.format === 'MOVIE' ? ['movie'] : f.format === 'TV' ? ['tv'] : ['movie', 'tv'];
@@ -1285,7 +1412,7 @@ const tvApi = {
         const keep = tvKeep(o);
         if (q) {
             const d = kinds.length === 2 ? await tmdbCall('search/multi', { query: q, page, include_adult: !!o.adult }) : await tmdbCall(`search/${kinds[0]}`, { query: q, page, include_adult: !!o.adult });
-            const items = (d.results || []).filter(x => (x.media_type || kinds[0]) !== 'person' && ['movie', 'tv'].includes(x.media_type || kinds[0]) && keep(x)).map(x => normTmdb(x, x.media_type || kinds[0]));
+            const items = tmdbPopular((d.results || []).filter(x => (x.media_type || kinds[0]) !== 'person' && ['movie', 'tv'].includes(x.media_type || kinds[0]) && keep(x))).map(x => normTmdb(x, x.media_type || kinds[0]));
             return { items, hasNextPage: page < (d.total_pages || 1) };
         }
         const gs = splitMulti(f.genre).map(v => TV_GENRES.find(x => x.v === v)).filter(Boolean);
@@ -1329,7 +1456,7 @@ const tvApi = {
         for (let i = 0; i < max; i++) pages.forEach(p => p.results[i] && items.push(p.results[i]));
         return { items, hasNextPage: pages.some(p => page < Math.min(p.total_pages || 1, 500)) };
     },
-    async search(q) { const d = await tmdbCall('search/multi', { query: q }); return (d.results || []).filter(x => (x.media_type === 'movie' || x.media_type === 'tv') && tvKeep({})(x)).slice(0, 8).map(x => normTmdb(x, x.media_type)); },
+    async search(q) { const d = await tmdbCall('search/multi', { query: q }); return tmdbPopular((d.results || []).filter(x => (x.media_type === 'movie' || x.media_type === 'tv') && tvKeep({})(x))).slice(0, 8).map(x => normTmdb(x, x.media_type)); },
     async details(id) {
         const kind = id >= SHOW_BASE ? 'tv' : 'movie'; const ext = id - (kind === 'tv' ? SHOW_BASE : MOVIE_BASE);
         const x = await tmdbCall(`${kind}/${ext}`, { append_to_response: kind === 'movie' ? 'videos,credits,watch/providers,recommendations,external_ids,release_dates' : 'videos,aggregate_credits,watch/providers,recommendations,external_ids,content_ratings' });
@@ -2019,6 +2146,7 @@ const recheckInfinite = () => nextTick(() => INF_ELS.forEach(el => el._recheck?.
    current options each time. Picking writes the value back and fires "change"/"input" like a real pick.
    <select data-multi> menus stay open, so you can tick several genres / tags in a row.
    ------------------------------------------------------------------ */
+const touchUI = () => window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 const Dropdowns = (() => {
     let pop = null, sel = null, items = [], active = -1, query = '';
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -2075,7 +2203,8 @@ const Dropdowns = (() => {
         document.body.appendChild(pop);
         render(); place();
         const input = pop.querySelector('.dd-search input');
-        if (input) { input.addEventListener('input', () => { query = input.value; active = -1; render(); place(); }); setTimeout(() => input.focus({ preventScroll: true }), 10); }
+        // v9.9 phones: the search box waits for a tap (focusing it right away opened the keyboard over the list)
+        if (input) { input.addEventListener('input', () => { query = input.value; active = -1; render(); place(); }); if (!touchUI()) setTimeout(() => input.focus({ preventScroll: true }), 10); }
         pop.addEventListener('mousedown', (e) => { if (!e.target.closest('input')) e.preventDefault(); });   // keep focus where it is
         pop.addEventListener('click', (e) => { const b = e.target.closest('.dd-opt'); if (b) pick(Number(b.dataset.i)); });
     };
@@ -2106,7 +2235,9 @@ const Dropdowns = (() => {
                 e.preventDefault(); open(s);
             }, { capture: true });
             document.addEventListener('keydown', key, true);
-            window.addEventListener('resize', close);
+            // v9.9 the phone keyboard opening (only the height changes) keeps the menu open; turning the phone / resizing the window closes it
+            let lastW = window.innerWidth;
+            window.addEventListener('resize', () => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; close(); } else place(); });
             window.addEventListener('scroll', (e) => { if (pop && !pop.contains(e.target)) place(); }, true);
             // if Vue removes the select (you changed page) the menu goes too
             setInterval(() => { if (sel && !document.body.contains(sel)) close(); }, 500);
@@ -2123,6 +2254,40 @@ const DockHeight = {
         el._dockRO = new ResizeObserver(set); el._dockRO.observe(el); set();
     },
     unmounted(el) { el._dockRO?.disconnect(); document.documentElement.style.setProperty('--dock-h', '0px'); },
+};
+// v9.9 v-drag-fab: a round button you can drag anywhere on the screen (it stays where you leave it, on this device);
+// a tap still presses it. Kept as a share of the screen, so turning the phone keeps it in the same area.
+const DragFab = {
+    mounted(el, binding) {
+        const KEY = 'anicoop_fab_' + (binding.arg || 'btn');
+        const put = (x, y) => {
+            x = Math.min(Math.max(6, x), window.innerWidth - el.offsetWidth - 6); y = Math.min(Math.max(6, y), window.innerHeight - el.offsetHeight - 6);
+            Object.assign(el.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+        };
+        const load = () => { const p = readJSON(KEY); if (p && typeof p.x === 'number') put(p.x * window.innerWidth, p.y * window.innerHeight); };
+        let start = null, moved = false, justDragged = false;
+        el.addEventListener('pointerdown', (e) => { if (e.button > 0) return; const r = el.getBoundingClientRect(); start = { x: e.clientX, y: e.clientY, l: r.left, t: r.top, id: e.pointerId }; moved = false; });
+        el.addEventListener('pointermove', (e) => {
+            if (!start || e.pointerId !== start.id) return;
+            const dx = e.clientX - start.x, dy = e.clientY - start.y;
+            if (!moved) { if (Math.hypot(dx, dy) < 7) return; moved = true; try { el.setPointerCapture(e.pointerId); } catch {} el.classList.add('is-dragging'); }
+            e.preventDefault(); put(start.l + dx, start.t + dy);
+        });
+        const end = () => {
+            if (!start) return; start = null;
+            if (!moved) return;
+            el.classList.remove('is-dragging');
+            const r = el.getBoundingClientRect();
+            try { localStorage.setItem(KEY, JSON.stringify({ x: r.left / window.innerWidth, y: r.top / window.innerHeight })); } catch {}
+            justDragged = true; setTimeout(() => { justDragged = false; }, 60);
+        };
+        el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+        el.addEventListener('click', (e) => { if (justDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);   // letting go after a drag isn't a tap
+        el._fabResize = () => load();
+        window.addEventListener('resize', el._fabResize);
+        load();
+    },
+    unmounted(el) { window.removeEventListener('resize', el._fabResize); },
 };
 const InfiniteScroll = {
     mounted(el, binding) {
@@ -2162,9 +2327,9 @@ createApp({
         const songBlocked = () => { if (songsOn.value) return false; showToast('Songs aren’t turned on for your account', 'error'); return true; };
         const tabs = [
             { id: 'browse', label: 'Browse', icon: 'fa-compass' },
-            { id: 'top', label: 'Top 100', icon: 'fa-trophy' },
+            { id: 'top', label: 'Leaderboard', icon: 'fa-trophy' },   // v9.9 was "Top 100"
             { id: 'feed', label: 'Feed', icon: 'fa-bolt' },
-            { id: 'solo', label: 'Solo', icon: 'fa-user' },   // v9.8 Squads live inside it now (a switch under the statuses)
+            { id: 'solo', label: 'Lists', icon: 'fa-list-ul' },   // v9.9 was "Solo" · v9.8 Squads live inside it now (a switch under the statuses)
             { id: 'profile', label: 'Profile', icon: 'fa-circle-user' },
         ];
 
@@ -2358,14 +2523,57 @@ createApp({
             }
         };
         const signOut = async () => { await sb.auth.signOut(); showToast('Signed out'); };
+        // v9.9 sign in with Google, Discord… (each one is switched on in Supabase → Authentication → Providers; see README).
+        // The browser goes to that site and comes back here already signed in. Same email as an existing account = same account.
+        const OAUTH_PROVIDERS = [
+            { id: 'google', name: 'Google', icon: 'fa-brands fa-google', color: '#ea4335' },
+            { id: 'discord', name: 'Discord', icon: 'fa-brands fa-discord', color: '#5865f2' },
+            { id: 'facebook', name: 'Facebook', icon: 'fa-brands fa-facebook', color: '#1877f2' },
+            { id: 'twitch', name: 'Twitch', icon: 'fa-brands fa-twitch', color: '#9146ff' },
+        ];
+        const oauthBusy = ref(null);
+        const signInWith = async (p) => {
+            if (oauthBusy.value) return;
+            oauthBusy.value = p.id;
+            try {
+                const { error } = await sb.auth.signInWithOAuth({ provider: p.id, options: { redirectTo: location.origin + location.pathname } });
+                if (error) throw error;
+            } catch (err) {
+                oauthBusy.value = null;
+                showToast(/not enabled|unsupported provider/i.test(err.message || '') ? `${p.name} sign-in isn’t switched on yet` : 'Could not sign in: ' + (err.message || err), 'error');
+            }
+        };
+        // a username made from an email / a Google or Discord name: 3–20 letters, numbers, _ or .
+        const usernameFrom = (u) => {
+            const m = u?.user_metadata || {};
+            const raw = [m.username, m.user_name, m.preferred_username, m.custom_claims?.global_name, m.full_name, m.name, (u?.email || '').split('@')[0]].find(x => String(x || '').trim());
+            let name = String(raw || '').replace(/[^A-Za-z0-9_.]/g, '').slice(0, 20);
+            if (name.length < 3) name = 'user' + name;
+            return name;
+        };
 
         const fetchProfile = async () => {
             const { data, error } = await sb.from('profiles').select('*').eq('id', uid()).maybeSingle();   // includes banner_url
             if (error) { console.error(error); return; }
-            if (data) { currentProfile.value = data; return; }
-            const username = currentUser.value.user_metadata?.username || currentUser.value.email.split('@')[0];
-            const { data: created, error: insErr } = await sb.from('profiles').insert({ id: uid(), username }).select().single();
-            if (insErr) showToast('Could not create your profile: ' + insErr.message, 'error');
+            if (data) {
+                currentProfile.value = data;
+                // just signed up with Google / Discord…: the username was made from that account's name, and it can be changed
+                const via = currentUser.value.app_metadata?.provider;
+                if (via && via !== 'email' && Date.now() - new Date(data.created_at).getTime() < 10 * 60e3) {
+                    const k = 'anicoop_named:' + uid();
+                    try { if (!localStorage.getItem(k)) { localStorage.setItem(k, '1'); setTimeout(() => showToast(`Welcome, ${data.username}! Change your username any time in Settings → Account`), 1500); } } catch {}
+                }
+                return;
+            }
+            // no profile yet (the database didn't make one): make one, adding numbers if the name is taken
+            const base = usernameFrom(currentUser.value);
+            let created = null, insErr = null;
+            for (let n = 0; n < 5 && !created; n++) {
+                const username = n ? base.slice(0, 16) + Math.floor(1000 + Math.random() * 9000) : base;
+                ({ data: created, error: insErr } = await sb.from('profiles').insert({ id: uid(), username }).select().single());
+                if (insErr && !/duplicate|unique/i.test(insErr.message)) break;
+            }
+            if (!created) showToast('Could not create your profile: ' + (insErr?.message || 'unknown error'), 'error');
             else currentProfile.value = created;
         };
 
@@ -3177,7 +3385,7 @@ createApp({
                 const sec = Object.values(SECTIONS).find(s => s.type === (act.media_type || 'ANIME'))?.id || 'anime';
                 highlightActivity.value = n.activity_id;
                 openReplies.add(n.activity_id);
-                Object.assign(feedFilter, { who: 'all', kind: 'ALL' });
+                Object.assign(feedFilter, { who: 'all', kind: 'ALL', type: 'ALL' });
                 navigate(() => { section.value = sec; currentAppView.value = 'tracker'; activeTab.value = 'feed'; selectedAnime.value = null; viewUserId.value = null; entity.value = null; });
                 await nextTick();
                 await fetchFeed(false);   // newest request: whatever the tab switch started is ignored
@@ -3334,8 +3542,14 @@ createApp({
             try {
                 let q = sb.from('activities').select('*').order('created_at', { ascending: false }).limit(FEED_PAGE);
                 if (feedFilter.who === 'me') q = q.eq('user_id', uid());
-                // each section (anime, manga, games, movies & TV) has its own feed; old posts with no section count as anime
-                q = mediaType.value === 'ANIME' ? q.or('media_type.eq.ANIME,media_type.is.null') : q.eq('media_type', mediaType.value);
+                // v9.9 one feed for every section, with a filter per kind of content. Old posts with no section count as anime;
+                // manhwa posts are manga posts marked as Korean (extra.country = 'KR')
+                const t = feedFilter.type;
+                if (t === 'ANIME') q = q.or('media_type.eq.ANIME,media_type.is.null');
+                else if (t === 'MANHWA') q = q.eq('media_type', 'MANGA').eq('extra->>country', 'KR');
+                else if (t === 'MANGA') q = q.eq('media_type', 'MANGA').or('extra->>country.is.null,extra->>country.neq.KR');
+                else if (t !== 'ALL') q = q.eq('media_type', t);
+                else if (!songsOn.value) q = q.or('media_type.is.null,media_type.neq.SONG');
                 q = feedFilter.kind !== 'ALL' ? q.eq('kind', feedFilter.kind) : q.in('kind', ['post', 'poll', 'question', 'tierlist', 'debate']);   // list updates live on profiles now
                 if (more && feed.value.length) q = q.lt('created_at', feed.value[feed.value.length - 1].created_at);
                 const { data, error } = await q;
@@ -3355,7 +3569,14 @@ createApp({
         };
         const loadMoreFeed = () => { if (!feedEnd.value && !feedLoading.value && feed.value.length) fetchFeed(true); };
         watch(feedFilter, () => fetchFeed(false));
-        watch(mediaType, () => { if (activeTab.value === 'feed') fetchFeed(false); });
+        // v9.9 what's in the feed (every section is in the one feed now)
+        const FEED_TYPES = computed(() => [{ v: 'ALL', l: 'All' }, { v: 'ANIME', l: 'Anime' }, { v: 'MANGA', l: 'Manga' }, { v: 'MANHWA', l: 'Manhwa' },
+            { v: 'GAME', l: 'Games' }, { v: 'TV', l: 'Movies & TV' }, ...(songsOn.value ? [{ v: 'SONG', l: 'Songs' }] : [])]);
+        // the section chip on a post
+        const actSection = (a) => {
+            const s = Object.values(SECTIONS).find(x => x.type === (a.media_type || 'ANIME')) || SECTIONS.anime;
+            return { l: a.media_type === 'MANGA' && a.extra?.country === 'KR' ? 'Manhwa' : s.short, c: s.color, icon: s.icon };
+        };
         watch(() => currentAppView.value === 'tracker' && activeTab.value === 'feed' && !selectedAnime.value && !viewUserId.value, (on) => { if (on) fetchFeed(false); });
         const activityVerb = (a) => {
             const m = a.media_type === 'MANGA';
@@ -3435,9 +3656,14 @@ createApp({
         const POLL_DURATIONS = [{ v: 1, l: '1 hour' }, { v: 6, l: '6 hours' }, { v: 24, l: '1 day' }, { v: 72, l: '3 days' }, { v: 168, l: '1 week' }];
         const FEED_KINDS = [{ v: 'ALL', l: 'All' }, { v: 'post', l: 'Posts' }, { v: 'poll', l: 'Polls' }, { v: 'question', l: 'Questions' }, { v: 'tierlist', l: 'Tier lists' }, { v: 'debate', l: 'Debates' }];
         const newOption = () => ({ id: Math.random().toString(36).slice(2, 8), label: '', image: null, media_id: null, media_type: null, character_id: null });
-        const composer = reactive({ open: false, kind: 'post', body: '', attachments: [], media: null, episode: '', spoiler: false, question: '', options: [newOption(), newOption()], hours: 24, posting: false, uploading: 0, link: '', audience: 'friends', sides: ['Agree', 'Disagree'] });
+        const composer = reactive({ open: false, kind: 'post', type: 'ANIME', body: '', attachments: [], media: null, episode: '', spoiler: false, question: '', options: [newOption(), newOption()], hours: 24, posting: false, uploading: 0, link: '', audience: 'friends', sides: ['Agree', 'Disagree'] });
         const resetComposer = () => Object.assign(composer, { open: false, body: '', attachments: [], media: null, episode: '', spoiler: false, question: '', options: [newOption(), newOption()], hours: 24, posting: false, link: '', sides: ['Agree', 'Disagree'] });
-        const openComposer = (kind = 'post') => { composer.kind = kind; composer.open = true; picker.target = null; };
+        // v9.9 what a post is about (its filter in the feed): the feed's filter if one is picked, otherwise the section you're in
+        const composerType = computed(() => composer.type === 'MANHWA' ? 'MANGA' : composer.type);
+        const openComposer = (kind = 'post') => {
+            composer.type = feedFilter.type !== 'ALL' && (songsOn.value || feedFilter.type !== 'SONG') ? feedFilter.type : section.value === 'manga' && filters.value.country === 'KR' ? 'MANHWA' : mediaType.value;
+            composer.kind = kind; composer.open = true; picker.target = null;
+        };
         const mediaInput = ref(null);
         const compressImage = (file) => new Promise((resolve) => {
             if (file.type === 'image/gif' || file.size < 500 * 1024) { resolve(file); return; }
@@ -3494,7 +3720,7 @@ createApp({
 
         // search AniList for a title or character (attach to a post / poll option / question)
         const picker = reactive({ target: null, mode: 'ANIME', q: '', results: [], loading: false });
-        const openPicker = (target, mode) => Object.assign(picker, { target, mode: mode || mediaType.value || 'ANIME', q: '', results: [], loading: false });
+        const openPicker = (target, mode) => Object.assign(picker, { target, mode: mode || (target === 'chat' ? mediaType.value : composerType.value) || 'ANIME', q: '', results: [], loading: false });
         let pickerReq = 0;
         const runPicker = debounce(async () => {
             const q = picker.q.trim(); const id = ++pickerReq;
@@ -3506,9 +3732,16 @@ createApp({
                     if (id === pickerReq) picker.results = games;
                     return;
                 }
+                if (picker.mode === 'CHARACTER' && mediaType.value === 'GAME') {   // v9.9 in Games: game characters
+                    const list = await gameApi.searchCharacters(q, 8);
+                    if (id !== pickerReq) return;
+                    picker.results = list;
+                    if (list.some(c => !c.image?.large)) wikiCharPics(list).then(l2 => { if (id === pickerReq) picker.results = l2; }).catch(() => {});
+                    return;
+                }
                 const data = picker.mode === 'CHARACTER'
-                    ? await anilist('query ($q: String) { Page(perPage: 8) { characters(search: $q, sort: SEARCH_MATCH) { id name { full } image { large } media(perPage: 1, sort: POPULARITY_DESC) { nodes { title { romaji english native } } } } } }', { q })
-                    : await anilist(`query ($q: String, $t: MediaType) { Page(perPage: 8) { media(search: $q, type: $t, isAdult: false, sort: SEARCH_MATCH) { ${MEDIA_FIELDS} } } }`, { q, t: picker.mode });
+                    ? await anilist('query ($q: String) { Page(perPage: 8) { characters(search: $q, sort: [FAVOURITES_DESC, SEARCH_MATCH]) { id name { full } image { large } media(perPage: 1, sort: POPULARITY_DESC) { nodes { title { romaji english native } } } } } }', { q })
+                    : await anilist(`query ($q: String, $t: MediaType) { Page(perPage: 8) { media(search: $q, type: $t, isAdult: false, sort: [POPULARITY_DESC, SEARCH_MATCH]) { ${MEDIA_FIELDS} } } }`, { q, t: picker.mode });
                 if (id !== pickerReq) return;
                 picker.results = picker.mode === 'CHARACTER' ? (data?.Page?.characters || []) : (data?.Page?.media || []).map(normMedia);
             } catch (err) { if (id === pickerReq) picker.results = []; }
@@ -3517,7 +3750,10 @@ createApp({
         watch(() => [picker.q, picker.mode], runPicker);
         const choosePick = (item) => {
             if (picker.target === 'chat') { recommendToChat(item); picker.target = null; picker.q = ''; picker.results = []; return; }
-            if (picker.target === 'attach') composer.media = { id: item.id, type: item.type, title: titleOf(item), cover: item.coverImage?.large || null };
+            if (picker.target === 'attach') {
+                composer.media = { id: item.id, type: item.type, title: titleOf(item), cover: item.coverImage?.large || null, country: item.countryOfOrigin || null };
+                composer.type = item.type === 'MANGA' && item.countryOfOrigin === 'KR' ? 'MANHWA' : item.type || composer.type;   // the post goes where its title belongs
+            }
             else if (typeof picker.target === 'number' && composer.options[picker.target]) {
                 Object.assign(composer.options[picker.target], picker.mode === 'CHARACTER'
                     ? { label: item.name?.full, image: item.image?.large || null, character_id: item.id, media_id: null, media_type: null }
@@ -3545,11 +3781,13 @@ createApp({
                 user_id: uid(), kind: k, body: composer.body.trim().slice(0, 2000) || null,
                 attachments: k === 'poll' ? [] : composer.attachments.map(a => ({ type: a.type, url: a.url, ...(a.id ? { id: a.id } : {}) })),
                 spoiler: !!composer.spoiler, audience: composer.audience === 'everyone' ? 'everyone' : 'friends',
-                media_id: composer.media?.id || null, media_type: composer.media?.type || mediaType.value, media_title: composer.media?.title || null, media_cover: composer.media?.cover || null,
+                media_id: composer.media?.id || null, media_type: composer.media?.type || composerType.value, media_title: composer.media?.title || null, media_cover: composer.media?.cover || null,
                 episode: k === 'question' && composer.episode ? Math.max(1, Math.floor(Number(composer.episode))) : null,
                 extra: k === 'debate' ? { sides: composer.sides.map((l, n) => ({ id: n ? 'b' : 'a', label: l.trim().slice(0, 40) })) } : null,
                 poll: k === 'poll' ? { question: composer.question.trim().slice(0, 200), ends_at: new Date(Date.now() + composer.hours * 3600e3).toISOString(), options: opts } : null,
             };
+            // v9.9 manhwa: a manga post marked as Korean, so the feed's Manhwa filter finds it
+            if (row.media_type === 'MANGA' && (composer.media ? composer.media.country === 'KR' : composer.type === 'MANHWA')) row.extra = { ...(row.extra || {}), country: 'KR' };
             Object.keys(row).forEach(k => { if (row[k] === null && (k.startsWith('media_') || k === 'extra')) delete row[k]; });
             try {
                 const { data, error } = await sb.from('activities').insert(row).select().single();
@@ -3626,14 +3864,19 @@ createApp({
         const tierType = computed(() => mediaType.value || 'ANIME');
         const tierAL = computed(() => tierType.value === 'ANIME' || tierType.value === 'MANGA');
         const tierNoun = computed(() => TIER_NOUN[tierType.value] || 'anime');
+        // v9.9 games have characters too: a game's whole cast, or single characters from any game
+        const tierChars = computed(() => tierAL.value || tierType.value === 'GAME');
         const TIER_SOURCES = computed(() => tierAL.value ? [
             { v: 'anime', l: 'Characters from a' + (tierType.value === 'ANIME' ? 'n anime' : ' manga') }, { v: 'tag', l: 'By tag (tsundere, isekai…)' }, { v: 'genre', l: 'By genre' },
             { v: 'mine', l: 'From my list' }, { v: 'search', l: 'Pick one by one' },
-        ] : [{ v: 'search', l: 'Pick one by one' }, { v: 'genre', l: 'By genre' }, { v: 'mine', l: 'From my list' }]);
+        ] : tierType.value === 'GAME' ? [{ v: 'anime', l: 'Characters from a game' }, { v: 'search', l: 'Pick one by one' }, { v: 'genre', l: 'By genre' }, { v: 'mine', l: 'From my list' }]
+          : [{ v: 'search', l: 'Pick one by one' }, { v: 'genre', l: 'By genre' }, { v: 'mine', l: 'From my list' }]);
         const tierStatuses = computed(() => ['COMPLETED', 'WATCHING', 'PLANNING', 'DROPPED'].filter(st => !(tierType.value === 'SONG' && st === 'PLANNING')));
         const tier = reactive({ open: false, title: '', source: 'anime', what: 'CHARACTER', q: '', results: [], media: null, genre: '', tag: '', loading: false, pool: [], tiers: newTiers(), sel: null, posting: false, drag: null });
+        // games: a game's cast is characters, a genre or your list is games, one by one can be either
+        watch(() => tier.source, (s) => { if (tierType.value === 'GAME' && s !== 'search') tier.what = s === 'anime' ? 'CHARACTER' : 'MEDIA'; });
         const openTierMaker = (from = null) => {
-            Object.assign(tier, { open: true, title: '', source: tierAL.value ? 'anime' : 'search', what: tierAL.value ? 'CHARACTER' : 'MEDIA', q: '', results: [], media: null, genre: '', tag: '', loading: false, pool: [], tiers: newTiers(), sel: null, posting: false, drag: null });
+            Object.assign(tier, { open: true, title: '', source: tierChars.value ? 'anime' : 'search', what: tierChars.value ? 'CHARACTER' : 'MEDIA', q: '', results: [], media: null, genre: '', tag: '', loading: false, pool: [], tiers: newTiers(), sel: null, posting: false, drag: null });
             if (from?.extra?.tiers) {   // "make my own version" of someone's tier list: same items, empty tiers
                 tier.title = from.extra.title || from.body || '';
                 tier.pool = from.extra.tiers.flatMap(t => t.items).map(x => ({ ...x }));
@@ -3650,21 +3893,27 @@ createApp({
             tier.pool = [...tier.pool, ...fresh].slice(0, 80);
             return fresh.length;
         };
-        const charItem = (c) => ({ kind: 'CHARACTER', id: c.id, name: c.name?.full || '?', image: c.image?.large || null });
+        const charItem = (c) => ({ kind: 'CHARACTER', id: c.id, name: c.name?.full || '?', image: c.image?.large || null, ...(c.gameId ? { gameId: c.gameId } : {}), ...(c.gameName ? { sub: c.gameName } : {}) });
         const mediaItem = (m) => ({ kind: m.type || 'ANIME', id: m.id, name: titleOf(m), image: m.coverImage?.large || null });
         // one search box: anime (for "characters from an anime"), or a single character/anime to add
         const runTierSearch = debounce(async () => {
             const q = tier.q.trim(); if (!q) { tier.results = []; return; }
             try {
                 const T = tierType.value;
-                if (!tierAL.value) {
+                if (T === 'GAME' && tier.source === 'search' && tier.what === 'CHARACTER') {
+                    const list = await gameApi.searchCharacters(q, 10);
+                    if (tier.q.trim() !== q) return;
+                    tier.results = list.map(charItem);
+                    // pictures IGDB doesn't have fill in when found
+                    if (list.some(c => !c.image?.large)) wikiCharPics(list).then(l2 => { if (tier.q.trim() === q) tier.results = l2.map(charItem); }).catch(() => {});
+                } else if (!tierAL.value) {
                     const list = T === 'GAME' ? await gameApi.search(q) : T === 'TV' ? await tvApi.search(q) : await songApi.search(q);
                     tier.results = (list || []).slice(0, 10);
                 } else if (tier.source === 'search' && tier.what === 'CHARACTER') {
-                    const d = await anilist('query ($q: String) { Page(perPage: 8) { characters(search: $q, sort: SEARCH_MATCH) { id name { full } image { large } } } }', { q });
+                    const d = await anilist('query ($q: String) { Page(perPage: 8) { characters(search: $q, sort: [FAVOURITES_DESC, SEARCH_MATCH]) { id name { full } image { large } } } }', { q });
                     tier.results = (d?.Page?.characters || []).map(charItem);
                 } else {
-                    const d = await anilist(`query ($q: String, $t: MediaType) { Page(perPage: 8) { media(search: $q, type: $t, isAdult: false, sort: SEARCH_MATCH) { ${MEDIA_FIELDS} } } }`, { q, t: T });
+                    const d = await anilist(`query ($q: String, $t: MediaType) { Page(perPage: 8) { media(search: $q, type: $t, isAdult: false, sort: [POPULARITY_DESC, SEARCH_MATCH]) { ${MEDIA_FIELDS} } } }`, { q, t: T });
                     tier.results = (d?.Page?.media || []).map(normMedia);
                 }
             } catch { tier.results = []; }
@@ -3675,6 +3924,15 @@ createApp({
             // characters from an anime: fill the pool with its cast
             tier.media = r; tier.q = ''; tier.results = []; tier.loading = true;
             if (!tier.title) tier.title = `${titleOf(r)} characters`;
+            if (tierType.value === 'GAME') {   // v9.9 a game's cast (IGDB), with pictures found for the ones that have none
+                try {
+                    const cast = await wikiCharPics(await gameApi.characters(r.id), titleOf(r)).catch(() => []);
+                    const n = addToPool(cast.map(charItem));
+                    showToast(n ? `${n} characters added — drag them into tiers` : 'No characters listed for this game yet', n ? 'success' : 'error');
+                } catch (err) { showToast(err.message || 'Could not load characters', 'error'); }
+                finally { tier.loading = false; }
+                return;
+            }
             try {
                 const out = [];
                 for (let p = 1; p <= 2; p++) {
@@ -4463,9 +4721,44 @@ createApp({
             try {
                 navigator.mediaSession.metadata = new MediaMetadata({ title: s.title?.romaji || '', artist: (s.artists || []).join(', '), album: s.album || '', artwork: s.coverImage?.large ? [{ src: s.coverImage.large, sizes: '600x600' }] : [] });
                 navigator.mediaSession.setActionHandler('play', togglePlay); navigator.mediaSession.setActionHandler('pause', togglePlay);
-                navigator.mediaSession.setActionHandler('nexttrack', () => nextSong()); navigator.mediaSession.setActionHandler('previoustrack', prevSong);
+                navigator.mediaSession.setActionHandler('nexttrack', () => skipSong(1)); navigator.mediaSession.setActionHandler('previoustrack', () => skipSong(-1));
             } catch {}
         };
+        // v9.9 keyboard: next / previous song
+        //  • Shift+N / Shift+P (like YouTube) or Ctrl+→ / Ctrl+← anywhere on the site (not while typing)
+        //  • the keyboard's own ⏭ ⏮ keys. While a full song plays in YouTube's player, those keys went to YouTube's
+        //    player (it only knows play / pause). On computers a silent sound now plays next to it, so they come here.
+        let skipAt = 0;
+        const skipSong = (d) => { if (!player.song || Date.now() - skipAt < 400) return; skipAt = Date.now(); if (d > 0) nextSong(); else prevSong(); };
+        window.addEventListener('keydown', (e) => {
+            if (!player.song) return;
+            if (e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious') { e.preventDefault(); skipSong(e.key === 'MediaTrackNext' ? 1 : -1); return; }
+            const el = document.activeElement;
+            if (/INPUT|TEXTAREA|SELECT/.test(el?.tagName || '') || el?.isContentEditable || rd.open || vp.open) return;
+            const k = e.key.toLowerCase(), shiftOnly = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey, ctrlOnly = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey;
+            if ((shiftOnly && k === 'n') || (ctrlOnly && e.key === 'ArrowRight')) { e.preventDefault(); skipSong(1); }
+            else if ((shiftOnly && k === 'p') || (ctrlOnly && e.key === 'ArrowLeft')) { e.preventDefault(); skipSong(-1); }
+        });
+        const keysAnchorOk = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !touchUI();   // phones: never (it could stop the song)
+        let keysAnchor = null;
+        const silentWav = () => {   // 1 second of silence (8-bit, 8 kHz), made here instead of downloaded
+            const n = 8000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), s = (o, t) => [...t].forEach((c, i) => { b[o + i] = c.charCodeAt(0); });
+            s(0, 'RIFF'); v.setUint32(4, 36 + n, true); s(8, 'WAVE'); s(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+            v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); s(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+            return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+        };
+        // the keys go to whatever started playing last: restart the silence each time YouTube (re)starts a song
+        watch(() => keysAnchorOk && player.mode === 'yt' && player.playing ? (player.song?.id ?? null) : null, (id) => {
+            if (id == null) return;
+            setTimeout(() => {
+                if (!player.song || player.mode !== 'yt') return;
+                if (!keysAnchor) { keysAnchor = new Audio(silentWav()); keysAnchor.loop = true; }
+                keysAnchor.pause(); keysAnchor.play().catch(() => {});
+                setMediaSession(player.song);
+            }, 400);
+        });
+        watch(() => player.mode === 'yt' && !!player.song, (on) => { if (!on) keysAnchor?.pause(); });
+        watch(() => player.playing, (p) => { try { navigator.mediaSession.playbackState = player.song ? (p ? 'playing' : 'paused') : 'none'; } catch {} });
         // a video (episode, trailer) pauses the song
         const pauseSong = () => { if (!player.playing) return; userPausedAt = Date.now(); if (player.mode === 'yt') ytP?.pauseVideo?.(); else audio.pause(); };
         // the bar takes room at the bottom: the page and every popup end above it, so it never covers a button
@@ -5294,6 +5587,7 @@ createApp({
         const toggleSelect = (anime) => { const m = new Map(selected.value); if (m.has(anime.id)) m.delete(anime.id); else m.set(anime.id, anime); selected.value = m; };
         const visibleAnime = computed(() => {
             if (activeTab.value === 'browse') return visibleResults.value;
+            if (activeTab.value === 'top') return topItems.value;   // v9.9 "All" on the Leaderboard
             const seen = new Map();
             Object.values(filteredGroupedList.value).flat().forEach(i => seen.set(i.anime.id, i.anime));
             return [...seen.values()];
@@ -5624,7 +5918,7 @@ createApp({
             const mediaArgs = [`type: ${type}`, `isAdult: ${f.isAdult && adultAllowed.value ? 'true' : 'false'}`];   // 18+ only if the owner allows you
             const variables = { page };
             let sort = '[TRENDING_DESC, POPULARITY_DESC]';
-            if (f.search.trim()) { varsDef.push('$search: String'); mediaArgs.push('search: $search'); variables.search = f.search.trim(); sort = '[SEARCH_MATCH, POPULARITY_DESC]'; }
+            if (f.search.trim()) { varsDef.push('$search: String'); mediaArgs.push('search: $search'); variables.search = f.search.trim(); sort = '[POPULARITY_DESC, SEARCH_MATCH]'; }   // v9.9 searches: most popular first
             // several genres / tags = titles that have ALL of them (that's how AniList's genre_in / tag_in behave)
             if (f.genre) { varsDef.push('$genres: [String]'); mediaArgs.push('genre_in: $genres'); variables.genres = splitMulti(f.genre); }
             if (f.tag) { varsDef.push('$tags: [String]'); mediaArgs.push('tag_in: $tags'); variables.tags = splitMulti(f.tag); }
@@ -5912,7 +6206,7 @@ createApp({
             const m = type === 'MANGA' && top.sub && top.sub !== 'JP' ? { ...cfg, m: cfg.m / 3 } : cfg;
             // pages asked for together can overlap (titles with the same score swap places between pages): keep each title once
             const add = items.filter(x => !seen.has(x.id) && seen.add(x.id) && notHidden(x) && (x.rating || x.averageScore)).map(x => ({ ...x, rating: x.rating || x.averageScore, wScore: weighted(x.rating || x.averageScore, x.votes || 0, m) }));
-            top.pool = [...top.pool, ...add];
+            top.pool = [...top.pool, ...add.map(markRaw)];   // v9.9 read-only rows: no reactive copy of each one (less memory)
         };
         // Songs: the 100 most streamed songs of all time (Spotify's all-time list, kept up to date on Wikipedia),
         // each matched to Apple Music for its cover, preview and page. The list shows at once; covers fill in.
@@ -5972,7 +6266,7 @@ createApp({
         const restoreTopCache = () => {
             const c = readJSON(topCacheKey());
             if (!c?.pool?.length || Date.now() - c.at > 6 * 3600e3) return false;
-            const ids = new Set(); Object.assign(top, { pool: c.pool.filter(x => !ids.has(x.id) && ids.add(x.id)).map(normMedia), page: c.page, done: c.done });
+            const ids = new Set(); Object.assign(top, { pool: c.pool.filter(x => !ids.has(x.id) && ids.add(x.id)).map(x => markRaw(normMedia(x))), page: c.page, done: c.done });
             return true;
         };
         const loadTop = () => {
@@ -6130,7 +6424,7 @@ createApp({
             quickMenuFor.value = null; drill.open = false;
             navigate(() => { selectedAnime.value = null; viewUserId.value = null; entity.value = { type, id }; currentAppView.value = 'tracker'; });
         };
-        const openCharacter = (id) => openEntity('character', id);
+        const openCharacter = (id) => { if (id >= GAME_BASE) return; openEntity('character', id); };   // game / movie characters have no page of their own
         // favourite actors are kept with the staff favourites, under PERSON_BASE + their TMDB id
         const openStaff = (id) => id >= PERSON_BASE && id < SONG_BASE ? openEntity('actor', id - PERSON_BASE) : openEntity('staff', id);
         const openActor = (tmdbId) => openEntity('actor', tmdbId);
@@ -6997,7 +7291,7 @@ createApp({
 
         const canReadInApp = (c) => !!c && (!!c.src || (extOn('mangadex') && !c.url));   // website-source chapter, or a MangaDex-hosted one
 
-        const rd = reactive({ open: false, manga: null, chapter: null, pages: [], i: 0, mode: 'rtl', loading: false, error: '', local: false, marked: false, ui: true, flash: null, segs: [], appending: false });
+        const rd = reactive({ open: false, manga: null, chapter: null, pages: [], i: 0, mode: 'rtl', loading: false, error: '', local: false, marked: false, ui: true, flash: null, segs: [], appending: false, resume: 0 });
         let blobUrls = [];
         const freeBlobs = () => { blobUrls.forEach(u => URL.revokeObjectURL(u)); blobUrls = []; };
         const chNum = (c) => parseFloat(c?.ch);
@@ -7057,7 +7351,7 @@ createApp({
             })();
             job.catch(() => pageCache.delete(c.id));
             pageCache.set(c.id, job);
-            if (pageCache.size > 10) pageCache.delete(pageCache.keys().next().value);
+            if (pageCache.size > 6) pageCache.delete(pageCache.keys().next().value);   // v9.9 was 10 (less memory)
             return job;
         };
         const prefetchNext = () => {
@@ -7129,6 +7423,22 @@ createApp({
         // scroll past a chapter's last page it counts as read, and the top bar follows the chapter you're in.
         const rdSegOf = (n) => { const segs = rd.segs || []; for (let k = segs.length - 1; k >= 0; k--) if (n >= segs[k].start) return segs[k]; return null; };
         const rdSeg = computed(() => rdSegOf(rd.i));
+        // a page's key in the strip: its chapter + its page number there (stays the same when older chapters are let go)
+        const rdPageKey = (n) => { const s = rdSegOf(n); return s ? `${s.ch.id}:${n - s.start}` : `p${n}`; };
+        // v9.9 where you are in each manga (chapter + page), kept in this browser: "Continue reading" opens right there
+        const READPOS_KEY = 'anicoop_readpos_v1';
+        const readPos = readJSON(READPOS_KEY) || {};   // manga id → { ch, chId, src, page, at }
+        const saveReadPos = debounce(() => {
+            const ids = Object.keys(readPos); if (ids.length > 300) ids.sort((a, b) => readPos[a].at - readPos[b].at).slice(0, ids.length - 300).forEach(k => delete readPos[k]);
+            try { localStorage.setItem(READPOS_KEY, JSON.stringify(readPos)); } catch {}
+        }, 1500);
+        watch(() => rd.open && !rd.local && rd.manga?.id && rd.chapter ? [rd.manga.id, rd.chapter.id, rd.i] : null, (v) => {
+            if (!v || rd.loading || !rd.pages.length) return;
+            const c = rd.chapter; if (Number.isNaN(chNum(c))) return;
+            const seg = rdSeg.value, page = Math.min(rd.i - (seg?.start || 0), (seg?.count || rd.pages.length) - 1);
+            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), at: Date.now() };
+            saveReadPos();
+        });
         const appendNext = async () => {
             const segs = rd.segs || []; const last = segs[segs.length - 1]; if (!last || rd.appending || rd.local) return;
             const c = rdNeighbourOf(last.ch, 1); if (!c) return;
@@ -7140,7 +7450,23 @@ createApp({
                 rd.pages.push(...r.pages);
                 addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
                 prefetchNext();
+                pruneStrip();
             } catch {} finally { rd.appending = false; }
+        };
+        // v9.9 less memory on long reads: the strip keeps 3 chapters; the oldest one above you is let go
+        // (the page doesn't move: the scroll position is corrected by the height that was removed)
+        const STRIP_MAX = 3;
+        const pruneStrip = async () => {
+            const el = document.querySelector('.reader-strip'); const segs = rd.segs || [];
+            if (!el || segs.length <= STRIP_MAX || rdSegOf(rd.i) === segs[0]) return;
+            const drop = segs[0], next = segs[1];
+            const anchor = el.querySelectorAll('img.rd-img')[next.start]; if (!anchor) return;
+            const before = anchor.offsetTop;
+            const gone = rd.pages.splice(0, drop.count);
+            segs.shift(); segs.forEach(s => { s.start -= drop.count; }); rd.i = Math.max(0, rd.i - drop.count);
+            await nextTick();
+            el.scrollTop -= before - anchor.offsetTop;
+            gone.forEach(u => { if (u.startsWith('blob:')) { URL.revokeObjectURL(u); blobUrls = blobUrls.filter(x => x !== u); } });
         };
         const onVerticalScroll = (e) => {
             const el = e.target; const imgs = el.querySelectorAll('img.rd-img');
@@ -7179,7 +7505,7 @@ createApp({
             const files = [...(e.target.files || [])]; e.target.value = '';
             if (!files.length) return;
             freeBlobs();
-            Object.assign(rd, { open: true, manga: selectedAnime.value || null, chapter: { ch: null, title: files.length === 1 ? files[0].name : files.length + ' images' }, pages: [], i: 0, mode: defaultMode(selectedAnime.value), loading: true, error: '', local: true, marked: false, ui: true });
+            Object.assign(rd, { open: true, manga: selectedAnime.value || null, chapter: { ch: null, title: files.length === 1 ? files[0].name : files.length + ' images' }, pages: [], segs: [], i: 0, mode: defaultMode(selectedAnime.value), loading: true, error: '', local: true, marked: false, ui: true });
             try {
                 const out = [];
                 for (const f of files) {
@@ -7276,7 +7602,45 @@ createApp({
             const a = item?.anime; if (!a) return;
             if (!MEDIA_KIND[a.type]) { fetchAnimeDetails(a); return; }
             await fetchAnimeDetails(a);
-            if (selectedAnime.value?.id === a.id) nextTick(() => openWatch());
+            if (selectedAnime.value?.id !== a.id) return;
+            await nextTick(); openWatch();
+            if (a.type === 'MANGA') resumeReading(a);   // v9.9 manga: straight into the chapter you were reading
+        };
+        // wait (up to ms) until fn() gives something
+        const until = (fn, ms = 15000) => new Promise((ok) => { const t0 = Date.now(); const tick = () => { let v = null; try { v = fn(); } catch {} if (v) ok(v); else if (Date.now() - t0 > ms) ok(null); else setTimeout(tick, 150); }; tick(); });
+        // the chapter you were in (and the page), unless you've finished it since — then the next one you haven't read.
+        // The Read window stays open underneath, so closing the reader shows every chapter.
+        const resumeReading = async (a) => {
+            const pos = readPos[a.id], prog = myProgress(a);
+            const inIt = pos && Math.floor(parseFloat(pos.ch)) > prog;
+            const want = inIt ? parseFloat(pos.ch) : null;
+            if (pos?.src && readTabs.value.some(t => t.id === pos.src)) readSrc.value = pos.src;   // the same source as last time
+            const here = () => selectedAnime.value?.id === a.id && wp.open && !rd.open;
+            const ready = await until(() => !here() || (!srcView.loading && !reader.loading && (rdChapters.value.length || srcView.picking || srcView.error || reader.error)), 20000);
+            if (!ready || !here() || !rdChapters.value.length) return;
+            // MangaDex sends the newest 100 first: older chapters need the rest of the list
+            const low = chNum(rdChapters.value[0]), need = want ?? prog + 1;
+            if (readSrc.value === 'mangadex' && low > need && reader.chapters.length < reader.total) { await loadAllChapters(); if (!here()) return; }
+            const c = want != null ? rdChapters.value.find(x => chNum(x) === want) : continueChapter.value;
+            if (!c) return;
+            const page = want != null && chNum(c) === want ? pos.page || 0 : 0;
+            await openChapter(c, a);
+            if (page > 0 && rd.chapter?.id === c.id && rd.pages.length) {
+                const p = Math.min(page, rd.pages.length - 1);
+                if (rd.mode !== 'vertical') rd.i = p;
+                else { rd.resume = p; scrollStripTo(p); }
+                showToast(`Back to chapter ${c.ch} · page ${p + 1}`);
+            }
+        };
+        // webtoon mode: the pages above load first (so their height is known), then the strip scrolls to the page
+        const scrollStripTo = async (p) => {
+            await nextTick();
+            const el = document.querySelector('.reader-strip'); if (!el) return;
+            const imgs = [...el.querySelectorAll('img.rd-img')].slice(0, p + 1);
+            await Promise.race([Promise.all(imgs.map(im => im.complete ? 1 : new Promise(r => { im.addEventListener('load', r, { once: true }); im.addEventListener('error', r, { once: true }); }))), new Promise(r => setTimeout(r, 8000))]);
+            const target = el.querySelectorAll('img.rd-img')[p];
+            if (target && rd.open) el.scrollTop = target.offsetTop;
+            rd.resume = 0;
         };
         const openWatch = () => {
             const a = selectedAnime.value; if (!a || !playKind.value) return;
@@ -8338,7 +8702,7 @@ createApp({
             const s = gameExtra.seriesOpts[gameExtra.seriesIdx]; if (!s) return;
             gameExtra.seriesLoading = true; gameExtra.series = []; gameExtra.storyIds = []; seriesLimit.value = 10;
             try {
-                const [list, ord] = await Promise.all([gameApi.series(s, adultAllowed.value), sb.from('story_orders').select('media_ids').eq('series_key', s.key).maybeSingle()]);
+                const [list, ord] = await Promise.all([s.movie ? movieSeries(g) : gameApi.series(s, adultAllowed.value), sb.from('story_orders').select('media_ids').eq('series_key', s.key).maybeSingle()]);
                 if (gameExtra.id !== g.id) return;
                 gameExtra.series = list; gameExtra.storyIds = ord?.data?.media_ids || [];
             } catch (err) { console.warn('series', err.message || err); }
@@ -8394,10 +8758,40 @@ createApp({
                 gameExtra.ttb = { story: hoursOf(t.hastily), sides: hoursOf(t.normally), full: hoursOf(t.completely), fullDlc: t.completely && dlc ? hoursOf(t.completely + dlc) : null, count: t.count || 0 };
             }).catch(() => {});
             if (g.steamId) steam('game', [g.steamId]).then(s => { if (gameExtra.id === g.id) gameExtra.steam = s; }).catch(() => { if (gameExtra.id === g.id) gameExtra.steam = false; });
-            gameApi.characters(g.id).then(c => { if (gameExtra.id === g.id) gameExtra.chars = c; }).catch(() => {});
+            gameApi.characters(g.id).then(c => {
+                if (gameExtra.id !== g.id) return;
+                gameExtra.chars = c;
+                // v9.9 the ones without a picture: look for one (the list shows straight away, pictures fill in)
+                if (c.some(x => !x.image?.large)) wikiCharPics(c, titleOf(g), (g.series || []).map(s => s.name)).then(c2 => { if (gameExtra.id === g.id) gameExtra.chars = c2; }).catch(() => {});
+            }).catch(() => {});
             loadSeries(g);
         };
         watch(() => selectedAnime.value?.type === 'GAME' ? selectedAnime.value.id : null, (id) => { if (id) loadGameExtras(selectedAnime.value); });
+        // v9.9 movies in a collection (Harry Potter, Marvel…) get the same Franchise list: release order, or the story order
+        // anyone can arrange, with each movie's length and the whole franchise's watch time
+        const movieRuntimes = new Map();   // TMDB movie id → minutes
+        const movieSeries = async (m) => {
+            const parts = [m, ...(m.relations?.edges || []).filter(e => e.relationType === 'COLLECTION').map(e => e.node)];
+            const list = [...new Map(parts.map(p => [p.id, p])).values()].slice(0, 40);
+            if (m.runtime) movieRuntimes.set(m.extId, m.runtime);
+            const todo = list.filter(p => !movieRuntimes.has(p.extId));
+            const worker = async () => { while (todo.length) { const p = todo.shift(); try { movieRuntimes.set(p.extId, (await tmdbCall(`movie/${p.extId}`)).runtime || 0); } catch {} } };
+            await Promise.all([worker(), worker(), worker(), worker()]);
+            return list.map(p => ({ ...p, runtime: movieRuntimes.get(p.extId) || p.runtime || null }))
+                .sort((a, b) => String(a.releaseDate || '9999').localeCompare(String(b.releaseDate || '9999')));
+        };
+        watch(() => { const a = selectedAnime.value; return a?.type === 'TV' && a.format === 'MOVIE' && a.collectionId ? a.id : null; }, (id) => {
+            if (!id) return;
+            const m = selectedAnime.value;
+            Object.assign(gameExtra, { id: m.id, steam: null, ttb: null, series: [], seriesOpts: [{ key: 'tmdbc:' + m.collectionId, name: m.collectionName || 'Collection', movie: true }], seriesIdx: 0, storyIds: [], seriesView: 'release', chars: [], linkFallback: null });
+            storyEdit.value = false;
+            loadSeries(m);
+        });
+        const fmtMins = (n) => !n ? '–' : n >= 60 ? `${Math.floor(n / 60)} h${n % 60 ? ' ' + (n % 60) + ' m' : ''}` : n + ' m';
+        const movieTotals = computed(() => {
+            const l = gameExtra.series, mins = l.reduce((n, m) => n + (m.runtime || 0), 0);
+            return { count: l.length, time: fmtMins(mins), missing: l.filter(m => !m.runtime).length, seen: l.filter(m => myEntry(m.id)?.status === 'COMPLETED').length };
+        });
         watch(() => selectedAnime.value?.id, () => { gameExtra.linkFallback = null; });
         const pickSeries = (n) => { gameExtra.seriesIdx = n; gameExtra.seriesView = 'release'; loadSeries(selectedAnime.value); };
         // release order = by date; story order = the order your community arranged (new games fall in by date at the end)
@@ -8464,6 +8858,22 @@ createApp({
         const favTab = reactive({ me: 'ANIME', them: 'ANIME' });
         const favsIn = (list, t) => (list || []).filter(c => favSectionOf(c) === t);
         const openFavChar = (p) => { if (p.section === 'GAME' || p.section === 'TV') { if (p.gameId) fetchAnimeDetails(p.gameId); } else openCharacter(p.id); };
+        // v9.9 a character picture everywhere: the saved one, one found later (game characters IGDB had none for), or their initials
+        const charPicFix = reactive({});   // character id → picture found after it was saved
+        const initialsPic = (name) => {
+            const t = String(name || '?').trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?';
+            return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140"><rect width="100" height="140" fill="#26262c"/><text x="50" y="84" font-family="Arial,sans-serif" font-size="40" font-weight="700" fill="#8b8b96" text-anchor="middle">${t.replace(/[<&>"]/g, '')}</text></svg>`);
+        };
+        const picOf = (url, name, id) => url || (id != null && charPicFix[id]) || initialsPic(name);
+        // game characters saved without a picture: look once (remembered in this browser) and show it
+        const fixCharPics = async (list) => {
+            const miss = (list || []).filter(c => c.section === 'GAME' && !c.image?.large && !charPicFix[c.id]);
+            if (!miss.length) return;
+            const done = await wikiCharPics(miss).catch(() => []);
+            done.forEach(c => { if (c.image?.large) charPicFix[c.id] = c.image.large; });
+        };
+        watch(favCharacters, (l) => fixCharPics(l));
+        watch(() => viewedUser.value?.favs, (l) => fixCharPics(l));
         // favourite people, by kind: anime voice actors, actors (movies & TV), singers (songs) and staff
         const personKind = (p) => p.id < 0 ? 'SINGER' : (p.id >= PERSON_BASE && p.id < SONG_BASE) ? 'ACTOR' : p.kind === 'va' ? 'VA' : 'STAFF';
         // Actors aren't a tab in People (still counted as people, so an old "Actors" pick doesn't turn into characters)
@@ -8899,15 +9309,15 @@ createApp({
             vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
             gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
             siteSources, srcForm, SOURCE_TEMPLATES, installRepoItem, repoLangs, repoShown, repoState, addSource, testSource, removeSource, loadRepo, repoInstalled, readSrc, srcView, readTabs, currentSite, chapterList, loadSourceFor, chooseMatch, changeMatch, onPageError,
-            EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdSeg, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
+            EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdSeg, rdPageKey, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
             moreWatch, reader, readInfo, readLangs, readSources, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,
             fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback,
-            gameExtra, pickSeries, seriesShown, seriesTotals, storyEdit, storySort, openGameLink, playVideo, scrollRow, shotViewer, openShot, closeShot, stepShot, fmtHours,
+            gameExtra, pickSeries, seriesShown, seriesTotals, movieTotals, fmtMins, storyEdit, storySort, openGameLink, playVideo, scrollRow, shotViewer, openShot, closeShot, stepShot, fmtHours,
             FAV_SECTIONS, favTab, favsIn, favSectionOf, openFavChar, activityOpen, toggleMyActivity, openViewedActivity, setActivityHidden, activityLine, openActivity, checkGames,
             STATUS_ORDER, statusPick, MAX_REPEATS, lilBro, setFormStatus, repeatNow, repeatsDone, STATUS_LABELS, STATUS_SHORT, STATUS_COLORS, UNIT, ACCENTS, tabs,
-            authReady, currentUser, currentProfile, isSignUp, authLoading, authForm, handleAuth, signOut,
+            authReady, currentUser, currentProfile, isSignUp, authLoading, authForm, handleAuth, signOut, OAUTH_PROVIDERS, oauthBusy, signInWith,
             introMode, skipIntro, warmSection, ROLE_PERMS, ROLE_ICONS, AWARD_ICONS, ROLE_COLORS, roles, roleLinks, rolesReady, rolesOf, can, anyPower, canTouchRole, isOwnerId, roleDraft, editRole, toggleRolePerm, saveRole, deleteRole, moveRole, hasRole, toggleUserRole, adminLookup, adminFind, awardsOf, awardBox, openAwardBox, giveAward, removeAward, moderateProfile, adminMenu, heroPosters, heroPath, HERO_POINTS, heroSave, statusLabelFor, showToTop, scrollToTop,
             currentAppView, activeTab, openTracker, switchTab, canGoBack, goBack, goHome,
             section, sectionMenu, sectionList, currentSection, openSection, sectionCounts, sectionProgress, secSolo, secCoop,
@@ -8945,7 +9355,7 @@ createApp({
             friendsOnAnime, isOnline, people, peopleTab, peopleLoading, peopleOnline, peopleOffline, lastSeenText, friendStateOf, addFriendById, viewedFriends,
             EFFECTS, NAME_STYLES, effectParticles, heroColors,
             personKind, FAV_PEOPLE, isPeopleTab, favTheirTab, favItems, favCount, openFavItem, removeFavItem, FAV_EMPTY, heroGlow, FRAMES, THEMES, BADGES, myBadges, viewedBadges, decorOf, decorDraft, togglePinBadge, toggleHideBadge, hideBadgeNow, myEarnedBadges, decorDirty, saveDecor, profileBg, pageBg, bgBannerChoices, setBgUrl, onBgFile, bgUrlDraft, bgUploading, bgInput,
-            debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, tierNoun, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
+            debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, tierChars, tierNoun, picOf, charPicFix, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
             follows, isFollowing, toggleFollow, checkFollowed, mediaLinks, linkDraft, saveMediaLink, deleteMediaLink,
             buddyState, buddyRequests, buddyList, askBuddy, acceptBuddy, endBuddy,
             siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList,
@@ -8968,14 +9378,14 @@ createApp({
             importState, importProgress, importMal, importAniList,
             notifQuote, notifIcon, likeOf, toggleLike, likeNames, mentionSuggestions, applyMention, bodyParts,
             repliesOf, replyTo, replyDraft, startReply,
-            feed, feedLoading, feedEnd, feedFilter, feedReplies, replyDrafts, openReplies, fetchFeed, loadMoreFeed, activityVerb, toggleReplies, postReply, deleteReply, deleteActivity, highlightActivity,
+            feed, feedLoading, feedEnd, feedFilter, FEED_TYPES, actSection, composerType, feedReplies, replyDrafts, openReplies, fetchFeed, loadMoreFeed, activityVerb, toggleReplies, postReply, deleteReply, deleteActivity, highlightActivity,
             continueItem, chSort, toggleChSort, chQ, filteredChapters, typeOf, drill, openDrill, drillTitle, drillItems, drillStatusCounts, drillShowsStatus, drillName, drillType, scoreBuckets, heatmap, streak, countedOf,
             compareTab, compareType, comparison, compareGroups, viewedSection,
             detailStaff, detailInfo, detailRankings, detailTags, showSpoilerTags, detailStats,
             loadMoreBrowse, moreError, quickFormats, checkListMedia, genreOptions, GAME_PLATFORMS, platformFamilies, CHART_COUNTRIES, typeWord, isAniListType, fmtDuration, mediaType, songPlayerId, songSpotifyUrl, addMulti, removeMulti, hasMulti, activeChips, TV_TAGS, TV_TAG_GROUPS,
         };
     }
-}).component('quick-add', QuickAdd).component('track-row', TrackRow).component('poster-card', PosterCard).component('user-avatar', UserAvatar).component('score-input', ScoreInput).directive('infinite', InfiniteScroll).directive('dock-height', DockHeight).directive('focus-select', { mounted: (el) => setTimeout(() => { el.focus(); el.select?.(); }, 60) }).mount('#app');
+}).component('quick-add', QuickAdd).component('track-row', TrackRow).component('poster-card', PosterCard).component('user-avatar', UserAvatar).component('score-input', ScoreInput).directive('infinite', InfiniteScroll).directive('dock-height', DockHeight).directive('drag-fab', DragFab).directive('focus-select', { mounted: (el) => setTimeout(() => { el.focus(); el.select?.(); }, 60) }).mount('#app');
 
 // Offline support + "install as app"
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

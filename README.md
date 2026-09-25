@@ -573,3 +573,88 @@ create policy "admin: song settings" on public.app_config for update to authenti
   section you're in.
 * **Feed:** the tier list maker, poll / question pickers and hints follow the section you're in (games, movies & TV,
   songs… not only anime).
+
+## v9.9 — sign in with Google / Discord, one feed for everything, Lists & Leaderboard, game characters, phone fixes
+
+**Update:** merge the PR (GitHub Pages updates by itself), then **run the new SQL** below in Supabase → SQL Editor
+(it's also section "8e" in `supabase_setup.sql`). No Edge Function change. To use the new sign-in buttons, switch the
+providers on in Supabase (steps at the end of this section).
+
+```sql
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  m jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  base text;
+  pick text;
+  tries int := 0;
+begin
+  base := coalesce(nullif(trim(m->>'username'), ''), nullif(trim(m->>'user_name'), ''), nullif(trim(m->>'preferred_username'), ''),
+                   nullif(trim(m->'custom_claims'->>'global_name'), ''), nullif(trim(m->>'full_name'), ''), nullif(trim(m->>'name'), ''),
+                   nullif(split_part(coalesce(new.email, ''), '@', 1), ''), 'user');
+  base := left(regexp_replace(base, '[^A-Za-z0-9_.]', '', 'g'), 20);
+  if char_length(base) < 3 then base := 'user' || base; end if;
+  pick := base;
+  while exists (select 1 from public.profiles where lower(username) = lower(pick)) loop
+    tries := tries + 1;
+    pick := left(base, 16) || (1000 + floor(random() * 9000))::int::text;
+    if tries > 25 then pick := 'user' || substr(md5(new.id::text), 1, 12); exit; end if;
+  end loop;
+  insert into public.profiles (id, username) values (new.id, pick) on conflict (id) do nothing;
+  return new;
+end;
+$$;
+```
+
+1. **Sign in with Google, Discord, Facebook or Twitch** on the login page. A new account gets a username made from its
+   name there (numbers are added if it's taken) and can change it in Settings → Account. Signing in with an account that
+   has the same email as your anicoop account opens that same account.
+2. **GIFs** scroll down instead of sideways.
+3. **Solo → Lists** and **Top 100 → Leaderboard** (tabs and the phone's bottom bar).
+4. **Game characters:** the tier list maker in Games can add a game's whole cast ("Characters from a game") or single
+   characters ("Pick one by one" → Characters); polls in Games search game characters. Characters with no picture on
+   IGDB now get one from the game's Fandom wiki (or Wikipedia) — on game pages, tier lists, polls and favourites.
+   The few left show their initials instead of a blank.
+5. **One feed for every section**, with filters on top: All, Anime, Manga, Manhwa, Games, Movies & TV (and Songs).
+   Every post shows which section it's about (tap it to see only those). When you post, "About:" picks where it shows
+   (it starts on the section you're in).
+6. **Continue reading** opens the exact chapter and page you were on (or the next chapter, if you finished that one).
+   Closing the reader shows the chapter list.
+7. **Phones:** filters with a search box (Genre, Tag…) no longer open the keyboard by themselves, and the list stays
+   open when the keyboard comes up.
+8. **Phones:** every row of tab buttons (like Anime / Manga / Games / Movies & TV) scrolls sideways when it doesn't fit.
+9. **Phone headers:** Home fits every button; in Browse (and the other tabs) Settings and Feedback are back in the
+   header. The back arrow and small logo step aside on phones (the phone's back works; Home is in the section menu).
+10. **Hide genres** is clearly on ("Genres hidden" + a count, filled) or off, and hidden genres are red and marked "hidden".
+11. **Selecting several titles on a phone:** the bar at the bottom says what each button does (Watching, Planning,
+    Completed…, Add to squad, Remove) in three short rows.
+12. **The music button** (after you hide the player) can be dragged anywhere; it stays where you leave it.
+13. **Search shows the most popular first** (anime, manga, games, movies & TV). Games search also finds the big ones
+    it used to miss (e.g. "zelda" now starts with Breath of the Wild).
+14. **Less memory:** long webtoon reads keep only 3 chapters loaded (the older ones above you are let go), the Leaderboard
+    and feed skip drawing rows far off screen, and big lists use lighter data.
+15. **Searching on a phone** shows the results first (the Top 5 boxes are hidden while you search).
+16. **Leaderboard:** a **Select** button — tick titles and add them to your list in one go.
+17. **Movies:** a **Franchise** list (e.g. every Harry Potter movie) in release order or a story order anyone can
+    arrange, with each movie's length, the whole franchise's watch time and how many you've seen.
+18. **Keyboard:** **Shift+N / Shift+P** (or **Ctrl+→ / Ctrl+←**) for next / previous song. On computers the keyboard's own
+    ⏭ ⏮ keys now work with full songs too.
+
+**Switching on Google / Discord / Facebook / Twitch sign-in** (do only the ones you want; a button that isn't switched
+on says so when tapped — ask to have it removed from the page):
+
+1. Supabase → **Authentication → URL Configuration**: set **Site URL** to your site's address
+   (e.g. `https://dripslayer1.github.io/anicoop/`) and add the same address under **Redirect URLs**.
+2. Supabase → **Authentication → Providers** → open the provider and turn it on. It shows a **Callback URL**
+   (`https://trbwiqkgrifeigntvhmh.supabase.co/auth/v1/callback`) and asks for a **Client ID** and **Client Secret**,
+   which you get from that site:
+   * **Google:** console.cloud.google.com → APIs & Services → OAuth consent screen (fill it in), then Credentials →
+     Create credentials → OAuth client ID → Web application → add the Callback URL under "Authorized redirect URIs".
+   * **Discord:** discord.com/developers/applications → New Application → OAuth2 → add the Callback URL under Redirects,
+     copy the Client ID and reset / copy the Client Secret.
+   * **Facebook:** developers.facebook.com → My Apps → Create app (Authenticate with Facebook Login) → Facebook Login
+     settings → add the Callback URL to "Valid OAuth Redirect URIs"; App ID and App Secret are in App settings → Basic.
+     The app has to be switched to **Live** before other people can use it.
+   * **Twitch:** dev.twitch.tv/console → Register Your Application (a new one, not the IGDB one) → OAuth Redirect URL =
+     the Callback URL → copy the Client ID and a new Client Secret.
+3. Paste the ID and secret into Supabase and **Save**. Keys stay in Supabase only — never put them in the repo.

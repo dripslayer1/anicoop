@@ -1632,3 +1632,107 @@ html.has-player .lift-pbar { bottom: calc(var(--pbar-edge) + 14px) !important; }
   input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px !important; }
 }
 button, a, [role="button"], .chip, .seg-btn { touch-action: manipulation; }
+
+/* v9.9 sign in with Google, Discord, Facebook, Twitch */
+.oauth-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-family: "Geist Mono", monospace; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgb(var(--c-mute)); }
+.oauth-or::before, .oauth-or::after { content: ''; flex: 1; height: 1px; background: rgb(var(--c-line2)); }
+.oauth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.oauth-btn { display: flex; align-items: center; justify-content: center; gap: 9px; height: 46px; border-radius: 14px; border: 1px solid rgb(var(--c-line2)); background: rgb(var(--c-raised) / .6); color: rgb(var(--c-ink)); font-size: 13px; font-weight: 600; transition: border-color .15s, background-color .15s, transform .15s; }
+.oauth-btn i { font-size: 16px; color: var(--c); }
+.oauth-btn:hover:not(:disabled) { border-color: var(--c); background: rgb(var(--c-raised)); transform: translateY(-1px); }
+.oauth-btn:disabled { opacity: .55; }
+
+/* v9.9 GIFs: a grid that scrolls down (the old newspaper columns spilled sideways once the box was full) */
+.gif-grid { columns: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-height: min(320px, 42dvh); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; align-content: start; }
+.gif-grid > .gif-tile { margin: 0; }
+
+/* v9.9 one feed for every section: what the posts are about, and each post's section */
+.feed-types { display: flex; flex-wrap: wrap; gap: 6px; }
+.sec-badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; flex-shrink: 0; font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); transition: background-color .15s; }
+.sec-badge i { font-size: 9px; }
+.sec-badge:hover { background: color-mix(in srgb, var(--c) 24%, transparent); }
+/* v9.9 "Hide genres": clearly on (some genres hidden: filled, "Genres hidden") or off, and an arrow for the open panel;
+   inside the panel a hidden genre is red and says "hidden", a shown one stays normal */
+.hg-toggle .hg-chev { font-size: 9px; margin-left: 2px; opacity: .7; transition: transform .2s var(--ease); }
+.hg-toggle.is-open .hg-chev { transform: rotate(180deg); }
+.toggle.hg-toggle.is-on { background: rgb(var(--c-volt) / .16); color: rgb(var(--c-volt)); border-color: rgb(var(--c-volt)); }
+.toggle.hg-toggle.is-open:not(.is-on) { color: rgb(var(--c-ink)); border-color: rgb(var(--c-volt) / .85); }
+.genre-toggle.hg-genre i { color: #22c55e; }
+.genre-toggle.hg-genre.on { opacity: 1; text-decoration: line-through; text-decoration-color: rgb(248 113 113 / .7); border-style: solid; border-color: rgb(248 113 113 / .6); background: rgb(248 113 113 / .12); color: #fca5a5; }
+.genre-toggle.hg-genre.on i { color: #f87171; }
+.hg-tag { margin-left: 2px; padding: 1px 6px; border-radius: 999px; background: rgb(248 113 113 / .22); color: #fecaca; font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; text-decoration: none; display: inline-block; }
+
+.section-switch-name .sw-tiny { display: none; }
+
+/* v9.9 less memory / smoother scrolling on long lists: rows far off screen aren't drawn until you get near them */
+.rank-row, .activity-card { content-visibility: auto; contain-intrinsic-size: auto 72px; }
+.activity-card { contain-intrinsic-size: auto 220px; }
+
+/* v9.9 Leaderboard: tick several titles (Select) */
+.rank-check { width: 24px; height: 24px; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; border: 2px solid rgb(var(--c-line2)); transition: background-color .12s, border-color .12s, color .12s; }
+.rank-check.on { background: rgb(var(--c-lilac)); border-color: rgb(var(--c-lilac)); color: rgb(var(--c-onaccent)); }
+.rank-row.is-sel { background: rgb(var(--c-lilac) / .1); }
+
+/* v9.9 searching on a phone / tablet: the results come first (the trending + friends boxes step aside) */
+@media (max-width: 1279px) { .browse-aside.is-searching { display: none; } }
+
+/* v9.9 the hidden player's round button can be dragged anywhere */
+.pbar-peek { touch-action: none; cursor: grab; }
+.pbar-peek.is-dragging { cursor: grabbing; transform: scale(1.12) !important; transition: none; box-shadow: 0 18px 40px -10px rgb(0 0 0 / .9), 0 0 30px -6px rgb(var(--c-volt)); }
+
+/* v9.9 the bar for several selected titles: every button says what it does. On phones it's three short rows:
+   how many + All / None / Done, then the statuses (with their names), then squad / remove */
+.batch-hint { display: none; }
+.batch-done-sm { display: none; }
+@media (max-width: 767px) {
+  .batch-wrap { width: calc(100vw - 16px); }
+  .batch-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; overflow: visible; }
+  .batch-count { border: 0; padding: 0; }
+  .batch-count .batch-btn { height: 32px; }
+  .batch-done-sm { display: inline-flex; margin-left: auto; }
+  .batch-done-lg { display: none; }
+  .batch-statuses { flex-wrap: wrap; gap: 5px; }
+  .batch-hint { display: block; width: 100%; font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgb(var(--c-mute)); }
+  .batch-statuses .batch-btn { flex: 1 1 calc(33.33% - 5px); justify-content: center; height: 36px; padding: 0 8px; }
+  .batch-more { gap: 5px; }
+  .batch-more .batch-btn { flex: 1 1 0; justify-content: center; height: 36px; }
+}
+/* v9.9 phone headers: settings + feedback are back in the header (not only in the section menu), the back arrow goes
+   (the phone's own back works), the buttons are a little smaller, and a long section name shortens with "…" */
+@media (max-width: 767px) {
+  header.sticky .hdr-extra:not(.hdr-space) { display: flex !important; }
+  header.sticky .hdr-space, .home-hdr .hdr-space { display: none !important; }
+  .sm-only { display: none !important; }
+}
+@media (max-width: 639px) {
+  header.sticky > div { padding-left: 10px !important; padding-right: 10px !important; gap: 6px !important; }
+  header.sticky .hdr-back, header.sticky .hdr-logo { display: none !important; }   /* Home is in the section menu */
+  .section-switch-name .sw-full { display: none; }
+  .section-switch-name .sw-tiny { display: inline; }
+  header.sticky .hdr-side:first-child { flex: 1 1 auto; min-width: 0; gap: 8px !important; }
+  header.sticky .hdr-side:first-child > .relative { flex-shrink: 1; min-width: 0; }
+  header.sticky .hdr-side:last-child { flex: 0 0 auto; gap: 3px !important; }
+  header.sticky .hdr-side .icon-btn { width: 33px !important; height: 33px !important; }
+  header.sticky .hdr-side .icon-btn i { font-size: 13px; }
+  header.sticky .section-switch { min-width: 0; max-width: 100%; }
+  header.sticky .section-switch-icon { flex-shrink: 0; }
+  header.sticky .section-switch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .home-hdr { padding-left: 12px !important; padding-right: 12px !important; gap: 8px; }
+  .home-hdr .home-icons { gap: 4px; min-width: 0; }
+  .home-hdr .icon-btn { width: 34px !important; height: 34px !important; }
+}
+@media (max-width: 439px) { .home-wordmark { display: none; } }   /* the big "anicoop" just below says it */
+
+/* v9.9 phones: every row of tab buttons scrolls sideways when it doesn't fit (instead of the last ones being cut off) */
+@media (max-width: 767px) {
+  .seg { flex-wrap: nowrap !important; overflow-x: auto; max-width: 100%; scrollbar-width: none; overscroll-behavior-x: contain; border-radius: 999px; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg > .seg-btn { flex-shrink: 0; }
+  .fav-tabs { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+  .feed-types { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .feed-types::-webkit-scrollbar { display: none; }
+  .feed-types > * { flex-shrink: 0; }
+}

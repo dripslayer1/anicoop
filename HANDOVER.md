@@ -1,6 +1,12 @@
 # anicoop: handover
 
-For the next agent/session taking over. Last updated at v9.8 (2026-09-25), after v9.8 was merged.
+For the next agent/session taking over. Last updated at v9.9 (2026-09-25), when the v9.9 PR was opened.
+
+> **v9.9 session (new account, working on the owner's own Windows PC):** the repo lives at
+> `C:\Users\drips\Downloads\anicoop\anicoop`. Node.js LTS and GitHub CLI were installed there this session; `gh` is logged
+> in as dripslayer1. New PowerShell windows may not see them on PATH yet: use `& "C:\Program Files\GitHub CLI\gh.exe"`
+> and `C:\Program Files\nodejs\node.exe`, or reload PATH from the registry first. There is **no Python** on this PC.
+> What v9.9 changed is in §2; how testing works on this PC is in §5.
 
 ---
 
@@ -20,8 +26,10 @@ For the next agent/session taking over. Last updated at v9.8 (2026-09-25), after
   6. Check that the footer shows the new version.
 
 **Status**
-- PRs #3–#13 (v8.8 → v9.8 + this handover) are **merged into `main`**; the live site runs v9.8.
-- Nothing is open or unfinished. The next session starts from the latest `main`.
+- PRs #3–#14 (v8.8 → v9.8 + handovers) are **merged into `main`**.
+- **v9.9 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's 18-item list). It **needs SQL** (section
+  "8e. v9.9" — a new `handle_new_user()`), and the OAuth providers must be switched on in Supabase (README v9.9 has the
+  steps). Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
 - `sw.js`: `const VERSION = 'anicoop-v9.8'`
@@ -97,15 +105,53 @@ These are cumulative; the README has one section per version.
   - Compare is section-aware.
   - The feed's tier list maker and pickers are section-aware.
   - **Squads moved inside the Solo tab** as a Solo/Squads switch.
+- **v9.9 (needs SQL 8e):**
+  - **OAuth sign-in** (`OAUTH_PROVIDERS`, `signInWith`: Google, Discord, Facebook, Twitch). `handle_new_user()` now
+    makes a clean, unique username from the provider's name; `fetchProfile` does the same if the trigger didn't.
+  - Tabs renamed: Solo → **Lists**, Top 100 → **Leaderboard** (ids are still `solo` / `top`).
+  - **One feed for every section:** `fetchFeed` filters by `feedFilter.type` (`FEED_TYPES`). Manhwa posts are
+    `media_type = 'MANGA'` with `extra.country = 'KR'`. The composer has `composer.type` ("About:"), and `composerType`
+    drives the picker and wording. `actSection(a)` is the chip on each post.
+  - **Game characters:** `gameApi.searchCharacters`. `wikiCharPics(chars, game, hints)` fills missing pictures from the
+    game's **Fandom wiki** (the host is guessed from the game/franchise names by `fandomFor` and cached in
+    `anicoop_fandom_v1`), then Wikipedia. Results are cached in `anicoop_charpics_v2`. `picOf(url, name, id)` gives the
+    fallback (initials SVG) everywhere. `charPicFix` holds pictures found for already-saved favourites (they aren't
+    written back: `favorite_characters` has no update policy). The tier maker for GAME has `tierChars`, a
+    "Characters from a game" source, and characters in "Pick one by one". `openCharacter` ignores ids ≥ `GAME_BASE`.
+  - **Resume reading:** `readPos` (localStorage `anicoop_readpos_v1`: manga id → chapter, source, page) is saved by a
+    watcher on the reader. `continueItem` → `resumeReading(a)` waits (`until`) for the chapter list, then opens that
+    chapter and page (`scrollStripTo` in webtoon mode; `rd.resume` makes the pages above load eagerly).
+  - **Memory:** the webtoon strip keeps `STRIP_MAX = 3` chapters (`pruneStrip`, which corrects the scroll). Page keys are
+    `rdPageKey(n)` (chapter id + page). `pageCache` is capped at 6. Leaderboard rows are `markRaw`. `.rank-row` and
+    `.activity-card` use `content-visibility: auto`.
+  - **Phones:** the Dropdowns search box isn't auto-focused on touch (`touchUI()`), and a resize that only changes the
+    height (the keyboard) no longer closes the menu. Every `.seg` scrolls sideways under 768px. The header shows
+    settings and feedback under 768px; under 640px it hides `.hdr-back` and `.hdr-logo`, and `SECTIONS[x].tiny` is the
+    short section name. The home header hides the wordmark under 440px.
+  - "Hide genres": `.hg-toggle` / `.hg-genre` styles, "Genres hidden" label. Batch bar: three rows on phones
+    (`.batch-count`, `.batch-statuses`, `.batch-more`).
+  - `v-drag-fab:music` on `.pbar-peek` (the `DragFab` directive; position in `anicoop_fab_music`).
+  - **Search popularity:** AniList uses `[POPULARITY_DESC, SEARCH_MATCH]` (characters use `FAVOURITES_DESC`). Games use
+    `gameApi.searchPopular` (`name ~ *"q"*` sorted by `total_rating_count`, then IGDB `search` fuzzy matches). TMDB
+    uses `tmdbPopular` (by `vote_count`).
+  - Leaderboard **Select** (`visibleAnime` covers `top`; rows toggle while `selectMode`).
+  - **Movie franchise:** reuses `gameExtra` / `loadSeries` with `seriesOpts[0].movie = true` and key
+    `tmdbc:<collectionId>` in `story_orders`. `movieSeries` fetches runtimes. `movieTotals`, `fmtMins`.
+  - **Keys:** `skipSong`, Shift+N/P, Ctrl+←/→, `MediaTrackNext/Previous`. On desktop only, a looping silent WAV
+    (`keysAnchor`) restarts after YouTube starts, so the OS media keys reach our `mediaSession` handlers instead of
+    YouTube's iframe. This is **not verified with real hardware keys** — ask the owner.
 
 ---
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** v9.8 is merged and live. The keys file is deleted and the owner has rotated all keys (Twitch, TMDB, emoji). Nothing is pending; wait for the owner's next list.
+**Stopped at:** the v9.9 PR is open. The owner has to merge it, run SQL 8e, and switch on the OAuth providers they want.
 
 **Next steps**
-1. **When the owner reports back on v9.8,** check these first:
+0. **When the owner reports back on v9.9,** check these first: whether the media keys ⏭ ⏮ work with full songs (the
+   `keysAnchor` trick); whether OAuth sign-in works (Site URL / Redirect URLs in Supabase must include the Pages
+   address); and whether the phone header looks right on their phone.
+1. **Older checks from v9.8:**
    - Phone layout. `src/input.css` has the new `@media (max-width: 767px)` blocks at the end, marked with `v9.8` comments. The title-page reorder uses `display: contents` on `.det-left` and `.det-main` (classes in `index.html` around lines 506–600).
    - Background music on a locked phone: `app.js`, the `onStateChange` handler inside `ytPlayer()`, which uses `userPausedAt`. Some mobile browsers still force-pause YouTube, and that can't be fully fixed from a web page.
 2. **Unresolved since v8.8:** the owner said *full songs never play* and only the 30-second preview works. The real cause is unknown because YouTube is unreachable from our sandbox. v8.9 added a diagnostic: the amber `0:30` badge on the player explains why (`player.why`). **Ask the owner what that badge says.** The code is in `app.js`: search for `startSong`, `ytCandidates`, `ytTry`, `whyFull`, `fullDown`.
@@ -116,7 +162,8 @@ These are cumulative; the README has one section per version.
    - Run `node --check app.js`.
    - Run the Playwright tests.
    - Write a README section.
-   - Commit, push, and open the PR with `mcp__github__create_pull_request`.
+   - Commit, push, and open the PR with `mcp__github__create_pull_request` (cloud sessions) or
+     `& "C:\Program Files\GitHub CLI\gh.exe" pr create` (on the owner's PC).
 4. **Security (done):** `session-history.jsonl` (which held API keys) was deleted from `main`, and the owner generated new Twitch, TMDB and emoji keys, which live only in Supabase Edge Function secrets. The old keys remain in git history but no longer work. **Never commit keys or secrets:** the repo is public because GitHub Pages hosts the site.
 
 ---
@@ -185,7 +232,16 @@ These are cumulative; the README has one section per version.
 
   They send numbered wish lists with screenshots, and sometimes pure questions ("just a question, don't do anything"); answer those without coding.
 - **Git:** develop only on `claude/intelligent-johnson-gofau9`. Once a PR is merged, start the next change from the latest `main` (sync as in §3). Commit messages end with the `Co-Authored-By` and `Claude-Session` lines from the session instructions. Only open PRs when the work is done (that has been the pattern: one PR per version).
-- **Local testing (headless Chromium):**
+- **Testing on the owner's Windows PC (v9.9):** there's no Python and no Playwright. Serve the repo with a tiny Node
+  static server (a scratchpad `serve.mjs`: `node serve.mjs <repo> 5577`, started from `.claude/launch.json`; `.claude/`
+  is in `.git/info/exclude`), then use the Claude **Browser pane** (`preview_start`, `javascript_tool`). The real
+  internet works there (AniList, IGDB/TMDB through the Edge Function, MangaDex, Fandom, Wikipedia). Fake a login the same
+  way as below (`sb.from = () => <Proxy>`, set `currentUser` / `currentProfile` on `setupState`). **If the pane is
+  hidden, `requestAnimationFrame` never fires, so Vue's page transitions freeze.** Run
+  `window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16)` and inject
+  `*{transition-duration:0s!important;animation-duration:0s!important}` right after each reload. Screenshots of a hidden
+  pane are unreliable: read the DOM text instead.
+- **Local testing (headless Chromium, cloud sandbox):**
   - Serve the repo with `python3 -m http.server 5577` from the repo root, run in the background.
   - Playwright uses `executablePath: '/opt/pw-browsers/chromium'`. Harnesses from this session lived in the scratchpad, which won't carry over; recreate them as needed:
     - `h.mjs <w> <h> <out.png|-> "<js>"` runs JS with `st = document.getElementById('app')._vnode.component.setupState`.
