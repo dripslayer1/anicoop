@@ -2132,7 +2132,13 @@ createApp({
         const viewUserId = ref(null);             // friend profile being viewed
         const currentSection = computed(() => SECTIONS[section.value] || SECTIONS.anime);
         const mediaType = computed(() => currentSection.value.type || 'ANIME');
-        const sectionList = SECTION_LIST;
+        // v9.7 Songs are hidden until the owner (or a role with "Manage songs") lets you in, like 18+.
+        // The last answer is remembered on this device so the page doesn't flash songs in or out while it loads.
+        const SONGS_SEEN_KEY = 'anicoop_songs_ok';
+        const songsCfg = reactive({ everyone: false, users: [], ready: false, missing: false, cached: (() => { try { return localStorage.getItem(SONGS_SEEN_KEY) === '1'; } catch { return false; } })() });
+        const songsOn = computed(() => songsCfg.ready ? (isOwner.value || can('manage_songs') || songsCfg.everyone || songsCfg.users.includes(uid())) : songsCfg.cached);
+        const sectionList = computed(() => songsOn.value ? SECTION_LIST : SECTION_LIST.filter(s => s.type !== 'SONG'));
+        const songBlocked = () => { if (songsOn.value) return false; showToast('Songs aren’t turned on for your account', 'error'); return true; };
         const tabs = [
             { id: 'browse', label: 'Browse', icon: 'fa-compass' },
             { id: 'top', label: 'Top 100', icon: 'fa-trophy' },
@@ -2296,7 +2302,7 @@ createApp({
             currentProfile.value = null;
             soloList.value = []; coopList.value = []; favCharacters.value = []; squads.value = [];
             friendsList.value = []; pendingRequests.value = []; sentRequests.value = []; friendEntries.value = [];
-            notifications.value = []; daysActive.value = 0; feed.value = []; favStaff.value = []; entity.value = null; chats.value = []; chatWith.value = null; chatMessages.value = []; adultAllowed.value = false; isOwner.value = false; extraProfiles.value = []; settingsLoaded = false; settingsOpen.value = false;
+            notifications.value = []; daysActive.value = 0; feed.value = []; favStaff.value = []; entity.value = null; chats.value = []; chatWith.value = null; chatMessages.value = []; adultAllowed.value = false; isOwner.value = false; songsCfg.ready = false; extraProfiles.value = []; settingsLoaded = false; settingsOpen.value = false;
             selectedAnime.value = null; editForm.value = emptyForm();
             follows.value = []; buddies.value = []; playlists.value = []; plOpen.value = null; closePlayer(); alLink.value = null; mediaLinks.value = [];
             stopPresence(); people.value = [];
@@ -4035,6 +4041,7 @@ createApp({
         const musicLiked = computed(() => soloList.value.filter(i => typeOf(i) === 'SONG' && i.status !== 'DROPPED').map(i => i.anime));
         const musicRecent = computed(() => { const seen = new Set(); return histList.value.filter(h => h.type === 'SONG' && h.media && !seen.has(h.id) && seen.add(h.id)).map(h => h.media).slice(0, 40); });
         const openMusic = (tab = null) => {
+            if (songBlocked()) return;
             music.open = true; if (tab) music.tab = tab;
             if (!playlists.value.length && !plMissing.value) fetchPlaylists();
             nextTick(() => { if (music.tab === 'search') document.getElementById('music-q')?.focus(); });
@@ -4124,6 +4131,7 @@ createApp({
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
         const saveVol = () => { try { localStorage.setItem(VOL_KEY, String(player.vol)); } catch {} };
+        if (player.vol <= 0.01) player.muted = true;
         let playTok = 0, backStack = [], loadStart = 0, lastNote = '';
         // --- engine 1: Apple previews (a plain <audio>) ---
         const audio = new Audio(); audio.preload = 'none'; audio.volume = player.vol;
@@ -4297,6 +4305,7 @@ createApp({
         const queueFrom = (list, s) => { const q = (list || []).filter(x => x?.type === 'SONG'); return q.some(x => sameSong(x, s)) ? q : [s]; };
         const playPreview = (s, list = null) => {
             if (!s) return;
+            if (s.type === 'SONG' && songBlocked()) return;
             quickMenuFor.value = null;
             if (sameSong(player.song, s) && (player.mode || player.loading)) { togglePlay(); return; }
             if (list) { player.queue = queueFrom(list, s).slice(0, 500); backStack = []; }
@@ -4350,8 +4359,10 @@ createApp({
         const seekPreview = (e) => { const r = e.currentTarget.getBoundingClientRect(); seekTo(clamp((e.clientX - r.left) / r.width, 0, 1) * (player.dur || 0)); };
         const seekKey = (e) => { if (e.key === 'ArrowRight') seekTo(player.t + 5); else if (e.key === 'ArrowLeft') seekTo(player.t - 5); };
         const applyVolume = () => { audio.volume = player.vol; audio.muted = player.muted; try { if (ytP?.setVolume) { ytP.setVolume(Math.round(player.vol * 100)); player.muted ? ytP.mute() : ytP.unMute(); } } catch {} };
-        const setVolume = (v) => { player.muted = false; player.vol = clamp(Number(v) || 0, 0, 1); applyVolume(); saveVol(); };
-        const toggleMute = () => { player.muted = !player.muted; applyVolume(); };
+        // dragging the volume all the way down mutes (YouTube can still leak sound at 0), and un-muting from 0 brings the last level back
+        let lastVol = 0.8;
+        const setVolume = (v) => { const n = clamp(Number(v) || 0, 0, 1); player.vol = n; player.muted = n <= 0.01; if (n > 0.01) lastVol = n; applyVolume(); saveVol(); };
+        const toggleMute = () => { if (player.muted && player.vol <= 0.01) player.vol = lastVol; player.muted = !player.muted; applyVolume(); saveVol(); };
         const isPlaying = (s) => !!s && player.playing && sameSong(player.song, s);
         const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
@@ -4484,7 +4495,7 @@ createApp({
             { key: 'SONG', label: 'Songs', value: s.songs, icon: 'fa-music', color: SECTIONS.songs.color, col: 5, done: s.songsDone },
             { key: 'plays', label: 'Plays', value: s.plays, small: true, col: 5 },
         ];
-        const statColumns = (cards) => [0, 1, 2, 3, 4, 5].map(c => cards.filter(x => x.col === c));
+        const statColumns = (cards) => [0, 1, 2, 3, 4, 5].map(c => cards.filter(x => x.col === c && (songsOn.value || x.col !== 5))).filter(col => col.length);
 
         // "Series" count: seasons, movies & side stories of the same show count once (uses AniList relations)
         const FRANCHISE_RELS = ['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY', 'SUMMARY', 'COMPILATION', 'ALTERNATIVE'];
@@ -4607,7 +4618,7 @@ createApp({
             return out;
         };
         // manhwa used to share the manga ranking, so until you reorder Manhwa it keeps the order you gave it there
-        const buildRankings = (entries, orders) => RANK_CATS.map(c => ({ ...c, items: applyRankOrder(entries.filter(i => i.score > 0 && rankCatOf(i) === c.id), orders[c.id]?.length ? orders[c.id] : (c.id === 'MANHWA' ? orders.MANGA : null)) }));
+        const buildRankings = (entries, orders) => RANK_CATS.filter(c => songsOn.value || c.id !== 'SONG').map(c => ({ ...c, items: applyRankOrder(entries.filter(i => i.score > 0 && rankCatOf(i) === c.id), orders[c.id]?.length ? orders[c.id] : (c.id === 'MANHWA' ? orders.MANGA : null)) }));
         const myRankOrders = reactive({});
         const viewedRankOrders = reactive({});
         const myRankings = computed(() => buildRankings(uniqueItems.value, myRankOrders));
@@ -5050,6 +5061,7 @@ createApp({
         const openSection = (id) => {
             sectionMenu.value = false;
             if (!SECTIONS[id]) return;
+            if (id === 'songs' && songBlocked()) return;
             navigate(() => {
                 if (section.value !== id) clearListFilters();
                 resetSelection();
@@ -5431,6 +5443,7 @@ createApp({
         const fetchAnimeDetails = async (animeNode, { push = true } = {}) => {
             const id = typeof animeNode === 'object' ? animeNode?.id : animeNode;
             if (!id) return;
+            if ((typeOfId(id) === 'SONG' || animeNode?.type === 'SONG') && songBlocked()) return;
             quickMenuFor.value = null;
             if (detailCache.has(id)) {
                 if (push) navigate(() => showDetails(detailCache.get(id))); else showDetails(detailCache.get(id));
@@ -6036,6 +6049,7 @@ createApp({
             staffMedia(sort: POPULARITY_DESC, perPage: 30) { edges { staffRole node { ${ENTITY_MEDIA} } } } } }`;
         const openEntity = (type, id) => {
             if (!id) return;
+            if ((type === 'artist' || type === 'album') && songBlocked()) return;
             quickMenuFor.value = null; drill.open = false;
             navigate(() => { selectedAnime.value = null; viewUserId.value = null; entity.value = { type, id }; currentAppView.value = 'tracker'; });
         };
@@ -6382,7 +6396,29 @@ createApp({
             } catch (err) { reader.error = err.status === 400 ? 'Update the “igdb” Edge Function in Supabase to load chapters (see README).' : (err.message || 'Could not load chapters'); }
             finally { reader.loading = false; }
         };
-        const shownChapters = computed(() => chapterList.value.slice(0, reader.shown));
+        // v9.7 newest-first / oldest-first switch (remembered). Only the list's order changes, not "next chapter" in the reader.
+        const CH_SORT_KEY = 'anicoop_ch_sort';
+        const chSort = ref((() => { try { return localStorage.getItem(CH_SORT_KEY) === 'asc' ? 'asc' : 'desc'; } catch { return 'desc'; } })());
+        const sortedChapters = computed(() => {
+            const list = chapterList.value.map((c, i) => { const n = parseFloat(c?.ch); return { c, i, n: Number.isNaN(n) ? null : n }; });
+            const dir = chSort.value === 'asc' ? 1 : -1;
+            // numbered chapters by number; unnumbered ones (extras, oneshots) go last, in the order the source gave
+            list.sort((a, b) => a.n != null && b.n != null ? (a.n - b.n) * dir || a.i - b.i : a.n != null ? -1 : b.n != null ? 1 : a.i - b.i);
+            return list.map(x => x.c);
+        });
+        const shownChapters = computed(() => sortedChapters.value.slice(0, reader.shown));
+        const loadAllChapters = async () => {   // MangaDex sends the newest first, 100 at a time: oldest-first needs them all
+            let guard = 0;
+            while (readSrc.value === 'mangadex' && reader.chapters.length < reader.total && !reader.error && guard++ < 40) {
+                const before = reader.chapters.length; await loadChapters(true); if (reader.chapters.length === before) break;
+            }
+        };
+        const toggleChSort = () => {
+            chSort.value = chSort.value === 'asc' ? 'desc' : 'asc'; reader.shown = 40;
+            try { localStorage.setItem(CH_SORT_KEY, chSort.value); } catch {}
+            if (chSort.value === 'asc') loadAllChapters();
+        };
+        watch(() => reader.total, (t) => { if (t && chSort.value === 'asc' && reader.chapters.length < t && !reader.loading) loadAllChapters(); });
         const showMoreChapters = () => { reader.shown += 40; if (readSrc.value === 'mangadex' && reader.shown > reader.chapters.length && reader.chapters.length < reader.total) loadChapters(true); };
         const chapterUrl = (c) => c.url || `https://mangadex.org/chapter/${c.id}`;
         const chapterRead = (c) => { const e = myEntry(selectedAnime.value?.id); const n = parseFloat(c.ch); return !!e && !Number.isNaN(n) && (e.status === 'COMPLETED' || (e.progress || 0) >= n); };
@@ -7363,8 +7399,8 @@ createApp({
         const adultConfig = reactive({ everyone: false, users: [] });
         const loadOwnerState = async () => {
             const call = (fn) => sb.rpc(fn).then(r => r.error ? null : r.data, () => null);
-            const [allowed, owner, any] = await Promise.all([call('adult_allowed'), call('is_app_owner'), call('has_owner')]);
-            adultAllowed.value = allowed === true; isOwner.value = owner === true; hasOwner.value = any !== false;
+            const [allowed, owner, any] = await Promise.all([call('adult_allowed'), call('is_app_owner'), call('has_owner'), loadSongsCfg()]);
+            adultAllowed.value = allowed === true; isOwner.value = owner === true; hasOwner.value = any !== false; songsCfg.ready = true;
             if (!adultAllowed.value && filters.value.isAdult) filters.value.isAdult = false;
             if (isOwner.value || can('manage_18')) {
                 const { data } = await sb.from('app_config').select('value').eq('key', 'adult').maybeSingle();
@@ -7383,6 +7419,40 @@ createApp({
             const { error } = await sb.from('app_config').update({ value: { everyone: adultConfig.everyone, users: adultConfig.users }, updated_at: new Date().toISOString() }).eq('key', 'adult');
             if (error) showToast('Could not save: ' + error.message, 'error'); else showToast('18+ access updated');
         };
+        // v9.7 who may see Songs (app_config 'songs', readable by everyone signed in)
+        const loadSongsCfg = async () => {
+            const { data, error } = await sb.from('app_config').select('value').eq('key', 'songs').maybeSingle().then(r => r, () => ({ data: null, error: true }));
+            Object.assign(songsCfg, { everyone: !!data?.value?.everyone, users: [...(data?.value?.users || [])], missing: !error && !data });
+            ensureProfiles(songsCfg.users);
+        };
+        const saveSongsCfg = async () => {
+            const { data, error } = await sb.from('app_config').update({ value: { everyone: songsCfg.everyone, users: songsCfg.users }, updated_at: new Date().toISOString() }).eq('key', 'songs').select('key');
+            if (error || !data?.length) showToast('Could not save: ' + (error?.message || 'run the v9.7 SQL in Supabase first (see README)'), 'error'); else showToast('Songs access updated');
+        };
+        const setSongsEveryone = (on) => { songsCfg.everyone = on; saveSongsCfg(); };
+        const toggleSongsUser = (id) => { const i = songsCfg.users.indexOf(id); if (i === -1) songsCfg.users.push(id); else songsCfg.users.splice(i, 1); saveSongsCfg(); };
+        const songsSearch = ref('');
+        const addSongsUserByName = async () => {
+            const name = songsSearch.value.trim().replace(/^@/, ''); if (!name) return;
+            const { data } = await sb.from('profiles').select('id, username, avatar_url, accent').ilike('username', escapeLike(name)).maybeSingle();
+            if (!data) { showToast('No user with that username', 'error'); return; }
+            if (!profileById.value.has(data.id)) extraProfiles.value = [...extraProfiles.value, data];
+            if (!songsCfg.users.includes(data.id)) toggleSongsUser(data.id);
+            songsSearch.value = '';
+        };
+        // no access (or it was taken away): leave anything song-related that's open
+        watch(() => songsCfg.ready ? songsOn.value : null, (on) => {
+            if (on == null) return;
+            try { localStorage.setItem(SONGS_SEEN_KEY, on ? '1' : '0'); } catch {}
+            if (on) return;
+            if (section.value === 'songs') section.value = 'anime';
+            if (selectedAnime.value?.type === 'SONG') selectedAnime.value = null;
+            if (entity.value && (entity.value.type === 'artist' || entity.value.type === 'album')) entity.value = null;
+            music.open = false; player.queueOpen = false;
+            if (rankTab.me === 'SONG') rankTab.me = 'ANIME'; if (rankTab.them === 'SONG') rankTab.them = 'ANIME'; if (favTab.me === 'SINGER') favTab.me = 'VA';
+            if (player.song) { pauseSong(); player.song = null; player.queue = []; player.qi = -1; }
+        });
+        watch(section, (v) => { if (v === 'songs' && songsCfg.ready && !songsOn.value) section.value = 'anime'; });
         const setAdultEveryone = (on) => { adultConfig.everyone = on; saveAdultConfig(); };
         const toggleAdultUser = (id) => { const i = adultConfig.users.indexOf(id); if (i === -1) adultConfig.users.push(id); else adultConfig.users.splice(i, 1); saveAdultConfig(); };
         const ownerSearch = ref('');
@@ -7404,6 +7474,7 @@ createApp({
             { v: 'moderate', l: 'Moderate', d: "Delete anyone's posts, replies & comments; clear profile pictures, banners and bios" },
             { v: 'manage_feedback', l: 'Manage feedback', d: 'Change feedback status and delete feedback' },
             { v: 'manage_18', l: 'Manage 18+', d: 'Decide who sees 18+ content (and see it)' },
+            { v: 'manage_songs', l: 'Manage songs', d: 'Decide who sees Songs (and see them)' },
         ];
         const ROLE_ICONS = ['fa-shield-halved', 'fa-crown', 'fa-star', 'fa-gavel', 'fa-hammer', 'fa-wand-magic-sparkles', 'fa-heart', 'fa-fire', 'fa-bolt', 'fa-gem', 'fa-dragon', 'fa-ghost', 'fa-gamepad', 'fa-music', 'fa-film', 'fa-book-open', 'fa-paintbrush', 'fa-code', 'fa-handshake-angle', 'fa-seedling'];
         const AWARD_ICONS = ['fa-trophy', 'fa-medal', 'fa-award', 'fa-crown', 'fa-star', 'fa-gem', 'fa-fire', 'fa-bolt', 'fa-heart', 'fa-rocket', 'fa-dragon', 'fa-ghost', 'fa-gamepad', 'fa-music', 'fa-film', 'fa-book-open', 'fa-hand-holding-heart', 'fa-bug', 'fa-lightbulb', 'fa-cake-candles'];
@@ -8297,8 +8368,8 @@ createApp({
         // a friend's favourites: the tab you picked, or the first one they have something in
         const favTheirTab = computed(() => {
             const v = viewedUser.value; if (!v) return favTab.them;
-            const all = [...FAV_SECTIONS, ...FAV_PEOPLE];
-            return favItems(v.favs, v.favStaff, favTab.them).length ? favTab.them : (all.find(s => favItems(v.favs, v.favStaff, s.t).length) || all[0]).t;
+            const all = [...FAV_SECTIONS, ...FAV_PEOPLE.filter(s => songsOn.value || s.t !== 'SINGER')];
+            return favItems(v.favs, v.favStaff, favTab.them).length && (songsOn.value || favTab.them !== 'SINGER') ? favTab.them : (all.find(s => favItems(v.favs, v.favStaff, s.t).length) || all[0]).t;
         });
 
         // ---------- profile Activity button (hideable) ----------
@@ -8754,6 +8825,7 @@ createApp({
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
             selectMode, selectedCount, toggleSelectMode, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
+            songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
             STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
             incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendSticker, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
@@ -8788,7 +8860,7 @@ createApp({
             notifQuote, notifIcon, likeOf, toggleLike, likeNames, mentionSuggestions, applyMention, bodyParts,
             repliesOf, replyTo, replyDraft, startReply,
             feed, feedLoading, feedEnd, feedFilter, feedReplies, replyDrafts, openReplies, fetchFeed, loadMoreFeed, activityVerb, toggleReplies, postReply, deleteReply, deleteActivity, highlightActivity,
-            drill, openDrill, drillTitle, drillItems, drillStatusCounts, drillShowsStatus, drillName, drillType, scoreBuckets, heatmap, streak, countedOf,
+            chSort, toggleChSort, typeOf, drill, openDrill, drillTitle, drillItems, drillStatusCounts, drillShowsStatus, drillName, drillType, scoreBuckets, heatmap, streak, countedOf,
             compareTab, compareType, comparison, compareGroups, viewedSection,
             detailStaff, detailInfo, detailRankings, detailTags, showSpoilerTags, detailStats,
             loadMoreBrowse, moreError, quickFormats, checkListMedia, genreOptions, GAME_PLATFORMS, platformFamilies, CHART_COUNTRIES, typeWord, isAniListType, fmtDuration, mediaType, songPlayerId, songSpotifyUrl, addMulti, removeMulti, hasMulti, activeChips, TV_TAGS, TV_TAG_GROUPS,

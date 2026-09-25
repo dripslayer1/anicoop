@@ -526,3 +526,27 @@ Some sites need their own extension code ("Not readable here: this site needs it
   The count goes on the song's "Plays" in your list and shows on song rows (▶ 12) and next to songs in the Songs
   rankings on profiles (yours and friends'). Songs that aren't on your list keep their plays in this browser, and
   they're added when you add the song.
+
+## v9.7 — Songs by permission, song stats, chapter order
+
+**Update:** re-upload the folder, then run the SQL below once in Supabase → SQL Editor (it's also in
+`supabase_setup.sql`, section 8d). No Edge Function change.
+
+```sql
+insert into public.app_config (key, value) values ('songs', '{"everyone": false, "users": []}') on conflict (key) do nothing;
+drop policy if exists "admin: song settings" on public.app_config;
+create policy "admin: song settings" on public.app_config for update to authenticated
+  using (key = 'songs' and public.has_perm('manage_songs')) with check (key = 'songs' and public.has_perm('manage_songs'));
+```
+
+* **Songs are hidden until you're allowed**, like 18+: the Songs section, the music button, the player, song stats,
+  the Songs ranking, artist and album pages all disappear. The owner picks who sees them in **Settings → Admin → Songs**
+  ("Only people I pick" or "Everyone"). A role with **Manage songs** can do it too. Until the SQL is run only the
+  owner sees Songs.
+* **Song stats** say In Love / Liked / Disliked and show how many times each song was played (▶ 3), not "0/?".
+* **On repeat** (Songs home): a play button instead of "+1 Play", and "Played 3 times".
+* **Song page:** the play button is always there (also for songs from Spotify), and every song under
+  "More from this album" has its own play button.
+* **Volume:** dragging it all the way down mutes; un-muting from there brings the last volume back.
+* **Read window:** a "Newest first / Oldest first" button above the chapters (remembered).
+* **Home:** the 4 posters no longer go blurry for a moment when you hover them.
