@@ -1,6 +1,6 @@
 # anicoop: handover
 
-For the next agent/session taking over. Last updated at v9.8 (2026-09-25).
+For the next agent/session taking over. Last updated at v9.8 (2026-09-25), after v9.8 was merged.
 
 ---
 
@@ -20,9 +20,8 @@ For the next agent/session taking over. Last updated at v9.8 (2026-09-25).
   6. Check that the footer shows the new version.
 
 **Status**
-- PRs #3–#11 (v8.8 → v9.7) are **merged**.
-- **PR #12 (v9.8) is OPEN**: https://github.com/dripslayer1/anicoop/pull/12. It is pushed and was tested in headless Chromium, but the owner hasn't merged it yet.
-- The current version string is `v9.8`.
+- PRs #3–#13 (v8.8 → v9.8 + this handover) are **merged into `main`**; the live site runs v9.8.
+- Nothing is open or unfinished. The next session starts from the latest `main`.
 
 **Versioning:** each release bumps three places:
 - `sw.js`: `const VERSION = 'anicoop-v9.8'`
@@ -81,7 +80,7 @@ These are cumulative; the README has one section per version.
   - Dragging the volume to 0 mutes.
   - Newest/oldest chapter sort.
   - Home hero posters no longer blur on hover.
-- **v9.8 (PR #12, open):**
+- **v9.8 (PR #12, merged):**
   - Phone layout fixes.
   - Stickers removed; **saved GIFs** (`PREFS.savedGifs`, synced).
   - Faster first song play.
@@ -103,7 +102,7 @@ These are cumulative; the README has one section per version.
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** v9.8 is pushed (commit `2b3830a`), and PR #12 is open and waiting on the owner. Nothing is uncommitted except this file.
+**Stopped at:** v9.8 is merged and live. The keys file is deleted and the owner has rotated all keys (Twitch, TMDB, emoji). Nothing is pending; wait for the owner's next list.
 
 **Next steps**
 1. **When the owner reports back on v9.8,** check these first:
@@ -118,9 +117,7 @@ These are cumulative; the README has one section per version.
    - Run the Playwright tests.
    - Write a README section.
    - Commit, push, and open the PR with `mcp__github__create_pull_request`.
-4. **Owner homework, still outstanding:**
-   - `session-history.jsonl` in the repo root contains **secrets** (a Twitch/IGDB client secret and TMDB keys). The owner was told to delete the file and rotate the keys. Don't print or copy its contents, and **never commit new secrets**.
-   - The emoji API key was pasted in chat once. It belongs **only** in the Supabase secret `EMOJI_API_KEY`, and the owner was advised to regenerate it.
+4. **Security (done):** `session-history.jsonl` (which held API keys) was deleted from `main`, and the owner generated new Twitch, TMDB and emoji keys, which live only in Supabase Edge Function secrets. The old keys remain in git history but no longer work. **Never commit keys or secrets:** the repo is public because GitHub Pages hosts the site.
 
 ---
 
