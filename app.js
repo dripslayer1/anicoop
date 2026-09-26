@@ -100,6 +100,7 @@ const defaultPrefs = () => ({
     watchService: 'any',                                    // v10.6 automatic watch links for anime: 'any' (Crunchyroll first), a site name, or 'off'
     watchOpen: 'popup',                                     // v1.1 watch links open in a pop-up window over anicoop ('popup') or a new tab ('tab')
     tourDone: false,                                        // v1.0 the welcome tour was finished or skipped (kept with your account)
+    steam: null,                                            // v1.3 your linked Steam account: { id, name, avatar, profile } (public info only)
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
 const PREFS = reactive(mergePrefs(defaultPrefs(), readJSON(PREFS_KEY)));
@@ -2803,6 +2804,7 @@ createApp({
             settingsLoaded = true;
             if (!data) saveSettings();   // first time: upload what this browser had
             maybeStartTour();
+            finishSteamSignIn().then(() => loadSteamLib());   // v1.3
         };
         const saveSettings = debounce(async () => {
             if (!uid() || !settingsLoaded) return;
@@ -9978,6 +9980,110 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
             } else if (q.get('error') && saved) { localStorage.removeItem(MAL_PKCE_KEY); sessionStorage.setItem(MAL_CODE_KEY, JSON.stringify({ denied: q.get('error_description') || q.get('error') })); history.replaceState(history.state, '', location.pathname + location.hash); }
         } catch {} })();
+        // ---------- v1.3 Steam account ----------
+        // "Sign in through Steam" goes to Steam's own page (OpenID); Steam sends you back here with a signed answer that
+        // the Edge Function checks with Steam. Only your public Steam id, name and picture are kept (PREFS.steam, with your
+        // settings). Your library comes from Steam through the Edge Function (STEAM_API_KEY), cached here for 30 minutes.
+        const STEAM_RETURN_KEY = 'anicoop_steam_return_v1';
+        const STEAM_LIB_KEY = 'anicoop_steam_lib_v1';
+        const steamAcc = reactive({ busy: false, error: '', lib: null, at: 0, hidden: false, importing: false, step: '', result: null,
+            played: (() => { try { return localStorage.getItem('anicoop_steam_played') || 'PAUSED'; } catch { return 'PAUSED'; } })(),
+            unplayed: (() => { try { return localStorage.getItem('anicoop_steam_unplayed') || 'SKIP'; } catch { return 'SKIP'; } })() });
+        (() => {
+            try {
+                const q = new URLSearchParams(location.search);
+                if (q.get('openid.mode') !== 'id_res' || !q.get('openid.claimed_id')) return;
+                const params = {}; q.forEach((v, k) => { if (k.startsWith('openid.')) params[k] = v; });
+                sessionStorage.setItem(STEAM_RETURN_KEY, JSON.stringify(params));
+                [...q.keys()].filter(k => k.startsWith('openid.')).forEach(k => q.delete(k));
+                history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+            } catch {}
+        })();
+        const steamFn = async (payload) => {
+            const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'steamuser', ...payload } });
+            if (error) {
+                let m = ''; try { m = (await error.context.json())?.error || ''; } catch {}
+                throw new Error(/not allowed/i.test(m) || /404|not found/i.test(error.message || '') && !m ? 'Steam needs the updated Edge Function (see README v1.3)' : m || 'Steam request failed');
+            }
+            const d = typeof data === 'string' ? JSON.parse(data) : data;
+            if (d?.error) throw new Error(d.error);
+            return d;
+        };
+        const connectSteam = () => {
+            if (!currentUser.value) { showToast('Sign in first', 'error'); return; }
+            const back = location.origin + location.pathname;
+            const p = new URLSearchParams({
+                'openid.ns': 'http://specs.openid.net/auth/2.0', 'openid.mode': 'checkid_setup', 'openid.return_to': back, 'openid.realm': location.origin,
+                'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select', 'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
+            });
+            location.href = 'https://steamcommunity.com/openid/login?' + p;
+        };
+        // back from Steam: check the answer, keep the account, read the library
+        const finishSteamSignIn = async () => {
+            let params = null; try { params = JSON.parse(sessionStorage.getItem(STEAM_RETURN_KEY) || 'null'); } catch {}
+            if (!params || !currentUser.value) return;
+            try { sessionStorage.removeItem(STEAM_RETURN_KEY); } catch {}
+            steamAcc.busy = true; steamAcc.error = '';
+            try {
+                const d = await steamFn({ action: 'verify', params });
+                PREFS.steam = { id: d.steamid, name: d.name || 'Steam user', avatar: d.avatar || '', profile: d.profile || '', at: Date.now() };
+                showToast('Steam linked' + (d.name ? ' as ' + d.name : ''));
+                await loadSteamLib(true);
+                openSettings('import');
+            } catch (err) { steamAcc.error = err.message || String(err); showToast('Couldn’t link Steam: ' + steamAcc.error, 'error'); }
+            finally { steamAcc.busy = false; }
+        };
+        const loadSteamLib = async (force = false) => {
+            const id = PREFS.steam?.id; if (!id) return;
+            if (!force) {
+                try { const c = JSON.parse(localStorage.getItem(STEAM_LIB_KEY) || 'null'); if (c?.id === id && Date.now() - c.at < 30 * 60000) { Object.assign(steamAcc, { lib: c.lib, at: c.at, hidden: !!c.hidden }); return; } } catch {}
+            }
+            steamAcc.busy = true; steamAcc.error = '';
+            try {
+                const d = await steamFn({ action: 'owned', steamid: id });
+                const lib = {}; (d.games || []).forEach(g => { lib[g.appid] = g; });
+                Object.assign(steamAcc, { lib, at: Date.now(), hidden: !!d.hidden && !(d.games || []).length });
+                try { localStorage.setItem(STEAM_LIB_KEY, JSON.stringify({ id, at: steamAcc.at, lib, hidden: steamAcc.hidden })); } catch {}
+            } catch (err) { steamAcc.error = err.message || String(err); }
+            finally { steamAcc.busy = false; }
+        };
+        const disconnectSteam = () => { PREFS.steam = null; Object.assign(steamAcc, { lib: null, at: 0, hidden: false, result: null, error: '' }); try { localStorage.removeItem(STEAM_LIB_KEY); } catch {} showToast('Steam unlinked'); };
+        const steamCount = computed(() => steamAcc.lib ? Object.keys(steamAcc.lib).length : 0);
+        const steamOwned = (appid) => appid && steamAcc.lib ? steamAcc.lib[appid] || null : null;
+        const steamHours = (g) => g ? Math.round(g.mins / 6) / 10 : 0;
+        // put your Steam games on your Games list: played in the last 2 weeks → Playing; played before → your pick;
+        // never played → your pick (or skip). Games already on your list only get their hours updated.
+        const importSteam = async () => {
+            if (steamAcc.importing || !steamAcc.lib) return;
+            try { localStorage.setItem('anicoop_steam_played', steamAcc.played); localStorage.setItem('anicoop_steam_unplayed', steamAcc.unplayed); } catch {}
+            steamAcc.importing = true; steamAcc.result = null; steamAcc.step = 'Matching your games…';
+            try {
+                const lib = Object.values(steamAcc.lib);
+                const onList = new Map(soloList.value.filter(e => e.anime?.type === 'GAME' && e.anime.steamId).map(e => [Number(e.anime.steamId), e]));
+                const statusOf = (g) => g.recent > 0 ? 'WATCHING' : g.mins >= 6 ? steamAcc.played : steamAcc.unplayed;
+                const entries = [];
+                lib.filter(g => onList.has(g.appid)).forEach(g => { const e = onList.get(g.appid), h = Math.round(g.mins / 60); if (h > (e.progress || 0)) entries.push({ ...e, progress: h }); });
+                const need = lib.filter(g => !onList.has(g.appid) && statusOf(g) !== 'SKIP');
+                const byApp = new Map(); let notFound = 0;
+                for (let i = 0; i < need.length; i += 100) {
+                    const chunk = need.slice(i, i + 100), ids = new Set(chunk.map(g => String(g.appid)));
+                    steamAcc.step = `Finding your games… ${Math.min(i + 100, need.length)} / ${need.length}`;
+                    const rows = await igdb('games', `fields ${GAME_FIELDS},external_games.uid,external_games.external_game_source; where external_games.external_game_source = 1 & external_games.uid = (${[...ids].map(x => '"' + x + '"').join(',')}); limit 500;`).catch(() => []);
+                    (rows || []).forEach(row => (row.external_games || []).forEach(x => { if (x.external_game_source === 1 && ids.has(String(x.uid)) && !byApp.has(Number(x.uid))) byApp.set(Number(x.uid), row); }));
+                }
+                const seen = new Set();
+                need.forEach(g => {
+                    const row = byApp.get(g.appid); if (!row) { notFound++; return; }
+                    const anime = { ...normGame(row), steamId: g.appid }; if (seen.has(anime.id)) return; seen.add(anime.id);
+                    entries.push({ anime, status: statusOf(g), score: 0, progress: Math.round(g.mins / 60), repeats: [], lilbro: false, rewish: false, rotation: false, watchLink: '', readPos: null });
+                });
+                steamAcc.step = 'Saving…';
+                const res = entries.length ? await saveImported(entries) : { added: 0, updated: 0, skipped: 0 };
+                steamAcc.result = { ...res, notFound };
+                showToast(`Steam: ${res.added} added, ${res.updated} updated`);
+            } catch (err) { steamAcc.error = err.message || String(err); showToast('Steam import failed: ' + steamAcc.error, 'error'); }
+            finally { steamAcc.importing = false; steamAcc.step = ''; }
+        };
         const malFn = async (payload) => {
             const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'mal', ...payload } });
             if (error) {
@@ -10301,7 +10407,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

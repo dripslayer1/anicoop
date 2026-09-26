@@ -304,6 +304,16 @@ These are cumulative; the README has one section per version.
   `update` 5 s after the last page turn, or when the reader closes / the tab hides (no AniList / MAL push).
   `resumeReading` takes the newest of local / account; last page reached → next chapter; only if progress passed it
   and the row was updated after it → `continueChapter`. Tested with MangaDex (Ki ni Natteru Hito ga Otoko ja Nakatta).
+- **v1.3 Steam account** (Edge Function changed; secret `STEAM_API_KEY` added by the owner): endpoint `steamuser` —
+  `verify` (OpenID 2.0 `check_authentication` against steamcommunity.com, claimed_id → 17-digit SteamID, then
+  GetPlayerSummaries), `owned` (IPlayerService/GetOwnedGames, include_played_free_games, cached 5 min), `summary`.
+  Client: `connectSteam` → steamcommunity.com/openid/login with return_to = this page; an IIFE moves the `openid.*`
+  answer to sessionStorage and cleans the URL; `finishSteamSignIn` runs after `fetchSettings`. Stored in
+  **`PREFS.steam`** (no SQL: account_links only allows anilist / mal). Library in `steamAcc.lib` (localStorage 30 min).
+  `importSteam` matches appids on IGDB (`external_games.external_game_source = 1 & external_games.uid = (...)`, 100 per
+  call) and saves through `saveImported` (no AniList / MAL echo). Game page: Play on Steam + hours / Get it on Steam.
+  Verified: IGDB matching live (5/5), import statuses, UI; the Steam calls themselves only after the owner deploys.
+  Note: a user could type any SteamID into their own settings (only shows that public library to themselves).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
