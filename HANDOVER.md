@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.6'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.7'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.6'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.7'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -428,6 +428,18 @@ These are cumulative; the README has one section per version.
   - **"Unknown user" (v1.5 regression):** the owner's `profiles` table has **no `created_at` column** (made before it
     was in the schema), so `PROFILE_COLS` with it made every people list fail. Removed; `selectProfiles` retries with
     `*` on any error. Checked against the live API (`?select=created_at` → 400).
+
+- **v1.7** (no SQL): **series** (`// v1.7 series` next to the list filters): `seriesInfo` (localStorage `anicoop_series_v1`:
+  anime id → { r: related ids (PREQUEL / SEQUEL / PARENT / SIDE_STORY, anime only), d: start date }, 'm' + movie id →
+  TMDB `belongs_to_collection` { c, n, d }), filled by `ensureSeries` (AniList id_in 50 per call, 0.9 s apart, waits 30 s
+  on a rate limit; TMDB `movie/<id>` 4 at a time). `groupSeries(items)` = union-find over those links (through titles on
+  nobody's list too), groups in the order the items came in, titles inside by date. Lists: `groupSeasons` switch
+  (localStorage), `seriesOn`, `listSeries` { multi, single } from what the filters show. Compare: group id `series`
+  (`compareSeries`, `compareCount`), `compareQ` search (`compareRows`; Compare rows now show in steps of 60).
+  **Coming back to a profile:** `viewedCache` (10 min), `navRestoring` keeps viewedSection and the list steps on back,
+  `compareFor` resets Compare only for a different person; navState carries `compare`. `.list-aside` (xl) and
+  `.their-aside` (lg) scroll on their own (max-height 100dvh − 7rem). The list-steps reset watcher sits after the Compare
+  refs (TDZ).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

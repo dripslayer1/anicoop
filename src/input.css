@@ -2145,3 +2145,28 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .pbar-peek.is-bump { box-shadow: 0 12px 30px -10px rgb(0 0 0 / .8), 0 0 34px -2px rgb(var(--c-volt)); }
 .pbar-peek.is-bump img, .pbar-peek.is-bump .pbar-peek-eq { animation: peek-bump .26s cubic-bezier(.2,1.6,.4,1); }
 @keyframes peek-bump { 40% { transform: scale(.82); } }
+
+/* ===== v1.7 the Lists sidebar scrolls on its own when it's taller than the screen (it stays pinned on big screens,
+   so its bottom — "Watching with" — couldn't be reached) ===== */
+@media (min-width: 1280px) {
+  .list-aside { max-height: calc(100dvh - 7rem); overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; margin-right: -6px; scrollbar-width: thin; scrollbar-color: rgb(var(--c-line2)) transparent; }
+  .list-aside::-webkit-scrollbar { width: 6px; }
+  .list-aside::-webkit-scrollbar-thumb { background: rgb(var(--c-line2)); border-radius: 9px; }
+}
+@media (min-width: 1024px) {
+  .their-aside { max-height: calc(100dvh - 7rem); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+}
+
+/* ===== v1.7 series: the seasons of one show together ===== */
+.series-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; font-size: 12px; color: rgb(var(--c-sub)); }
+.series-row { border: 1px solid rgb(var(--c-line)); border-radius: 20px; background: rgb(var(--c-surface)); padding: 14px 14px 16px; }
+.series-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 12px; padding: 0 2px; }
+.series-name { font-family: Unbounded, system-ui, sans-serif; font-weight: 600; font-size: 15px; color: rgb(var(--c-ink)); min-width: 0; }
+.series-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 11px; color: rgb(var(--c-sub)); }
+.series-strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: rgb(var(--c-line2)) transparent; }
+.series-strip > .poster-hit { flex: 0 0 150px; }
+@media (max-width: 639px) { .series-strip > .poster-hit { flex-basis: 124px; } .series-row { padding: 12px 10px 14px; } }
+.series-cmp-row { display: grid; grid-template-columns: 22px 1fr 88px 88px 36px; gap: 8px; align-items: center; padding: 8px 14px; border-bottom: 1px solid rgb(var(--c-line)); }
+.series-cmp-row:last-child { border-bottom: 0; }
+@media (min-width: 640px) { .series-cmp-row { grid-template-columns: 26px 1fr 140px 140px 40px; } }
+@media (hover: hover) { .series-cmp-row:hover { background: rgb(var(--c-raised)); } }

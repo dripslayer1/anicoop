@@ -999,3 +999,20 @@ Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old
 - **The tour flickering / lagging** between sections: while a step opened another page, the spotlight lost its target
   for a moment and the card jumped to the middle and back. It now waits in place. The dark cover is also much lighter
   for the graphics card (it was a shadow several screens big, redrawn on every frame, which flickered on some computers).
+
+## v1.7 — seasons together, search in Compare, Compare remembers where you were
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.7**.
+
+- **Group seasons** (Lists, anime and movies & TV): a switch at the top. Every season, movie, OVA and special of the same
+  show sits in one row, in release order, with how many are watching / completed. Titles with nothing else from their show
+  are under **Single titles**. The filters still work inside it. The first time, anicoop asks AniList which titles belong
+  together (a few seconds per 50 titles; a line shows how far it is), then it remembers. Movies are grouped by their film
+  series on TMDB (like both Dune films).
+- **Compare → Series:** each show with 2+ titles between you two, its seasons in order, your status and score next to
+  theirs, and how many each of you finished. The + adds a season you don't have.
+- **Search in Compare:** a box next to the groups finds titles in the group you're on (in Series: shows or any season).
+- **Compare remembers:** open a title from Compare and go back, and you're on the same group, search and place (the
+  profile isn't loaded again for 10 minutes).
+- **Lists sidebar:** on big screens it was pinned and taller than the screen, so the bottom ("Watching with") couldn't be
+  reached. It now scrolls on its own.

@@ -5209,6 +5209,105 @@ createApp({
             const keys = listFilterStatus.value === 'ALL' ? [...STATUS_ORDER, ...extra] : [listFilterStatus.value];
             return Object.fromEntries(keys.filter(k => groups[k]?.length).map(k => [k, sortEntries(groups[k], PREFS.listOrder)]));
         });
+        // ---------- v1.7 series: seasons of the same show together (Lists → "Group seasons", Compare → "Series") ----------
+        // Anime: AniList's links between titles (prequel / sequel / parent / side story), followed through titles that aren't
+        // on anyone's list too, so season 1 and season 3 meet through season 2. Movies: TMDB's collections (Dune + Dune:
+        // Part Two). What AniList / TMDB say is kept on this device (anicoop_series_v1), so it's asked once per title.
+        const SERIES_KEY = 'anicoop_series_v1';
+        const SERIES_REL = ['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY'];
+        const seriesInfo = reactive((() => { const s = readJSON(SERIES_KEY); return s && typeof s === 'object' ? s : {}; })());   // anime id → { r: [ids], d } · 'm' + movie id → { c, n, d }
+        const seriesTick = ref(0);   // bumps when new answers arrive (the groups are worked out again)
+        const seriesState = reactive({ busy: false, done: 0, total: 0, error: '' });
+        const saveSeries = debounce(() => { try { localStorage.setItem(SERIES_KEY, JSON.stringify(seriesInfo)); } catch {} }, 1500);
+        const isMovieItem = (a) => a?.type === 'TV' && (a.format === 'MOVIE' || a.kind === 'movie' || (a.id >= MOVIE_BASE && a.id < SHOW_BASE));
+        const seriesType = (t) => t === 'ANIME' || t === 'TV';
+        const seriesKnown = (a) => a?.type === 'TV' ? (!isMovieItem(a) || ('m' + a.id) in seriesInfo) : String(a?.id) in seriesInfo;
+        let seriesRun = null;
+        const ensureSeries = (animes) => {
+            const need = [...new Map(animes.filter(a => a?.id && seriesType(a.type || 'ANIME') && !seriesKnown(a)).map(a => [a.id, a])).values()];
+            if (!need.length) return seriesRun || Promise.resolve();
+            const prev = seriesRun || Promise.resolve();
+            seriesRun = prev.then(async () => {
+                const todo = need.filter(a => !seriesKnown(a));
+                if (!todo.length) return;
+                seriesState.busy = true; seriesState.error = ''; seriesState.done = 0; seriesState.total = todo.length;
+                const anime = todo.filter(a => (a.type || 'ANIME') === 'ANIME').map(a => a.id), movies = todo.filter(isMovieItem);
+                try {
+                    for (let i = 0; i < anime.length; i += 50) {
+                        const chunk = anime.slice(i, i + 50);
+                        let d = null;
+                        for (let tries = 0; tries < 3 && !d; tries++) {
+                            try { d = await anilistRaw('query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { id startDate { year month day } relations { edges { relationType node { id type } } } } } }', { ids: chunk }); }
+                            catch (err) { if (/rate limit/i.test(err.message || '') && tries < 2) await sleep(30000); else throw err; }
+                        }
+                        const got = new Map((d?.Page?.media || []).map(m => [m.id, m]));
+                        chunk.forEach(id => {
+                            const m = got.get(id), s = m?.startDate || {};
+                            seriesInfo[id] = { r: (m?.relations?.edges || []).filter(e => SERIES_REL.includes(e.relationType) && e.node?.type === 'ANIME').map(e => e.node.id), d: s.year ? s.year * 10000 + (s.month || 0) * 100 + (s.day || 0) : 0 };
+                        });
+                        seriesState.done += chunk.length; seriesTick.value++; saveSeries();
+                        if (i + 50 < anime.length) await sleep(900);
+                    }
+                    const queue = [...movies];
+                    const worker = async () => {
+                        while (queue.length) {
+                            const a = queue.shift(), ext = a.extId || (a.id - MOVIE_BASE);
+                            try { const x = await tmdbCall(`movie/${ext}`); const c = x?.belongs_to_collection; seriesInfo['m' + a.id] = { c: c?.id || null, n: c?.name || null, d: Number(String(x?.release_date || '').replace(/-/g, '')) || 0 }; }
+                            catch { seriesInfo['m' + a.id] = { c: null, n: null, d: 0, miss: 1 }; }
+                            seriesState.done++;
+                            if (seriesState.done % 10 === 0) seriesTick.value++;
+                        }
+                    };
+                    await Promise.all([worker(), worker(), worker(), worker()]);
+                    seriesTick.value++; saveSeries();
+                } catch (err) { seriesState.error = err.message || 'Could not reach AniList'; }
+                finally { seriesState.busy = false; }
+            });
+            return seriesRun;
+        };
+        // items (with .anime) → [{ key, name, items }] in the order the items came in (so a group sorts by its best member)
+        const groupSeries = (items) => {
+            void seriesTick.value;
+            const parent = new Map();
+            const find = (k) => { while (parent.get(k) !== k) { const p = parent.get(k); parent.set(k, parent.get(p)); k = p; } return k; };
+            const join = (a, b) => { if (!parent.has(a)) parent.set(a, a); if (!parent.has(b)) parent.set(b, b); const ra = find(a), rb = find(b); if (ra !== rb) parent.set(rb, ra); };
+            const nodeOf = (a) => {
+                if (a.type === 'TV') { const m = isMovieItem(a) ? seriesInfo['m' + a.id] : null; return m?.c ? 'c' + m.c : 't' + a.id; }
+                return 'a' + a.id;
+            };
+            items.forEach(i => {
+                const a = i.anime, n = nodeOf(a);
+                if (!parent.has(n)) parent.set(n, n);
+                if ((a.type || 'ANIME') === 'ANIME') (seriesInfo[a.id]?.r || []).forEach(r => join(n, 'a' + r));
+            });
+            const groups = new Map();
+            items.forEach(i => { const k = find(nodeOf(i.anime)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
+            const dateOf = (a) => (a.type === 'TV' ? seriesInfo['m' + a.id]?.d : seriesInfo[a.id]?.d) || (a.seasonYear ? a.seasonYear * 10000 : 99999999);
+            return [...groups.entries()].map(([key, list]) => {
+                const inOrder = [...list].sort((x, y) => dateOf(x.anime) - dateOf(y.anime) || x.anime.id - y.anime.id);
+                const coll = key.startsWith('c') ? seriesInfo['m' + inOrder[0].anime.id]?.n : null;
+                return { key, name: coll ? coll.replace(/\s+Collection$/i, '') : titleOf(inOrder[0].anime), items: inOrder };
+            });
+        };
+        // Lists: the switch, and the groups of what the list shows right now (filters apply to the titles inside)
+        const groupSeasons = ref((() => { try { return localStorage.getItem('anicoop_group_seasons') === '1'; } catch { return false; } })());
+        watch(groupSeasons, (v) => { try { localStorage.setItem('anicoop_group_seasons', v ? '1' : '0'); } catch {} });
+        const seriesOn = computed(() => groupSeasons.value && seriesType(mediaType.value) && activeTab.value === 'solo');
+        const listSeriesItems = computed(() => {
+            if (listFilterStatus.value === 'ALL') return sortEntries(baseListItems.value, PREFS.listOrder);
+            return Object.values(filteredGroupedList.value).flat();
+        });
+        const listSeries = computed(() => {
+            if (!seriesOn.value) return { multi: [], single: [] };
+            const all = groupSeries(listSeriesItems.value);
+            return { multi: all.filter(g => g.items.length > 1), single: all.filter(g => g.items.length === 1).map(g => g.items[0]) };
+        });
+        watch(() => seriesOn.value ? secSolo.value.length : 0, (n) => { if (n) ensureSeries(secSolo.value.map(i => i.anime)); }, { immediate: false });
+        const retrySeries = () => { seriesState.error = ''; ensureSeries(secSolo.value.map(i => i.anime)); };
+        const seriesSummary = (g) => {
+            const c = {}; g.items.forEach(i => { c[i.status] = (c[i.status] || 0) + 1; });
+            return STATUS_ORDER.filter(s => c[s]).map(s => ({ s, n: c[s] }));
+        };
         const listFiltersOn = computed(() => listFilterStatus.value !== 'ALL' || !!listSearchQuery.value.trim() || !!listFilterGenre.value || !!listFormat.value || !!listWith.value.length || strictSolo.value);
         const clearListFilters = () => { listFilterStatus.value = 'ALL'; listSearchQuery.value = ''; listFilterGenre.value = ''; listFormat.value = ''; listWith.value = []; strictSolo.value = false; };
         watch(section, () => { listFormat.value = ''; listWith.value = []; });
@@ -5500,9 +5599,14 @@ createApp({
             if (userId === uid()) { switchTab('profile'); return; }
             navigate(() => { viewUserId.value = userId; selectedAnime.value = null; entity.value = null; currentAppView.value = 'tracker'; });
         };
+        // v1.7 a profile you just looked at is kept for 10 minutes: coming back to it (from a title you opened in Compare,
+        // say) puts you where you were instead of loading it again from the top
+        let viewedCache = { id: null, at: 0, data: null };
+        let navRestoring = false;
         const loadViewedUser = async (userId) => {
+            if (viewedCache.id === userId && Date.now() - viewedCache.at < 600000 && viewedCache.data) { viewedUser.value = viewedCache.data; if (!navRestoring) viewedSection.value = 'overview'; return; }
             viewedUser.value = { profile: personOf(userId), entries: [], favs: [], favStaff: [], days: 0, hidden: [], stats: null, loading: true };
-            viewedSection.value = 'overview';
+            if (!navRestoring) viewedSection.value = 'overview';
             const [{ data: prof }, { data: entries }, { data: favs }, days, { data: hidden }, { data: stats }, { data: favStaffRows }] = await Promise.all([
                 sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
                 selectAll(() => sb.from('list_entries').select('*').eq('user_id', userId).order('updated_at', { ascending: false }).order('media_id')),
@@ -5519,6 +5623,7 @@ createApp({
                 favStaff: (favStaffRows || []).map(r => ({ ...r.data, kind: r.kind })), days, hidden: Array.isArray(hidden) ? hidden : [],
                 stats: stats && typeof stats === 'object' ? stats : null, loading: false,
             };
+            viewedCache = { id: userId, at: Date.now(), data: viewedUser.value };
         };
         // v10 their 18+ titles stay out of sight for people without 18+ access (list, rankings, stats, comparison)
         watch(() => viewedUser.value && !viewedUser.value.loading && !adultAllowed.value ? viewedUser.value.all : null, (all) => { if (all?.length) checkAdultIds(all.map(i => i.anime?.id)); });
@@ -5578,7 +5683,6 @@ createApp({
         const listShown = reactive({});
         const shownIn = (k) => listShown[k] || LIST_STEP;
         const moreIn = (k) => { listShown[k] = shownIn(k) + LIST_STEP; recheckInfinite(); };
-        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFormat.value, listWith.value.join(','), strictSolo.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q].join('|'), () => { for (const k in listShown) delete listShown[k]; });
         // stat cards on a friend's profile: list-type cards open their list, the rest keep the breakdown pop-up
         const openFriendLists = async (id) => { friendsOpen.value = false; if (id !== viewUserId.value) { openUser(id); await nextTick(); } openTheirList('ANIME'); };
         const openFriendsManage = () => { friendsOpen.value = false; openTracker('profile'); setTimeout(() => document.getElementById('friends')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); };
@@ -5674,7 +5778,14 @@ createApp({
         // ---------- compare lists with a friend ----------
         const compareTab = ref('meDone');
         const compareType = ref('ANIME');
-        watch(() => viewedSection.value === 'compare', (on) => { if (on) compareType.value = songsOn.value || mediaType.value !== 'SONG' ? mediaType.value : 'ANIME'; });   // v9.8 opens on the section you're in
+        const compareQ = ref('');   // v1.7 search
+        // v9.8 opens on the section you're in (v1.7 only when you start comparing with someone new: coming back keeps it)
+        let compareFor = null;
+        watch(() => viewedSection.value === 'compare' ? viewUserId.value : null, (id) => {
+            if (!id || id === compareFor) return;
+            compareFor = id; compareTab.value = 'meDone'; compareQ.value = '';
+            compareType.value = songsOn.value || mediaType.value !== 'SONG' ? mediaType.value : 'ANIME';
+        });
         const comparison = computed(() => {
             const theirs = (viewedUser.value?.entries || []).filter(i => typeOf(i) === compareType.value);
             const mine = uniqueItems.value.filter(i => typeOf(i) === compareType.value);
@@ -5737,17 +5848,38 @@ createApp({
                 { id: 'meDone', label: 'Only me ' + done }, { id: 'themDone', label: 'Only them ' + done }, { id: 'bothDone', label: 'Both ' + done },
                 ...(compareType.value === 'SONG' ? [] : [{ id: 'mePlan', label: 'Only me ' + plan }, { id: 'themPlan', label: 'Only them ' + plan }, { id: 'bothPlan', label: 'Both ' + plan }]),
                 { id: 'extras', label: 'Everything else' },
+                ...(seriesType(compareType.value) ? [{ id: 'series', label: 'Series', icon: 'fa-layer-group' }] : []),
             ];
+        });
+        watch(compareType, (t) => { if (compareTab.value === 'series' && !seriesType(t)) compareTab.value = 'meDone'; });
+        // v1.7 the search box: titles in the group you're on (in Series: a series with any matching title)
+        const titleHas = (a, q) => [a?.title?.romaji, a?.title?.english, a?.title?.native].some(t => t && t.toLowerCase().includes(q));
+        const compareRows = computed(() => {
+            const q = compareQ.value.trim().toLowerCase(), rows = comparison.value.groups[compareTab.value] || [];
+            return q ? rows.filter(r => titleHas(r.anime, q)) : rows;
+        });
+        // v1.7 Series: every show with 2+ titles between you two, its seasons in order, each with your status and theirs
+        const compareSeriesAll = computed(() => {
+            if (!seriesType(compareType.value)) return [];
+            const rows = Object.values(comparison.value.groups).flat().sort((a, b) => titleOf(a.anime).localeCompare(titleOf(b.anime)));
+            return groupSeries(rows).filter(g => g.items.length > 1).sort((a, b) => a.name.localeCompare(b.name))
+                .map(g => ({ ...g, meDone: g.items.filter(r => r.me?.status === 'COMPLETED').length, themDone: g.items.filter(r => r.them?.status === 'COMPLETED').length, meHas: g.items.filter(r => r.me).length, themHas: g.items.filter(r => r.them).length }));
+        });
+        const compareSeries = computed(() => { const q = compareQ.value.trim().toLowerCase(); return q ? compareSeriesAll.value.filter(g => g.name.toLowerCase().includes(q) || g.items.some(r => titleHas(r.anime, q))) : compareSeriesAll.value; });
+        const compareCount = (id) => id === 'series' ? compareSeriesAll.value.length : (comparison.value.groups[id] || []).length;
+        watch(() => viewedSection.value === 'compare' && seriesType(compareType.value) && viewedUser.value && !viewedUser.value.loading ? compareType.value + (viewUserId.value || '') : null, (on) => {
+            if (on) ensureSeries(Object.values(comparison.value.groups).flat().map(r => r.anime));
         });
         const compareBig = ref((() => { try { return localStorage.getItem('anicoop_compare_big') === '1'; } catch { return false; } })());
         watch(compareBig, (v) => { try { localStorage.setItem('anicoop_compare_big', v ? '1' : '0'); } catch {} });
         // rows you can add to your own list (the title isn't on any of your lists yet)
-        const compareAddable = computed(() => (comparison.value.groups[compareTab.value] || []).filter(r => !r.me));
+        const compareAddable = computed(() => compareTab.value === 'series' ? compareSeries.value.flatMap(g => g.items).filter(r => !r.me) : compareRows.value.filter(r => !r.me));
         // "Only them": tick titles and add them to your own list in one go
         const compareSel = ref(new Set());
         const compareAddStatus = ref('PLANNING');
         const compareAdding = ref(false);
-        watch([compareTab, compareType, viewUserId], () => { compareSel.value = new Set(); });
+        watch([compareTab, compareType, compareQ], () => { compareSel.value = new Set(); });
+        watch(viewUserId, (id) => { if (id && id !== compareFor) compareSel.value = new Set(); });
         const toggleCompareSel = (id) => { const n = new Set(compareSel.value); if (n.has(id)) n.delete(id); else n.add(id); compareSel.value = n; };
         const compareAllSelected = computed(() => { const rows = compareAddable.value; return rows.length > 0 && rows.every(r => compareSel.value.has(r.anime.id)); });
         const toggleCompareAll = () => { compareSel.value = compareAllSelected.value ? new Set() : new Set(compareAddable.value.map(r => r.anime.id)); };
@@ -5767,13 +5899,14 @@ createApp({
             finally { compareAdding.value = false; }
         };
         const addSelectedFromCompare = () => addFromCompare(compareAddable.value.filter(r => compareSel.value.has(r.anime.id)));
+        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFormat.value, listWith.value.join(','), strictSolo.value, groupSeasons.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q, compareTab.value, compareType.value, compareQ.value].join('|'), () => { if (navRestoring) return; for (const k in listShown) delete listShown[k]; });   // (v1.7 not when you come back: the page is as long as you left it)
 
         // ---------- navigation + BACK button ----------
         const navIndex = ref(0);
         const canGoBack = computed(() => navIndex.value > 0);
         const detailCache = new Map();
         const navKey = () => `${currentAppView.value}|${section.value}|${activeTab.value}|${selectedAnime.value?.id || ''}|${viewUserId.value || ''}${viewUserId.value ? ':' + viewedSection.value : ''}|${entity.value ? entity.value.type + entity.value.id : ''}|${activeTab.value === 'chat' ? (chatWith.value || '') + '/' + (groupWith.value || '') : ''}`;
-        const navState = () => ({ anicoop: true, idx: navIndex.value, view: currentAppView.value, section: section.value, tab: activeTab.value, animeId: selectedAnime.value?.id || null, userId: viewUserId.value, entity: entity.value ? { ...entity.value } : null, chatWith: chatWith.value, groupWith: groupWith.value, viewedSection: viewedSection.value, theirList: { ...theirList }, scroll: window.scrollY,
+        const navState = () => ({ anicoop: true, idx: navIndex.value, view: currentAppView.value, section: section.value, tab: activeTab.value, animeId: selectedAnime.value?.id || null, userId: viewUserId.value, entity: entity.value ? { ...entity.value } : null, chatWith: chatWith.value, groupWith: groupWith.value, viewedSection: viewedSection.value, theirList: { ...theirList }, compare: { tab: compareTab.value, type: compareType.value, q: compareQ.value, for: compareFor }, scroll: window.scrollY,
             animeRef: selectedAnime.value?.extId ? { id: selectedAnime.value.id, extId: selectedAnime.value.extId, type: selectedAnime.value.type } : null, settings: settingsOpen.value ? settingsTab.value : null });
         // a refresh keeps you where you were: the browser keeps history.state across reloads, and a copy goes to this
         // tab's sessionStorage too (restoreNav puts you back there once you're signed in)
@@ -5894,9 +6027,14 @@ createApp({
             currentAppView.value = s.view || 'home';
             if (s.section && SECTIONS[s.section]) section.value = s.section;
             activeTab.value = s.tab || 'browse';
-            const sameUser = s.userId && s.userId === viewUserId.value;
+            // (v1.7 the profile section, their list and Compare come back as you left them, also after opening a title)
             viewUserId.value = s.userId || null;
-            if (sameUser) { viewedSection.value = s.viewedSection || 'overview'; if (s.theirList) Object.assign(theirList, s.theirList); }
+            if (s.userId) {
+                viewedSection.value = s.viewedSection || 'overview';
+                if (s.theirList) Object.assign(theirList, s.theirList);
+                if (s.compare && s.compare.for === s.userId) { compareFor = s.userId; compareType.value = s.compare.type || compareType.value; compareTab.value = s.compare.tab || compareTab.value; compareQ.value = s.compare.q || ''; }
+                navRestoring = true; nextTick(() => { navRestoring = false; });
+            }
             entity.value = s.entity || null;
             chatWith.value = s.chatWith || null;
             groupWith.value = s.groupWith || null;
@@ -6500,8 +6638,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6';
+        const APP_VERSION = '1.7';
         const WHATS_NEW = {
+            '1.7': [
+                { icon: 'fa-layer-group', t: 'Seasons together', d: 'Turn on “Group seasons” in Lists (anime, movies & TV): every season, movie and OVA of a show sits in one row, in release order.' },
+                { icon: 'fa-code-compare', t: 'Compare: Series', d: 'The new Series group in Compare shows each show’s seasons with your status next to your friend’s.' },
+                { icon: 'fa-magnifying-glass', t: 'Search in Compare', d: 'Find a title in any Compare group (or a show in Series) by typing its name.' },
+                { icon: 'fa-arrow-rotate-left', t: 'Compare remembers', d: 'Open a title from Compare and come back: you’re on the same group, search and spot.' },
+                { icon: 'fa-list', t: 'Lists sidebar scrolls', d: 'On big screens the filter column scrolls on its own, so “Watching with” is always reachable.' },
+            ],
             '1.6': [
                 { icon: 'fa-user-group', t: 'Watch together, on one list', d: 'Squads are gone: invite friends to any anime, manga or movie & TV title (or many at once). When they join, their picture shows on the poster, and a faded one means they haven’t answered yet.' },
                 { icon: 'fa-rotate-right', t: 'Everyone keeps their own status', d: 'The episode count moves together, but you can be Rewatching while a friend watches it for the first time, and if someone drops it the rest carry on.' },
@@ -10497,6 +10642,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             soloList, toast, selectedAnime, detailLoading, detailCharacters, detailRelations,
             editForm, inlineForm, isSaving, stepProgress,
             listFilterStatus, listSearchQuery, filteredGroupedList, statusCounts, listFiltersOn, clearListFilters,
+            groupSeasons, seriesOn, seriesState, listSeries, seriesSummary, retrySeries, compareQ, compareRows, compareSeries, compareCount,
             togetherCount, plMine, plPeople, plShared, plInvite, plInviteList, plInviteFriends, openPlInvite, togglePlMember, leavePlaylist, groupPicBusy, changeGroupPic, chatQ, chatFriendHits, chatNewFriends, chatOthers, openChatHit, REPEAT_TYPES,
             listFormat, listFormats, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
