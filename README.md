@@ -890,3 +890,51 @@ What it does:
 - **Fixed:** Continue reading sometimes jumped ahead (e.g. rereading chapter 1 with 8 read opened 8.5). Your spot is
   kept unless your chapter count went up after you left it.
 
+
+## v1.5 — full check: fixes, security and speed
+
+**Run one small SQL (below) and deploy the Edge Function again** (Supabase → Edge Functions → igdb → paste the new
+`supabase/functions/igdb/index.ts` → Deploy). Then hard-refresh: the footer says **v1.5**.
+
+```sql
+-- 8g. v1.5 — a role with "Manage 18+" can only change the 18+ setting
+drop policy if exists "admin: 18+ settings" on public.app_config;
+create policy "admin: 18+ settings" on public.app_config for update to authenticated
+  using (key = 'adult' and public.has_perm('manage_18')) with check (key = 'adult' and public.has_perm('manage_18'));
+```
+
+**Fixed**
+- **Security:** a link inside someone's post or a chat episode card could be a disguised script (`javascript:`) that runs
+  inside anicoop when clicked. Only real web links (http / https) are clickable now.
+- **Security (the SQL above):** a role with the "Manage 18+" power could also change other app settings (who sees
+  Songs, the AniList client id). Now it can only change the 18+ setting.
+- **Steam achievements:** opening another game briefly showed (or, if Steam didn't answer, kept showing) the previous
+  game's achievements.
+- **Steam games:** the daily game check could remove the Steam link from games you imported from Steam, so "Play on
+  Steam" and the achievements disappeared from them the next day.
+- **Signing out** on a shared computer: the next new account made there got your linked Steam account, saved GIFs and
+  "tour done", and could be asked your "how many episodes?" question. Now they stay with your account. The welcome
+  tour is remembered per account.
+- **Playlists:** "Add songs" didn't put the cursor in the search box (it caused an error instead).
+- **Songs:** picking a genre while searching let every song with no genre through.
+- **Games:** store links were in number order (Wiki before Steam); now Official site, Steam, Epic… as intended.
+- **Tour:** says "Welcome to anicoop" (it still said 1.0).
+- **Edge Function:** its memory could fill up during a big "Find readable sources" scan (thousands of sites) and make
+  it fail for a while; its cache now has a size limit. It also refuses a few more local-network addresses.
+
+**Faster**
+- Every change on your list (each +1, each reading-spot save while you read) used to download your **whole list** again
+  1.5 s later. Now only that title is updated, and changes from elsewhere (watch buddies, another device) arrive one by
+  one. Saving in the big editor doesn't re-download your list either.
+- **Profile pictures and banners** are now saved as files instead of as long text inside your profile, which every friends
+  list, squad, chat and notification downloaded again and again. Yours moves over by itself the next time you open anicoop.
+  Lists of people don't load banners at all any more (only a profile page shows them).
+- Opening the app: your profile, settings, friends and lists load **at the same time** instead of one after another.
+- **Lists** with hundreds of titles show them in steps (the first 60 of each status, more as you scroll), so the page opens
+  quickly on phones too. Friends' lists too.
+- The installed app keeps `app.js` / `app.css` for the version it's on, so opening it doesn't ask the server for them
+  every time (an update still arrives straight away: each version has its own address).
+- Vue and Supabase load from one CDN, at exact versions (cached for good, and never changed by a surprise update).
+- "Find readable sources" no longer re-reads its whole results table after every single site it checks.
+- Removed ~30 leftover functions nothing used any more, including one that asked the database for something on every
+  title page you opened.

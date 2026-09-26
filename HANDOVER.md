@@ -1,6 +1,6 @@
 # anicoop: handover
 
-For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when the v10.1 PR was opened.
+For the next agent/session taking over. Last updated at v1.5 (2026-09-26), the "full deep check" release (see §3, v1.5).
 
 > **v9.9 session (new account, working on the owner's own Windows PC):** the repo lives at
 > `C:\Users\drips\Downloads\anicoop\anicoop`. Node.js LTS and GitHub CLI were installed there this session; `gh` is logged
@@ -34,8 +34,10 @@ For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const VERSION = 'anicoop-v10.1'`
-- `index.html`: every `?v=10.1` cache-buster, plus the footer `<span>v10.1</span>` (around line 215)
+- `sw.js`: `const REL = '1.5'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+  `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
+  before)
+- `index.html`: both `?v=` cache-busters (app.css, app.js), plus the footer `<span>v1.5</span>` (around line 217)
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
 ---
@@ -324,6 +326,40 @@ These are cumulative; the README has one section per version.
   GetPlayerAchievements + global % v0002) and `achsummary` (40 apps per call, 8 at a time, cached 30 min). Client `ach` /
   `achView` / `achStats` on game pages, `achTotal` on your own profile (played games, ≤ 600, kept 6 h). `playOnSteam` shows
   `.steam-launch` and sets `location.href = steam://run/<id>` after 0.65 s.
+
+- **v1.5 "full deep check"** (owner: find and fix every bug, optimize everything, ask before adding features). Needs
+  SQL 8g (the "admin: 18+ settings" policy is limited to `key = 'adult'`) and an Edge Function redeploy.
+  - Checks used (now in `tools/`): ESLint on app.js, `tplcheck.mjs` (every template name must be returned by setup; lists
+    returned-but-unused names), `htmlcheck.mjs` (what the browser's parser does to the in-DOM template), and the Vue
+    **dev build** (`scratchpad/serve.mjs` serves `/dev.html` = index.html with vue.global.js) for runtime warnings.
+    All clean after v1.5.
+  - **List sync:** `upsertSolo` / `deleteSolo` / `syncReadPos` mark `ownWrites` (media id → time) and `lastWrite`
+    (sequence); after a successful upsert the local entry is rebuilt from the saved row (`listRow`), unless a newer save
+    of that title started meanwhile (two quick +1s). `onListRealtime` skips echoes of our own writes (6 s) and applies
+    other changes row by row (buddy sync, another device); unknown shapes fall back to `refreshSoloSoon`. `setSoloLocal`
+    fills missing fields through `withRepeats`. `saveEntry` no longer calls `fetchSolo` (only `fetchSquadEntries` when
+    squads were involved). **New code that writes list_entries directly must set `ownWrites` or update the list itself.**
+  - **Profile pictures:** `saveProfileFields` → `uploadPics` turns `data:image/…` values into files in
+    `anicoop-media/<uid>/avatar-…jpg` / `banner-…` (falls back to the old text if the upload fails) and `removeOwnPic`
+    deletes the replaced file (own folder only). `movePicsToStorage` moves an old text picture once after sign-in. Lists of
+    people use `PROFILE_COLS` (every profile column except `banner_url`): add a new column there if lists need it.
+  - `loadUserData` runs profile / settings / friends / lists / favourites / squads in one `Promise.all`; `maybeStartTour`
+    and `finishSteamSignIn` moved there (after it). Tour key is per account: `anicoop_tour_done_v1:<uid>`.
+  - `signOut` clears `PREFS.steam`, `savedGifs`, `tourDone` and `watchAsk`; a brand-new account (no user_settings row)
+    doesn't upload another account's Steam / GIFs / tour flag.
+  - **Lists in steps:** `shownIn(key)` / `moreIn(key)` (`LIST_STEP` 60; keys = status, `'them' + status` for a friend's
+    list) with a `v-infinite` sentinel under each group; reset when the tab / section / filters / viewed user change.
+    The hidden Browser pane never fires IntersectionObservers: call the sentinel's `_fn()` in tests.
+  - `safeHref(u)` (http/https only) on user-written links: feed link attachments and chat episode cards.
+  - Service worker: not registered on localhost / 127.0.0.1 (`LOCAL_TEST`, existing ones are unregistered), so edits show
+    up while testing. Vue + supabase-js are pinned on jsDelivr (supabase-js 2.117.2 `dist/umd/supabase.js`).
+  - `repoState` is saved by `saveChecks()` (debounced, keeps each result's own date so checks really expire after a week).
+  - Edge Function: `cachePut` (≤ ~20 M characters, ≤ 1 MB per answer, oldest out first) replaced `cache.set` +
+    "over 800 → clear". `PRIVATE_HOST` also blocks `::ffff:` / `fe80:` addresses and `.local` / `.internal` / `.lan` names.
+  - Dead code removed (moreWatch, readSources, MD_LINKS, media links + their per-page query, openAlbum/artistView,
+    buddyList, favVAs, … see the v1.5 commit). **Still in the code but unreachable since v10.7:** the anime / TV
+    source machinery (video templates, `vp` player, player links, Internet Archive, YouTube episodes, `wp` episode rows).
+    It was offered to the owner as a removal (ask before deleting it).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
