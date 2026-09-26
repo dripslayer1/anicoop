@@ -7810,7 +7810,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const rdNeighbourOf = (ch, d) => { const list = rdChapters.value; const k = list.findIndex(c => chNum(c) === chNum(ch)); return k === -1 ? null : list[k + d] || null; };
         const rdNeighbour = (d) => rdNeighbourOf(rd.chapter, d);
         const rdMarked = new Set();   // chapters marked read in this reading session
-        const defaultMode = (m) => PREFS.reader.modes?.[m?.id] || (['KR', 'CN', 'TW'].includes(m?.countryOfOrigin) ? 'vertical' : 'rtl');
+        // v1.4 Webtoon (vertical scroll) is the default for everything; a mode you pick for a title is still kept for it
+        const defaultMode = (m) => PREFS.reader.modes?.[m?.id] || 'vertical';
         const setReadMode = (mode) => { rd.mode = mode; if (rd.manga?.id) PREFS.reader = { ...PREFS.reader, modes: { ...(PREFS.reader.modes || {}), [rd.manga.id]: mode } }; };
         const preload = (from) => rd.pages.slice(from, from + 3).forEach(u => { const im = new Image(); im.decoding = 'async'; im.referrerPolicy = 'no-referrer'; im.src = u; });
         // Many sites refuse images shown on other websites. Pages load with no referrer first; if one still fails,
