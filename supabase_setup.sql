@@ -1497,7 +1497,7 @@ create policy "admin: delete comments" on public.comments         for delete to 
 create policy "admin: edit profiles"   on public.profiles         for update to authenticated using (public.has_perm('moderate')) with check (public.has_perm('moderate'));
 create policy "admin: feedback status" on public.feedback         for update to authenticated using (public.has_perm('manage_feedback')) with check (public.has_perm('manage_feedback'));
 create policy "admin: delete feedback" on public.feedback         for delete to authenticated using (public.has_perm('manage_feedback'));
-create policy "admin: 18+ settings"    on public.app_config       for update to authenticated using (public.has_perm('manage_18')) with check (public.has_perm('manage_18'));
+create policy "admin: 18+ settings"    on public.app_config       for update to authenticated using (key = 'adult' and public.has_perm('manage_18')) with check (key = 'adult' and public.has_perm('manage_18'));
 -- moderators can see every post (not only friends' ones) so they can remove what breaks the rules
 create policy "admin: see posts"       on public.activities       for select to authenticated using (public.has_perm('moderate'));
 
@@ -1581,6 +1581,14 @@ $$;
 -- (account_links already allows provider 'mal', and each person can only read their own row.)
 -- ---------------------------------------------------------------------
 alter table public.account_links add column if not exists refresh_token text;
+
+-- ---------------------------------------------------------------------
+-- 8g. v1.5 — A ROLE WITH "MANAGE 18+" CAN ONLY CHANGE THE 18+ SETTING
+-- (the rule let it change every app setting, like who sees Songs or the AniList client id)
+-- ---------------------------------------------------------------------
+drop policy if exists "admin: 18+ settings" on public.app_config;
+create policy "admin: 18+ settings" on public.app_config for update to authenticated
+  using (key = 'adult' and public.has_perm('manage_18')) with check (key = 'adult' and public.has_perm('manage_18'));
 
 -- ---------------------------------------------------------------------
 -- 10. Tell the Supabase API about new columns right away (avoids "not in the schema cache" errors)

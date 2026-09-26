@@ -46,6 +46,16 @@ const getToken = async (force = false) => {
 // small in-memory cache: the same browse page asked by several friends only hits IGDB once
 const cache = new Map<string, { at: number; body: string }>();
 const CACHE_MS = 10 * 60 * 1000;
+// v1.5 the cache stays under ~40 MB and never keeps one answer over 1 MB: a repository scan reads thousands of site
+// homepages, and keeping up to 800 of them (up to 4 MB each) could fill the function's memory until it crashed
+const CACHE_MAX_CHARS = 20 * 1024 * 1024, CACHE_ITEM_MAX = 1024 * 1024;
+let cacheChars = 0;
+const cachePut = (key: string, body: string, at = Date.now()) => {
+    const old = cache.get(key); if (old) { cacheChars -= old.body.length; cache.delete(key); }
+    if (body.length > CACHE_ITEM_MAX) return;
+    cache.set(key, { at, body }); cacheChars += body.length;
+    for (const [k, v] of cache) { if (cacheChars <= CACHE_MAX_CHARS && cache.size <= 2000) break; cache.delete(k); cacheChars -= v.body.length; }   // the oldest go first
+};
 
 const igdb = (endpoint: string, query: string, tok: string) => fetch(`https://api.igdb.com/v4/${endpoint}`, {
     method: 'POST',
@@ -157,8 +167,7 @@ const tmdb = async (body: Record<string, any>) => {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${TMDB_TOKEN}`, Accept: 'application/json' } });
     const text = await r.text();
     if (!r.ok) return json({ error: `TMDB error (${r.status})`, detail: text.slice(0, 300) }, r.status === 404 ? 404 : r.status === 429 ? 429 : 502);
-    if (cache.size > 800) cache.clear();
-    cache.set(url, { at: Date.now(), body: text });
+    cachePut(url, text);
     return json(text);
 };
 
@@ -254,18 +263,18 @@ const spotify = async (body: Record<string, any>) => {
         } else return json({ error: 'Not allowed' }, 400);
     } catch (err) { return json({ error: (err as Error).message || 'Spotify request failed' }, 502); }
     const text = JSON.stringify(out);
-    if (cache.size > 800) cache.clear();
     // the read check above always uses the full TTL for this kind; backdating "at" makes a short-lived (incomplete
     // chart) entry look that much older, so it expires under that same check after only `ttl` ms instead of the full one
     const fullTtl = kind === 'charts' ? CACHE_MS * 36 : CACHE_MS * 3;
-    cache.set(key, { at: Date.now() - (fullTtl - ttl), body: text });
+    cachePut(key, text, Date.now() - (fullTtl - ttl));
     return json(text);
 };
 
 // ---------- website sources (Mihon-style extensions) ----------
 // Browsers can't read other websites, so extensions fetch pages (HTML) and images through here.
 // Only signed-in users can call this function; local / private network addresses are refused.
-const PRIVATE_HOST = /^(localhost|127\.|10\.|0\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
+// (v1.5 also IPv4 addresses written as IPv6, link-local IPv6 and local-only names like printer.local)
+const PRIVATE_HOST = /^(localhost|127\.|10\.|0\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:|\[?::ffff:|\[?fe80:)|\.(localhost|local|internal|lan|home\.arpa)$/i;
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 const siteFetch = async (body: Record<string, any>) => {
     let u: URL;
@@ -294,7 +303,7 @@ const siteFetch = async (body: Record<string, any>) => {
     }
     const text = (await r.text()).slice(0, 4 * 1024 * 1024);
     const out = JSON.stringify({ status: r.status, url: r.url, body: text });
-    if (r.ok && method === 'GET') { if (cache.size > 800) cache.clear(); cache.set(key, { at: Date.now(), body: out }); }
+    if (r.ok && method === 'GET') cachePut(key, out);
     return json(out);
 };
 
@@ -334,8 +343,7 @@ const ytSearch = async (body: Record<string, any>) => {
     if (!r.ok) return json({ error: `YouTube search failed (${r.status})` }, 502);
     const out: any[] = []; ytWalk(await r.json(), out);
     const text = JSON.stringify({ items: out });
-    if (cache.size > 800) cache.clear();
-    cache.set(key, { at: Date.now(), body: text });
+    cachePut(key, text);
     return json(text);
 };
 
@@ -380,8 +388,7 @@ const ytmSearch = async (body: Record<string, any>) => {
     if (!r.ok) return json({ error: `YouTube Music search failed (${r.status})` }, 502);
     const out: any[] = []; ytmWalk(await r.json(), out);
     const text = JSON.stringify({ items: out });
-    if (cache.size > 800) cache.clear();
-    cache.set(key, { at: Date.now(), body: text });
+    cachePut(key, text);
     return json(text);
 };
 
@@ -401,7 +408,7 @@ const emojiList = async () => {
     const items = (Array.isArray(all) ? all : []).filter((e: any) => e?.character && !/skin-tone|:.*tone/i.test(e.slug || ''))
         .map((e: any) => ({ c: e.character, n: String(e.unicodeName || e.slug || '').replace(/^E\d+(\.\d+)?\s+/, ''), g: e.group || 'other' }));
     const text = JSON.stringify({ items });
-    cache.set(ck, { at: Date.now(), body: text });
+    cachePut(ck, text);
     return json(text);
 };
 // v10 MyAnimeList account link. MAL's sign-in and list API can't be called from a browser (no CORS), and its sign-in
@@ -494,7 +501,7 @@ const steamUser = async (body: Record<string, any>) => {
         // a private profile (or private game details) gives an empty answer
         const games = (d.games || []).map((g: any) => ({ appid: g.appid, name: g.name || '', mins: g.playtime_forever || 0, recent: g.playtime_2weeks || 0, last: g.rtime_last_played || 0 }));
         const text = JSON.stringify({ games, count: d.game_count ?? games.length, hidden: d.game_count === undefined });
-        cache.set(key, { at: Date.now(), body: text });
+        cachePut(key, text);
         return json(text);
     }
     // v1.4 achievements of one game: Steam's list (names, icons, descriptions), yours (unlocked + when) and how rare each is
@@ -520,7 +527,7 @@ const steamUser = async (body: Record<string, any>) => {
         });
         // no list from the player call: private game details, or the game has no achievements
         const text = JSON.stringify({ items, private: !!list.length && !mine?.playerstats?.success, error: mine?.playerstats?.error || '' });
-        cache.set(key, { at: Date.now(), body: text });
+        cachePut(key, text);
         return json(text);
     }
     // v1.4 unlocked / total for many games at once (your profile's achievement count), 40 per call
@@ -536,7 +543,7 @@ const steamUser = async (body: Record<string, any>) => {
             const d = await fetch(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${k}&steamid=${id}&appid=${app}`).then(r => r.json()).catch(() => null);
             const list = d?.playerstats?.success ? (d.playerstats.achievements || []) : null;
             const v = list && list.length ? { done: list.filter((a: any) => a.achieved).length, total: list.length } : null;
-            cache.set(ck, { at: Date.now(), body: JSON.stringify(v) });
+            cachePut(ck, JSON.stringify(v));
             if (v) out[app] = v;
         };
         for (let i = 0; i < apps.length; i += 8) await Promise.all(apps.slice(i, i + 8).map(one));
@@ -577,8 +584,7 @@ const gifSearch = async (body: Record<string, any>) => {
         }
     } catch (err) { return json({ error: 'GIF search failed: ' + ((err as Error).message || 'network error') }, 502); }
     const text = JSON.stringify({ items: items.filter(x => x.url && x.preview), by: giphy ? 'GIPHY' : 'Tenor', next: after });
-    if (cache.size > 800) cache.clear();
-    cache.set(ck, { at: Date.now(), body: text });
+    cachePut(ck, text);
     return json(text);
 };
 
@@ -609,8 +615,7 @@ Deno.serve(async (req) => {
             const out = await mangaDex(body);
             if (out === null) return json({ error: 'Not allowed' }, 400);
             const text = JSON.stringify(out);
-            if (cache.size > 800) cache.clear();
-            cache.set(key, { at: Date.now(), body: text });
+            cachePut(key, text);
             return json(text);
         } catch (err) { return json({ error: (err as Error).message || 'MangaDex request failed' }, 502); }
     }
@@ -624,7 +629,7 @@ Deno.serve(async (req) => {
         if (hit && Date.now() - hit.at < CACHE_MS * 3) return json(hit.body);
         try {
             const body = JSON.stringify(await steamData(kind, ids, country));
-            cache.set(key, { at: Date.now(), body });
+            cachePut(key, body);
             return json(body);
         } catch (err) { return json({ error: (err as Error).message || 'Steam request failed' }, 502); }
     }
@@ -649,8 +654,7 @@ Deno.serve(async (req) => {
             const ids = (pops || []).map((p: { game_id: number }) => p.game_id).filter(Boolean);
             const games = ids.length ? await run('games', `fields ${fields}; where id = (${ids.join(',')}) & ${where}; limit ${limit};`) : [];
             const text = JSON.stringify({ ids, games, full: (pops || []).length === limit });
-            if (cache.size > 800) cache.clear();
-            cache.set(key, { at: Date.now(), body: text });
+            cachePut(key, text);
             return json(text);
         } catch (err) { return json({ error: (err as Error).message || 'IGDB request failed' }, 502); }
     }
@@ -666,8 +670,7 @@ Deno.serve(async (req) => {
         if (res.status === 401) res = await igdb(endpoint, query, await getToken(true));   // token was revoked/expired early
         const body = await res.text();
         if (!res.ok) return json({ error: `IGDB error (${res.status})`, detail: body.slice(0, 500) }, res.status === 429 ? 429 : 502);
-        if (cache.size > 500) cache.clear();
-        cache.set(key, { at: Date.now(), body });
+        cachePut(key, body);
         return json(body);
     } catch (err) {
         return json({ error: (err as Error).message || 'IGDB request failed' }, 502);

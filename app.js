@@ -9,6 +9,9 @@ const SUPABASE_KEY = 'sb_publishable_15WKt42O2_ilZPZyH9C4eA_5ICg40kN';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ANILIST = 'https://graphql.anilist.co';
+// v1.5 the profile columns lists of people need (friends, squads, chat, notifications): everything but banner_url,
+// which only a profile page itself shows (older banners are big pictures saved as text)
+const PROFILE_COLS = 'id, username, avatar_url, accent, bio, decor, last_seen, created_at, updated_at';
 const STATUS_ORDER = ['WATCHING', 'PLANNING', 'COMPLETED', 'REPEATING', 'PAUSED', 'DROPPED'];
 // an anime you finished and are watching again: each rewatch gets its own episode counter, up to 5 of them
 const MAX_REPEATS = 5;
@@ -95,7 +98,6 @@ const defaultPrefs = () => ({
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
     hiddenGenres: { ANIME: [], MANGA: [], GAME: [], TV: [], SONG: [] },   // genres you never want to see (Browse, Top 100, trending, random)
     extensions: [],                                         // manga reading extensions you installed (Mihon-style)
-    players: [],                                            // player links you added (anime, movies & TV): an address with {tmdb} / {episode}… blanks
     sources: [],                                            // website sources you added (Mihon-style extensions: settings only, no code) · kind: manga | anime | tv
     repos: {},                                              // the extension repository you last opened, per section
     savedGifs: [],                                          // v9.8 GIFs you starred (like Discord favourites): { url, preview }
@@ -370,6 +372,8 @@ const GENRE_SHORT = { 'Role-playing (RPG)': 'RPG', 'Real Time Strategy (RTS)': '
 const GAME_SITES = { 1: ['Official site', '#B490F5'], 13: ['Steam', '#1b2838'], 16: ['Epic Games', '#313131'], 17: ['GOG', '#86328a'], 15: ['itch.io', '#fa5c5c'],
     22: ['Xbox', '#107c10'], 23: ['PlayStation', '#0070d1'], 24: ['Nintendo', '#e60012'], 10: ['App Store', '#0a84ff'], 12: ['Google Play', '#01875f'],
     3: ['Wikipedia', '#636466'], 2: ['Wiki', '#636466'], 14: ['Reddit', '#ff4500'], 18: ['Discord', '#5865f2'] };
+// the order the store links show in (v1.5: an object with number keys always lists them 1, 2, 3…, so Wiki came before Steam)
+const GAME_SITE_ORDER = [1, 13, 16, 17, 15, 22, 23, 24, 10, 12, 3, 2, 14, 18];
 const GAME_STATUS = { 0: 'Released', 2: 'Alpha', 3: 'Beta', 4: 'Early access', 5: 'Offline', 6: 'Cancelled', 7: 'Rumored', 8: 'Delisted' };
 const GAME_KIND = { 1: 'DLC', 2: 'Expansion', 4: 'Standalone expansion', 8: 'Remake', 9: 'Remaster', 10: 'Expanded game' };
 const MAIN_TYPES = '(0,4,8,9,10)';        // main games, standalone expansions, remakes, remasters, expanded games
@@ -451,7 +455,7 @@ const normGameDetail = (g) => {
         ...m,
         description: [g.summary && para(g.summary), g.storyline && '<b>Story</b><br>' + para(g.storyline)].filter(Boolean).join('<br><br>') || null,
         gameInfo: rows, gameTags: tags,
-        gameLinks: (g.websites || []).filter(w => GAME_SITES[w.type]).sort((a, b) => Object.keys(GAME_SITES).indexOf(String(a.type)) - Object.keys(GAME_SITES).indexOf(String(b.type)))
+        gameLinks: (g.websites || []).filter(w => GAME_SITES[w.type]).sort((a, b) => GAME_SITE_ORDER.indexOf(a.type) - GAME_SITE_ORDER.indexOf(b.type))
             .map(w => ({ id: w.id || w.url, url: w.url, site: GAME_SITES[w.type][0], color: GAME_SITES[w.type][1], type: w.type })),
         screenshots: [...(g.screenshots || []), ...(g.artworks || [])].filter(s => s.image_id).slice(0, 16).map(s => ({ thumb: IGDB_IMG(s.image_id, 't_screenshot_big'), full: IGDB_IMG(s.image_id, 't_1080p') })),
         videos: (g.videos || []).filter(v => v.video_id).slice(0, 12).map(v => ({ id: v.video_id, name: v.name || 'Video' })),
@@ -546,23 +550,9 @@ const SOURCE_TEMPLATES = {
     },
     generic: { label: 'Generic (smart guess)', search: { url: '{base}/?s={q}' }, chapters: {}, pages: {} },   // everything by the smart fallback
     custom: { label: 'Custom (my own selectors)', search: {}, chapters: {}, pages: {} },
-    // ---- video sites (anime, movies & TV). Their "chapters" are episodes and "pages" are the video servers. ----
-    animestream: {
-        label: 'AnimeStream (WordPress anime sites)', video: true,
-        search: { url: '{base}/?s={q}', item: 'div.listupd article, .listupd .bs', title: ['a.tip@title', 'div.tt::own', 'div.ttl::own', '.tt', 'a@title'], link: 'a@href', cover: 'img@data-src|data-lazy-src|srcset|src' },
-        chapters: { item: 'div.eplister li, .eplister li', name: ['.epl-title', '.epl-num', 'a'], num: '.epl-num', link: 'a@href', date: '.epl-date' },
-        pages: { servers: 'select.mirror option, ul.mirror a' },
-    },
-    dooplay: {
-        label: 'DooPlay (WordPress movie & TV sites)', video: true,
-        search: { url: '{base}/?s={q}', item: 'div.result-item, .search-page .result-item', title: ['.title a', 'img@alt'], link: ['.title a@href', 'div.image a@href', 'a@href'], cover: 'img@data-src|data-lazy-src|srcset|src' },
-        chapters: { item: 'ul.episodios li', name: ['.episodiotitle a', '.episodiotitle', 'a'], num: '.numerando', link: ['.episodiotitle a@href', 'a@href'], date: '.date' },
-        pages: { dooplay: true },
-    },
-    genericvideo: { label: 'Generic video site (smart guess)', video: true, search: { url: '{base}/?s={q}' }, chapters: {}, pages: {} },
 };
-// which templates fit a section: manga sites for Manga, video sites for Anime and Movies & TV
-const templatesFor = (kind) => Object.fromEntries(Object.entries(SOURCE_TEMPLATES).filter(([k, t]) => k === 'custom' || !!t.video === (kind !== 'manga')));
+// the templates the Extensions window offers (v1.5 manga sites only: the anime / TV ones went with the video player)
+const templatesFor = () => SOURCE_TEMPLATES;
 const MEDIA_KIND = { MANGA: 'manga', ANIME: 'anime', TV: 'tv' };
 const KIND_LABEL = { manga: 'Manga & manhwa', anime: 'Anime', tv: 'Movies & TV' };
 const srcDef = (s) => {
@@ -685,16 +675,14 @@ const pick = (root, spec, base) => {
 // the biggest group of images on the page. This also powers the "Generic" template.
 const MANGA_LINK = /\/(manga|manhwa|manhua|series|serie|comic|comics|webtoon|webtoons|title|titles|book|obra|project)s?\/(?:\d+\/)?[^/?#]+\/?$/i;   // also /manga/123/slug
 const CHAPTER_LINK = /(chapter|chapitre|capitulo|cap[-_]|chap[-_]|\bch[-_.]?\d|episode|\bep[-_.]?\d)/i;
-// anime / movie / show pages on video sites (episode pages are told apart by CHAPTER_LINK)
-const VIDEO_LINK = /\/(anime|animes|watch|series|serie|movie|movies|film|films|tv|tvshows?|shows?|drama|dramas|donghua|ova|title)\/(?:\d+\/)?[^/?#]+\/?$/i;
 const JUNK_IMG = /logo|avatar|icon|banner|ads?[-_/]|sprite|loading|spinner|emoji|gravatar|placeholder|flags?\/|\.svg(\?|$)/i;
 const imgSrc = (img, base) => pick(img, '@data-src|data-lazy-src|data-original|data-cfsrc|data-url|srcset|src', base);
 const guess = {
-    search(doc, base, video = false) {
-        const origin = new URL(base).origin; const out = new Map(); const LINK = video ? VIDEO_LINK : MANGA_LINK;
+    search(doc, base) {
+        const origin = new URL(base).origin; const out = new Map(); const LINK = MANGA_LINK;
         doc.querySelectorAll('a[href]').forEach(a => {
             const href = absUrl(a.getAttribute('href'), base); if (!href || !href.startsWith(origin) || a.closest('nav, header, footer, [class*="menu"], [class*="navbar"]')) return;   // skip site menus
-            const path = new URL(href).pathname; if (!LINK.test(path) || (CHAPTER_LINK.test(path) && !(video && /\/(movie|movies|film|films)\//i.test(path)))) return;
+            const path = new URL(href).pathname; if (!LINK.test(path) || CHAPTER_LINK.test(path)) return;
             const box = a.closest('article, li, .item, .card, [class*="item"], [class*="card"], div') || a;
             const img = a.querySelector('img') || box.querySelector('img');
             // prefer a real title: the link's title, a heading in the card, the cover's alt text — the link's full text is last (it often includes the latest chapter)
@@ -720,9 +708,8 @@ const guess = {
             // the address ("/chapter-201") is the most reliable number; the link text is the fallback
             const ch = chapNo((/(?:chapter|chap|ch|episode|ep)[-_.]?(\d+(?:[-.]\d+)?)/i.exec(new URL(href).pathname) || [])[1]?.replace('-', '.')) || chapNo(text);
             let name = cleanChapterName(text).slice(0, 120);
-            const word = isVideoSrc(s) ? 'Episode' : 'Chapter';   // anime / movie sites have episodes
-            if (!/\d/.test(name) && ch) name = `${word} ${ch}`;
-            out.set(href, { id: href, link: href, ch, title: name || word, at: null, src: s.id, group: s.name, url: null });
+            if (!/\d/.test(name) && ch) name = `Chapter ${ch}`;
+            out.set(href, { id: href, link: href, ch, title: name || 'Chapter', at: null, src: s.id, group: s.name, url: null });
         });
         return [...out.values()];
     },
@@ -735,20 +722,6 @@ const guess = {
         });
         if (!best || bestN < 2) return [];
         return [...best.querySelectorAll('img')].map(img => imgSrc(img, chapterUrl)).filter(u => u && !JUNK_IMG.test(u));
-    },
-    // video sites: the players on an episode page — iframes, server buttons that carry the player address, <video> tags,
-    // and .m3u8 / .mp4 addresses written into the page's scripts
-    videos(doc, html, pageUrl) {
-        const out = [];
-        doc.querySelectorAll('iframe').forEach(f => { const u = f.getAttribute('src') || f.getAttribute('data-src') || f.getAttribute('data-lazy-src'); if (u) out.push({ name: '', url: u }); });
-        doc.querySelectorAll('[data-embed], [data-video], [data-em], [data-link], [data-player]').forEach(el => {
-            const u = embedFrom(el.getAttribute('data-embed') || el.getAttribute('data-video') || el.getAttribute('data-em') || el.getAttribute('data-link') || el.getAttribute('data-player'), pageUrl);
-            if (u) out.push({ name: textOf(el).slice(0, 40), url: u });
-        });
-        doc.querySelectorAll('video[src], video source[src]').forEach(v => out.push({ name: 'Video', url: v.getAttribute('src') }));
-        const text = String(html || '').replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
-        for (const m of text.matchAll(/https?:\/\/[^"'\s<>\\]+?\.(?:m3u8|mp4)(?:\?[^"'\s<>\\]*)?/gi)) if (!/trailer|preview|thumb|sprite/i.test(m[0])) out.push({ name: /m3u8/i.test(m[0]) ? 'Stream' : 'Video', url: m[0] });
-        return out;
     },
     // sites that draw pages with JavaScript still ship the image addresses inside the page's data:
     // take every image URL in the raw HTML and keep the biggest group from the same folder
@@ -774,68 +747,10 @@ const cleanChapterName = (t) => String(t || '').replace(/\s+/g, ' ')
     .replace(/\s*(new|hot|free|up)\s*$/i, '').replace(/^[○●•·\-\s]+/, '').replace(/\s+/g, ' ').trim();
 const chapNo = (name) => { const m = /(?:ch(?:apter)?|ep(?:isode)?|#)\.?\s*(\d+(?:\.\d+)?)/i.exec(name || '') || /(\d+(?:\.\d+)?)/.exec(name || ''); return m ? m[1] : null; };
 const normTitle = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
-const isVideoSrc = (s) => s?.id === 'archive' || !!SOURCE_TEMPLATES[s?.template]?.video || s?.kind === 'anime' || s?.kind === 'tv';
-const hostName = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return 'Server'; } };
-// season + episode number from what a site shows: "S2 E5", "2x5", DooPlay's "2 - 5", "/season-2-episode-5/", "Episode 5", "05"
-const epMeta = (c) => {
-    let path = ''; try { path = decodeURIComponent(new URL(c.link).pathname); } catch {}
-    const texts = [c.num, c.title, path].filter(Boolean).map(String);
-    let season = null, ep = null;
-    for (const t of texts) {
-        const m = /\bs(?:eason)?[-_ .]?(\d{1,2})[-_ .]*e(?:p(?:isode)?)?[-_ .]?(\d{1,4})\b/i.exec(t) || /\b(\d{1,2})\s*[x×]\s*(\d{1,4})\b/.exec(t) || /^\s*(\d{1,2})\s*-\s*(\d{1,4})\s*$/.exec(t);
-        if (m) { season = +m[1]; ep = +m[2]; break; }
-    }
-    if (ep == null) for (const t of texts) { const m = /(?:episode|\bep)[-_ .]?(\d{1,4}(?:\.\d)?)/i.exec(t) || /^\s*(\d{1,4}(?:\.\d)?)\s*$/.exec(t); if (m) { ep = parseFloat(m[1]); break; } }
-    if (ep == null) { const n = chapNo(c.num || c.title); if (n) ep = parseFloat(n); }
-    const bare = !c.title || /^\s*(?:episode|ep\.?|chapter|ch\.?)?\s*[\d.]+\s*$/i.test(c.title);
-    // it's a video site: whatever the site calls them, these are episodes
-    const title = bare && ep != null ? `Episode ${ep}` : String(c.title || '').replace(/\bchapters?\b/gi, (w) => /s$/i.test(w) ? 'Episodes' : 'Episode').replace(/\bch\.\s*(?=\d)/gi, 'Ep ');
-    return { ...c, season, ep, ch: ep != null ? String(ep) : c.ch, title };
-};
-// a server button's value can be a link, a bit of HTML, or HTML in base64: find the player address inside
-const embedFrom = (raw, base) => {
-    raw = String(raw || '').trim(); if (!raw) return null;
-    if (/^(https?:)?\/\//i.test(raw)) return absUrl(raw, base);
-    let html = raw;
-    if (!/[<>]/.test(raw)) { try { html = atob(raw.replace(/\s/g, '')); } catch { return null; } }
-    const d = new DOMParser().parseFromString(html, 'text/html');
-    const el = d.querySelector('iframe'); const src = el?.getAttribute('src') || el?.getAttribute('data-src') || d.querySelector('[itemprop=embedUrl]')?.getAttribute('content') || d.querySelector('video source, video')?.getAttribute('src');
-    if (src) return absUrl(src, base);
-    const m = /https?:\/\/[^"'\s<>]+/.exec(html); return m ? m[0] : null;
-};
-const NOT_PLAYER = /facebook\.com|disqus|googletagmanager|doubleclick|googlesyndication|recaptcha|twitter\.com|x\.com\/|instagram|discord|youtube\.com|youtu\.be|about:blank|\/ads?\//i;
-const videoOf = (u, base) => {
-    const url = u && absUrl(u, base); if (!url || !/^https?:/i.test(url) || NOT_PLAYER.test(url)) return null;
-    return { url, kind: /\.m3u8(\?|$)/i.test(url) ? 'hls' : /\.(mp4|webm|ogv|m4v)(\?|$)/i.test(url) ? 'file' : 'embed' };
-};
-// Internet Archive: public-domain and freely licensed films & TV, played straight from archive.org
-const IA = 'https://archive.org';
+// a page / JSON straight from the browser when the site allows it, through our server otherwise
 const textAny = async (url) => {
     try { const r = await fetch(url); if (r.ok) return await r.text(); } catch {}
     return (await siteFetch(url)).body;
-};
-const archiveApi = {
-    async search(q) {
-        const query = `title:(${q.replace(/[():"]/g, ' ')}) AND mediatype:(movies) AND -collection:(trailers)`;
-        const j = JSON.parse(await textAny(`${IA}/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier&fl[]=title&fl[]=year&sort[]=downloads+desc&rows=24&output=json`));
-        return (j?.response?.docs || []).map(d => ({ title: String(d.title || d.identifier), year: d.year || null, url: `${IA}/details/${d.identifier}`, cover: `${IA}/services/img/${d.identifier}` }));
-    },
-    async episodes(url) {
-        const id = (/\/details\/([^/?#]+)/.exec(url) || [])[1]; if (!id) return [];
-        const j = JSON.parse(await textAny(`${IA}/metadata/${id}`));
-        // one file per video: the h.264 / MPEG4 copy, not the small 512kb version or the .ogv
-        const best = new Map();
-        (j?.files || []).filter(f => /\.(mp4|m4v|webm|ogv)$/i.test(f.name || '')).forEach(f => {
-            const key = f.name.replace(/(_512kb)?\.(ia\.)?(mp4|m4v|webm|ogv)$/i, '');
-            const rank = /512kb/i.test(f.name) ? 1 : /\.ogv$/i.test(f.name) ? 0 : /\.webm$/i.test(f.name) ? 2 : 3;
-            if (!best.has(key) || best.get(key).rank < rank) best.set(key, { f, rank });
-        });
-        const files = [...best.values()].map(x => x.f).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-        // file names are often years or reel numbers, so episodes are simply counted in order
-        return files.map((f, n) => ({ id: `${id}/${f.name}`, link: `${IA}/download/${id}/${encodeURIComponent(f.name).replace(/%2F/g, '/')}`, ch: String(n + 1), ep: n + 1, season: null,
-            title: files.length === 1 ? 'Movie' : (f.title || f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ')), movie: files.length === 1, src: 'archive', group: 'Internet Archive', url: null }));
-    },
-    async videos(link) { return [{ name: 'Internet Archive', ...videoOf(link, IA) }]; },
 };
 /* ------------------------------------------------------------------
    Mihon server (Suwayomi-Server): runs the real Mihon extensions on a computer you control, so sites that need their
@@ -893,12 +808,10 @@ const sourceApi = {
     async search(s, q) {
         const def = srcDef(s).search; const base = s.baseUrl.replace(/\/+$/, '');
         // Generic sites: find which search address the site uses (?s=, /search?q=, …) and remember it on the source
-        if (s.id === 'archive') return archiveApi.search(q);
         if (s.template === 'mihon') return mihonApi.search(s.srcId, q);
-        const video = isVideoSrc(s);
-        if ((s.template === 'generic' || s.template === 'genericvideo') && !s.selectors?.search?.url) {
+        if (s.template === 'generic' && !s.selectors?.search?.url) {
             const run = async (p) => {
-                try { return guess.search(htmlDoc((await siteFetch(p.replace('{base}', base).replace('{q}', encodeURIComponent(q)))).body, base + '/'), base + '/', video).filter((x, n, all) => all.findIndex(y => y.url === x.url) === n); }
+                try { return guess.search(htmlDoc((await siteFetch(p.replace('{base}', base).replace('{q}', encodeURIComponent(q)))).body, base + '/'), base + '/').filter((x, n, all) => all.findIndex(y => y.url === x.url) === n); }
                 catch { return null; }
             };
             const want = normTitle(q).split(' ').filter(w => w.length > 2);
@@ -922,11 +835,10 @@ const sourceApi = {
         const doc = htmlDoc((await siteFetch(url)).body, base + '/');
         let list = def.item ? [...doc.querySelectorAll(def.item)].map(el => ({ title: pick(el, def.title, base), url: pick(el, def.link, base), cover: pick(el, def.cover, base) })) : [];
         list = list.filter(x => x.title && x.url);
-        if (!list.length) list = guess.search(doc, base + '/', video);   // layout differs from the template → smart fallback
+        if (!list.length) list = guess.search(doc, base + '/');   // layout differs from the template → smart fallback
         return list.filter((x, n, all) => all.findIndex(y => y.url === x.url) === n).slice(0, 20);   // nested cards can match twice
     },
     async chapters(s, mangaUrl) {
-        if (s.id === 'archive') return archiveApi.episodes(mangaUrl);
         if (s.template === 'mihon') return mihonApi.chapters(s, mangaUrl);
         const def = srcDef(s).chapters; const base = s.baseUrl.replace(/\/+$/, '');
         const read = (doc) => def.item ? [...doc.querySelectorAll(def.item)].map(el => {
@@ -941,36 +853,7 @@ const sourceApi = {
         }
         if (!list.length) list = guess.chapters(page, mangaUrl, s);
         const seen = new Set();
-        list = list.filter(c => !seen.has(c.link) && seen.add(c.link));
-        if (!isVideoSrc(s)) return list;
-        // video sites: episodes in order (season, then episode). A page with no episode list is a movie: the page itself plays.
-        list = list.map(epMeta).sort((a, b) => (a.season || 0) - (b.season || 0) || (a.ep ?? 1e6) - (b.ep ?? 1e6));
-        return list.length ? list : [{ id: mangaUrl, link: mangaUrl, ch: '1', ep: 1, season: null, title: 'Movie', movie: true, src: s.id, group: s.name, url: null }];
-    },
-    // video servers for one episode: [{ name, url, kind: 'embed' | 'hls' | 'file' }]
-    async videos(s, epUrl) {
-        if (s.id === 'archive') return archiveApi.videos(epUrl);
-        const def = srcDef(s).pages; const base = s.baseUrl.replace(/\/+$/, '');
-        const html = (await siteFetch(epUrl, { referer: s.baseUrl })).body;
-        const doc = htmlDoc(html, epUrl);
-        const out = [];
-        const add = (name, u) => { const v = videoOf(u, epUrl); if (v && !out.some(o => o.url === v.url)) out.push({ ...v, name: (name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || hostName(v.url) }); };
-        if (def.servers) doc.querySelectorAll(def.servers).forEach(el => add(textOf(el), embedFrom(el.getAttribute('value') || el.getAttribute('data-em') || el.getAttribute('data-src') || '', epUrl)));
-        if (def.dooplay) {
-            // DooPlay asks the site for each server's player: the newer JSON address first, the older admin-ajax call if that fails
-            const opts = [...doc.querySelectorAll('li.dooplay_player_option[data-post], #playeroptionsul li[data-post]')].filter(li => li.getAttribute('data-nume') !== 'trailer').slice(0, 8);
-            const found = await Promise.all(opts.map(async (li) => {
-                const [post, type, nume] = ['data-post', 'data-type', 'data-nume'].map(a => encodeURIComponent(li.getAttribute(a) || ''));
-                const embed = (d) => { try { return embedFrom(JSON.parse(d.body).embed_url, epUrl); } catch { return null; } };
-                let u = null;
-                try { u = embed(await siteFetch(`${base}/wp-json/dooplayer/v2/${post}/${type}/${nume}`, { referer: epUrl })); } catch {}
-                if (!u) { try { u = embed(await siteFetch(`${base}/wp-admin/admin-ajax.php`, { method: 'POST', referer: epUrl, form: `action=doo_player_ajax&post=${post}&nume=${nume}&type=${type}` })); } catch {} }
-                return u ? [textOf(li.querySelector('.title') || li), u] : null;
-            }));
-            found.filter(Boolean).forEach(([n, u]) => add(n, u));
-        }
-        if (!out.length) guess.videos(doc, html, epUrl).forEach(v => add(v.name, v.url));
-        return out;
+        return list.filter(c => !seen.has(c.link) && seen.add(c.link));
     },
     async pages(s, chapterUrl) {
         if (s.template === 'mihon') return mihonApi.pages(chapterUrl);
@@ -1623,7 +1506,8 @@ const songRelevance = (s, q) => {
 };
 const bySongRelevance = (list, q) => list.map((s, i) => ({ s, i, r: songRelevance(s, q) })).sort((a, b) => b.r - a.r || a.i - b.i).map(x => x.s);
 const dedupeSongs = (list) => { const seen = new Set(); return list.filter(s => { const k = `${s.title.romaji.toLowerCase()}|${(s.artists[0] || '').toLowerCase()}`; return !seen.has(k) && seen.add(k); }); };
-const genreMatch = (s, g) => { const a = (s.genres[0] || '').toLowerCase().replace(/[^a-z]/g, ''), b = g.toLowerCase().replace(/[^a-z]/g, ''); return a.includes(b) || b.includes(a.slice(0, 4)); };
+// (v1.5 a song with no genre doesn't match every genre: "".slice(0, 4) is "", which every word includes)
+const genreMatch = (s, g) => { const a = (s.genres?.[0] || '').toLowerCase().replace(/[^a-z]/g, ''), b = g.toLowerCase().replace(/[^a-z]/g, ''); return !!a && (a.includes(b) || b.includes(a.slice(0, 4))); };
 // the artist a Songs search matched (shown as a card above the results)
 const songSearchArtist = ref(null);
 // a short "about" for an artist from Wikipedia (only if the page is really about a musician / band)
@@ -1921,6 +1805,9 @@ const notHidden = (m) => { const h = hiddenNames(m?.type || 'ANIME'); return !h.
 // next to what you clicked. Your playlists are listed there with a tick on the ones that already have the song.
 // It also takes several songs at once (the Select bar): then a playlist gets every one it doesn't have yet.
 const plPicker = reactive({ open: false, song: null, list: null, anchor: null, x: 0, y: 0, ready: false });
+// v1.5 your Steam achievements per game (Steam app id → { done, total }): filled by the profile total and by game pages,
+// shown on your game posters
+const achByApp = reactive({});
 const openPlPicker = (song, e) => {
     const list = Array.isArray(song) ? song.filter(Boolean) : null;
     if (list ? !list.length : !song) return;
@@ -2064,12 +1951,14 @@ const PosterCard = {
         const mStatus = computed(() => mangaStatusOf(props.anime));
         const total = computed(() => props.anime?.type === 'MANGA' ? lastChapterOf(props.anime) : props.anime?.episodes);
         const pct = computed(() => total.value ? Math.min(100, (props.entry?.progress || 0) / total.value * 100) : 0);
+        // v1.5 your Steam achievements on your own game posters (45/78)
+        const ach = computed(() => props.anime?.type === 'GAME' && props.entry && props.ownList && props.anime.steamId ? achByApp[props.anime.steamId] || null : null);
         // manga posters ask MangaDex for their latest chapter + status once they scroll into view
         const root = ref(null);
         onMounted(() => { if (props.anime?.type === 'MANGA' && root.value) { root.value._manga = props.anime; mdSeen.observe(root.value); } });
         Vue.onBeforeUnmount(() => { if (root.value) mdSeen.unobserve(root.value); });
         const onClick = () => emit(props.selectable ? 'select' : 'open');
-        return { STATUS_COLORS, STATUS_SHORT, UNIT, titleOf, rating, badge, pct, onClick, mStatus, total, root, fmtChapter };
+        return { STATUS_COLORS, STATUS_SHORT, UNIT, titleOf, rating, badge, pct, onClick, mStatus, total, root, fmtChapter, ach };
     },
     template: `
     <div class="poster-hit group" @click.self="onClick">
@@ -2089,7 +1978,7 @@ const PosterCard = {
             <p class="text-ink font-semibold text-sm leading-snug line-clamp-2">{{ titleOf(anime) }}</p>
             <p v-if="anime.type === 'SONG' && (anime.artists || []).length" class="text-[11px] text-sub truncate mt-0.5">{{ anime.artists.join(', ') }}</p>
             <template v-if="entry">
-                <p v-if="anime.type === 'GAME'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }">{{ entry.progress || 0 }} HRS</p>
+                <p v-if="anime.type === 'GAME'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }">{{ entry.progress || 0 }} HRS<span v-if="ach" class="poster-ach" :title="'Steam achievements: ' + ach.done + ' of ' + ach.total"><i class="fa-solid fa-trophy"></i>{{ ach.done }}/{{ ach.total }}</span></p>
                 <p v-else-if="anime.type === 'SONG'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }"><i class="fa-solid fa-play text-[8px] mr-1"></i>{{ entry.progress || 0 }} {{ entry.progress === 1 ? 'PLAY' : 'PLAYS' }}</p>
                 <p v-else class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }">{{ entry.progress || 0 }}/{{ total ? fmtChapter(total) : '?' }} {{ UNIT.unit }}</p>
                 <div v-if="total" class="mt-2 h-[3px] rounded-full bg-white/10 overflow-hidden">
@@ -2441,13 +2330,15 @@ createApp({
         const editForm = ref(emptyForm());
         const inlineForm = ref(emptyForm());
 
-        const toast = ref({ message: '', type: 'success' });
+        const toast = ref({ message: '', type: 'success', action: null });
         let toastTimer;
-        const showToast = (message, type = 'success') => {
-            toast.value = { message, type };
+        // (v1.5 a message can carry one button, like Undo: it stays up a little longer then)
+        const showToast = (message, type = 'success', action = null) => {
+            toast.value = { message, type, action };
             clearTimeout(toastTimer);
-            toastTimer = setTimeout(() => { toast.value.message = ''; }, type === 'error' ? 4000 : 2400);
+            toastTimer = setTimeout(() => { toast.value.message = ''; toast.value.action = null; }, action ? 6500 : type === 'error' ? 4000 : 2400);
         };
+        const runToastAction = () => { const a = toast.value.action; clearTimeout(toastTimer); toast.value.message = ''; toast.value.action = null; a?.run?.(); };
         // In-app confirm dialog (replaces the browser's confirm() pop-up). Resolves true/false.
         // `input` is null for a yes/no question, or the text of the box when it asks for a name (askText)
         const confirmBox = reactive({ open: false, title: '', body: '', ok: 'Confirm', danger: true, resolve: null, input: null, max: 40, placeholder: '' });
@@ -2478,7 +2369,6 @@ createApp({
             }
             return { data: out, error: null };
         };
-        const initialOf = (name) => (name || '?').charAt(0).toUpperCase();
         const uid = () => currentUser.value?.id;
 
         // everyone we know about (me, friends, squad members) by id
@@ -2494,7 +2384,7 @@ createApp({
         const ensureProfiles = async (ids) => {
             const missing = [...new Set(ids.filter(id => id && !profileById.value.has(id)))];
             if (!missing.length) return;
-            const { data } = await sb.from('profiles').select('*').in('id', missing);
+            const { data } = await sb.from('profiles').select(PROFILE_COLS).in('id', missing);
             if (data?.length) extraProfiles.value = [...extraProfiles.value, ...data];
         };
         const personOf = (id) => profileById.value.get(id) || { id, username: 'Someone' };
@@ -2519,11 +2409,13 @@ createApp({
         const loadUserData = async () => {
             if (!uid() || loadedUserId === uid()) return;
             loadedUserId = uid();
-            await fetchProfile();
-            await fetchSettings();
-            markActive();
-            await fetchFriends();
-            await Promise.all([fetchSolo(), fetchFavs(), fetchFavStaff(), fetchSquads(), fetchNotifications()]);
+            // v1.5 all at once (they used to wait for each other: profile, then settings, then friends, then the lists)
+            await Promise.all([fetchProfile().then(() => markActive()), fetchSettings(), fetchFriends(), fetchSolo(), fetchFavs(), fetchFavStaff(), fetchSquads()]);
+            fetchNotifications();   // after friends + squads: most of the people in it are known by then
+            movePicsToStorage().catch(() => {});   // v1.5
+            maybeStartTour();
+            finishSteamSignIn().then(() => loadSteamLib()).then(() => setTimeout(syncSteamHours, 5000));   // v1.3 · v1.5 daily hours
+            maybeWhatsNew();   // v1.5
             migrateLocalData();
             fetchFriendEntries();
             setupRealtimeSync();
@@ -2547,7 +2439,7 @@ createApp({
             friendsList.value = []; pendingRequests.value = []; sentRequests.value = []; friendEntries.value = [];
             notifications.value = []; daysActive.value = 0; feed.value = []; favStaff.value = []; entity.value = null; chats.value = []; chatWith.value = null; chatMessages.value = []; adultAllowed.value = false; isOwner.value = false; songsCfg.ready = false; extraProfiles.value = []; settingsLoaded = false; settingsOpen.value = false;
             selectedAnime.value = null; editForm.value = emptyForm();
-            follows.value = []; buddies.value = []; playlists.value = []; plOpen.value = null; closePlayer(); alLink.value = null; malLink.value = null; mediaLinks.value = [];
+            follows.value = []; buddies.value = []; playlists.value = []; plOpen.value = null; closePlayer(); alLink.value = null; malLink.value = null;
             stopPresence(); people.value = [];
             randomOpen.value = false; quickMenuFor.value = null; selectMode.value = false; selected.value = new Map();
             currentAppView.value = 'home'; viewUserId.value = null; entity.value = null;
@@ -2580,7 +2472,14 @@ createApp({
                 authLoading.value = false;
             }
         };
-        const signOut = async () => { await sb.auth.signOut(); showToast('Signed out'); };
+        const signOut = async () => {
+            await sb.auth.signOut();
+            // v1.5 what belongs to your account doesn't stay behind in this browser for the next person who signs in here
+            // (your linked Steam account, saved GIFs, the tour, an open "how many episodes?" question)
+            Object.assign(PREFS, { steam: null, savedGifs: [], tourDone: false });
+            watchAsk.value = null; keepAsk();
+            showToast('Signed out');
+        };
         // (v10: the Google / Discord / Facebook / Twitch sign-in buttons from v9.9 were taken out again — email only.
         // Accounts made with them before keep working: the username code below still handles them.)
         // a username made from an email / a Google or Discord name: 3–20 letters, numbers, _ or .
@@ -2644,10 +2543,18 @@ createApp({
             return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '', readPos: e.readPos ?? o?.readPos ?? null };
         };
         const soloRow = (e) => { e = withRepeats(e); return { user_id: uid(), media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score || 0, progress: e.progress || 0, updated_at: new Date().toISOString() }; };
+        // v1.5 your own saves update the screen from what was saved, and the live update that comes back for them is
+        // skipped (it used to download your whole list again 1.5 s after every +1 and every reading-spot save)
+        const ownWrites = new Map();   // media id → when this device last wrote it
+        let writeSeq = 0; const lastWrite = new Map();   // media id → the newest save started for it
         const upsertSolo = async (entries) => {
             const list = (Array.isArray(entries) ? entries : [entries]).map(withRepeats);
-            const { error } = await sb.from('list_entries').upsert(list.map(soloRow), { onConflict: 'user_id,media_id' });
+            const rows = list.map(soloRow), seq = ++writeSeq;
+            rows.forEach(r => { ownWrites.set(r.media_id, Date.now()); lastWrite.set(r.media_id, seq); });
+            const { error } = await sb.from('list_entries').upsert(rows, { onConflict: 'user_id,media_id' });
             if (error) throw error;
+            // (only if no newer save of that title started meanwhile: two quick +1s must not step back to the first one)
+            rows.forEach(r => { if (lastWrite.get(r.media_id) !== seq) return; ownWrites.set(r.media_id, Date.now()); const cur = soloEntry(r.media_id); setSoloLocal(listRow({ ...r, created_at: cur?.createdAt || r.updated_at })); });
             list.forEach(e => alEnqueue(e.anime.id, e.status === 'NONE' ? { kind: 'delete' } : alSaveOp(e)));
             list.filter(e => e.status === 'NONE').forEach(e => malEnqueue(e.anime.id, { kind: 'delete' }));
             list.filter(e => e.status !== 'NONE').forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: { status: e.status, score: e.score, progress: e.progress, repeats: e.repeats, anime: { episodes: e.anime?.episodes || 0 } } }));
@@ -2659,12 +2566,14 @@ createApp({
         };
         const deleteSolo = async (ids) => {
             const list = Array.isArray(ids) ? ids : [ids];
+            list.forEach(id => { ownWrites.set(id, Date.now()); lastWrite.set(id, ++writeSeq); });
             const { error } = await sb.from('list_entries').delete().eq('user_id', uid()).in('media_id', list);
             if (error) throw error;
             list.forEach(id => alEnqueue(id, { kind: 'delete' }));
             list.forEach(id => malEnqueue(id, { kind: 'delete' }));
         };
         const setSoloLocal = (entry) => {
+            entry = withRepeats(entry);   // v1.5 an entry built from a few fields keeps its watch link, reading spot, marks…
             const idx = soloList.value.findIndex(i => i.anime.id === entry.anime.id);
             if (idx !== -1) soloList.value[idx] = entry; else soloList.value.unshift(entry);
         };
@@ -2771,14 +2680,48 @@ createApp({
             catch (err) { showToast('Could not update picture: ' + (err.message || err), 'error'); }
             finally { avatarUploading.value = false; }
         };
+        // v1.5 profile pictures and banners are saved as files (anicoop-media/<you>/…) and the profile keeps their link.
+        // They used to be saved as long text inside the profile, which every list of people downloaded again and again.
+        const PIC_KEYS = { avatar_url: 'avatar', banner_url: 'banner' };
+        const uploadPics = async (fields) => {
+            const out = { ...fields };
+            for (const [k, kind] of Object.entries(PIC_KEYS)) {
+                const v = out[k]; if (typeof v !== 'string' || !v.startsWith('data:image/')) continue;
+                try {
+                    const blob = await (await fetch(v)).blob();
+                    const ext = { 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' }[blob.type] || 'jpg';
+                    const path = `${uid()}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+                    const { error } = await sb.storage.from(MEDIA_BUCKET).upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+                    if (error) throw error;
+                    out[k] = sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+                } catch (err) { console.warn('picture upload', err.message || err); }   // storage not set up: saved the old way
+            }
+            return out;
+        };
+        // a picture of yours that was replaced is deleted from storage (only files in your own folder)
+        const removeOwnPic = (url) => {
+            const m = /\/storage\/v1\/object\/public\/anicoop-media\/([^?#]+)/.exec(String(url || ''));
+            const path = m ? decodeURIComponent(m[1]) : '';
+            if (path.startsWith(uid() + '/')) sb.storage.from(MEDIA_BUCKET).remove([path]).then(() => {}, () => {});
+        };
         const saveProfileFields = async (fields) => {
+            const old = currentProfile.value || {};
+            fields = await uploadPics(fields);
             const { error } = await sb.from('profiles').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', uid());
             if (error) throw error;
             currentProfile.value = { ...currentProfile.value, ...fields };
+            Object.keys(PIC_KEYS).forEach(k => { if (k in fields && old[k] && old[k] !== fields[k]) removeOwnPic(old[k]); });
         };
-        const removeProfilePic = async () => {
-            try { await saveProfileFields({ avatar_url: null }); showToast('Profile picture removed'); }
-            catch (err) { showToast(err.message || String(err), 'error'); }
+        // your picture / banner saved the old way (as text) moves to storage once, quietly
+        const movePicsToStorage = async () => {
+            const p = currentProfile.value || {};
+            const old = Object.fromEntries(Object.keys(PIC_KEYS).filter(k => String(p[k] || '').startsWith('data:image/')).map(k => [k, p[k]]));
+            if (!Object.keys(old).length) return;
+            const up = await uploadPics(old);
+            const moved = Object.fromEntries(Object.entries(up).filter(([k, v]) => v !== old[k]));
+            if (!Object.keys(moved).length) return;
+            const { error } = await sb.from('profiles').update(moved).eq('id', uid());
+            if (!error) currentProfile.value = { ...currentProfile.value, ...moved };
         };
 
         // ---------- SETTINGS ----------
@@ -2798,7 +2741,7 @@ createApp({
         let settingsLoaded = false;
         const fetchSettings = async () => {
             const { data, error } = await sb.from('user_settings').select('settings, notif_prefs').eq('user_id', uid()).maybeSingle();
-            if (error) { console.warn('settings', error.message); settingsLoaded = true; maybeStartTour(); return; }   // v3 database: keep local settings
+            if (error) { console.warn('settings', error.message); settingsLoaded = true; return; }   // v3 database: keep local settings
             if (data) {
                 Object.assign(PREFS, mergePrefs(defaultPrefs(), data.settings));
                 Object.keys(notifPrefs).forEach(k => delete notifPrefs[k]);
@@ -2806,9 +2749,8 @@ createApp({
                 applyTheme();
             }
             settingsLoaded = true;
-            if (!data) saveSettings();   // first time: upload what this browser had
-            maybeStartTour();
-            finishSteamSignIn().then(() => loadSteamLib());   // v1.3
+            // first time: upload what this browser had (v1.5 minus another account's Steam link, GIFs and tour on this browser)
+            if (!data) { Object.assign(PREFS, { steam: null, savedGifs: [], tourDone: false }); saveSettings(); }
         };
         const saveSettings = debounce(async () => {
             if (!uid() || !settingsLoaded) return;
@@ -2832,7 +2774,6 @@ createApp({
             settingsOpen.value = true;
             fetchPrivacy();
         };
-        const openProfileEdit = () => openSettings('profile');
         const profileDirty = computed(() => {
             const p = currentProfile.value || {};
             return (profileEdit.bio || '') !== (p.bio || '') || profileEdit.accent !== (p.accent || ACCENTS[0]) || profileEdit.avatar_url !== (p.avatar_url || null) || profileEdit.banner_url !== (p.banner_url || null);
@@ -2841,6 +2782,7 @@ createApp({
             profileEdit.saving = true;
             try {
                 await saveProfileFields({ bio: profileEdit.bio.trim().slice(0, 160) || null, accent: profileEdit.accent, avatar_url: profileEdit.avatar_url, banner_url: profileEdit.banner_url });
+                Object.assign(profileEdit, { avatar_url: currentProfile.value?.avatar_url || null, banner_url: currentProfile.value?.banner_url || null });   // (now links to the saved files)
                 showToast('Profile saved!');
             } catch (err) {
                 showToast('Could not save: ' + (err.message || err) + (/banner_url/.test(err.message || '') ? ' — run the v4 SQL in Supabase' : ''), 'error');
@@ -3123,7 +3065,7 @@ createApp({
             const ids = [...new Set(rows.map(otherId))];
             let byId = {};
             if (ids.length) {
-                const { data: profiles } = await sb.from('profiles').select('*').in('id', ids);
+                const { data: profiles } = await sb.from('profiles').select(PROFILE_COLS).in('id', ids);
                 byId = Object.fromEntries((profiles || []).map(p => [p.id, p]));
             }
             const withProfile = (f) => ({ id: otherId(f), username: 'Unknown user', ...byId[otherId(f)], friendshipId: f.id, since: f.created_at });
@@ -3209,7 +3151,7 @@ createApp({
                 sb.from('squad_members').select('squad_id, user_id').in('squad_id', ids),
             ]);
             const memberIds = [...new Set((members || []).map(m => m.user_id))];
-            const { data: profs } = memberIds.length ? await sb.from('profiles').select('*').in('id', memberIds) : { data: [] };
+            const { data: profs } = memberIds.length ? await sb.from('profiles').select(PROFILE_COLS).in('id', memberIds) : { data: [] };
             const pById = Object.fromEntries((profs || []).map(p => [p.id, p]));
             squads.value = (sq || []).map(s => ({
                 ...s,
@@ -3304,7 +3246,17 @@ createApp({
         // ---------- realtime ----------
         let realtimeChannel = null;
         const teardownRealtime = () => { if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; } };
-        const refreshSoloSoon = debounce(() => fetchSolo(), 1500);   // a watch buddy's sync changed your list
+        const refreshSoloSoon = debounce(() => fetchSolo(), 1500);
+        // a change to your list from somewhere else (a watch buddy's sync, another device): that row is put in place; your
+        // own saves from this device are already on screen
+        const onListRealtime = (p) => {
+            const row = p.new && p.new.media_id != null ? p.new : null, id = row?.media_id ?? p.old?.media_id;
+            if (id == null) { refreshSoloSoon(); return; }
+            if ((row || p.old)?.user_id && (row || p.old).user_id !== uid()) return;
+            if (Date.now() - (ownWrites.get(id) || 0) < 6000) return;
+            if (p.eventType === 'DELETE') { soloList.value = soloList.value.filter(i => i.anime.id !== id); return; }
+            if (row?.media_data?.id) setSoloLocal(listRow(row)); else refreshSoloSoon();
+        };
         const setupRealtimeSync = () => {
             teardownRealtime();
             const me = uid();
@@ -3334,7 +3286,7 @@ createApp({
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_groups' }, refreshGroups)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_group_members' }, refreshGroups)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'watch_buddies' }, () => fetchBuddies())
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'list_entries', filter: `user_id=eq.${me}` }, refreshSoloSoon)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'list_entries', filter: `user_id=eq.${me}` }, onListRealtime)
                 .subscribe();
         };
 
@@ -3765,6 +3717,9 @@ createApp({
             if (a?.path) sb.storage.from(MEDIA_BUCKET).remove([a.path]).catch(() => {});
         };
         const linkHost = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+        // v1.5 links other people wrote (post links, chat episode cards) only become links when they're web addresses:
+        // a javascript: link would run inside anicoop, where your sign-in lives
+        const safeHref = (u) => { const t = String(u || '').trim(); return /^https?:\/\//i.test(t) ? t : null; };
 
         // search AniList for a title or character (attach to a post / poll option / question)
         const picker = reactive({ target: null, mode: 'ANIME', q: '', results: [], loading: false });
@@ -3809,7 +3764,6 @@ createApp({
             }
             picker.target = null; picker.q = ''; picker.results = [];
         };
-        const clearOption = (o) => Object.assign(o, { label: '', image: null, media_id: null, media_type: null, character_id: null });
         const addOption = () => { if (composer.options.length < 6) composer.options.push(newOption()); };
         const removeOption = (i) => { if (composer.options.length > 2) composer.options.splice(i, 1); };
         const canPost = computed(() => {
@@ -3922,7 +3876,6 @@ createApp({
         const tierNoun = computed(() => TIER_NOUN[tierType.value] || 'anime');
         // v10 every section ranks two kinds of things, picked with the switch at the top: characters (artists for songs)
         // or the titles themselves. Each kind has its own ways to fill the list.
-        const tierChars = computed(() => true);
         const tierWho = computed(() => tierType.value === 'SONG' ? 'Artists' : 'Characters');
         const TIER_SOURCES = computed(() => {
             const T = tierType.value, al = tierAL.value;
@@ -4234,7 +4187,6 @@ createApp({
         const LILBRO = 'lilbro';
         const lilBro = reactive({ open: false, title: '', fresh: false });
         const repeatNow = (e) => e?.status === 'REPEATING' ? ((e.repeats || [])[(e.repeats || []).length - 1] || 0) : null;
-        const repeatsDone = (e) => { const full = e?.anime?.episodes; return (e?.repeats || []).filter(n => full ? n >= full : n > 0).length; };
         // start a rewatch (or carry on with an unfinished one). null = all 5 used up
         const startRepeat = (repeats, eps) => {
             const r = [...(repeats || [])];
@@ -4287,7 +4239,9 @@ createApp({
                 else if (soloList.value.some(i => i.anime.id === anime.id)) { await deleteSolo(anime.id); }
                 for (const sid of form.squadIds) await upsertSquadEntry(sid, anime, fields);
                 for (const sid of form.originalSquadIds.filter(s => !form.squadIds.includes(s))) await deleteSquadEntry(sid, anime.id);
-                await Promise.all([fetchSolo(), fetchSquadEntries()]);
+                // v1.5 the solo entry is already up to date on screen (see upsertSolo); only squad lists are read again
+                if (!form.inSolo) soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
+                if (form.squadIds.length || form.originalSquadIds.length) await fetchSquadEntries();
                 logActivity(anime, before, fields, form.inSolo ? null : (form.squadIds[0] || null));
                 return true;
             } catch (err) {
@@ -4324,12 +4278,29 @@ createApp({
             try { await Promise.all(jobs); return ids.length; }
             catch (err) { soloList.value = prevSolo; coopList.value = prevCoop; throw err; }
         };
+        // v1.5 Undo on the message after removing titles or unchecking a status: what was there comes back as it was
+        // (status, score, progress, rewatches, marks, watch link, reading spot), squad entries too
+        const snapshotOf = (ids) => {
+            const set = new Set(ids);
+            return { solo: soloList.value.filter(i => set.has(i.anime.id)).map(i => ({ ...i })), coop: coopList.value.filter(i => set.has(i.anime.id)).map(i => ({ ...i })) };
+        };
+        const restoreEntries = async (snap, msg) => {
+            try {
+                if (snap.solo.length) { snap.solo.forEach(setSoloLocal); await upsertSolo(snap.solo); }
+                for (const r of snap.coop) await upsertSquadEntry(r.squadId, r.anime, { status: r.status, progress: r.progress, score: r.score });
+                if (snap.coop.length) await fetchSquadEntries();
+                if (selectedAnime.value && [...snap.solo, ...snap.coop].some(i => i.anime.id === selectedAnime.value.id)) inlineForm.value = buildForm(selectedAnime.value);
+                showToast(msg);
+            } catch (err) { showToast('Could not undo: ' + (err.message || err), 'error'); fetchSolo(); fetchSquadEntries(); }
+        };
+        const undoOf = (snap, msg) => ({ label: 'Undo', run: () => restoreEntries(snap, msg) });
         // One title → removed instantly, no pop-up
         const removeEverywhere = async (anime, { silent = false } = {}) => {
             if (!anime?.id) return false;
+            const snap = snapshotOf([anime.id]);
             try {
                 await removeMany([anime]);
-                if (!silent) showToast(`Removed ${titleOf(anime)} from all lists`);
+                if (!silent) showToast(`Removed ${titleOf(anime)} from all lists`, 'success', undoOf(snap, `${titleOf(anime)} is back on your lists`));
                 return true;
             } catch (err) {
                 showToast('Could not remove: ' + (err.message || err), 'error');
@@ -4411,7 +4382,6 @@ createApp({
         const playlists = ref([]);
         const plOpen = ref(null);           // open playlist id
         const plMissing = ref(false);       // the table isn't in the database yet (the SQL update wasn't run)
-        const plAddPick = ref('');
         const fetchPlaylists = async () => {
             if (!uid()) return;
             const { data, error } = await sb.from('playlists').select('*').eq('user_id', uid()).order('created_at');
@@ -4535,7 +4505,6 @@ createApp({
             return soloList.value.filter(i => typeOf(i) === 'SONG' && (!q || normTitle(`${i.anime.title?.romaji} ${(i.anime.artists || []).join(' ')}`).includes(q))).map(i => i.anime).slice(0, q ? 30 : 60);
         });
         const plAddToggle = (song) => { const p = plOpenList.value; if (p) togglePlaylistSong(p, song); };
-        const addPickToPlaylist = (p) => { const e = soloList.value.find(i => String(i.anime.id) === String(plAddPick.value)); plAddPick.value = ''; if (e) togglePlaylistSong(p, e.anime); };
         const renamePlaylist = async (p) => { const name = await askText({ title: 'Rename playlist', value: p.name, ok: 'Rename', max: 60 }); if (name) savePlaylist(p, { name }); };
         const deletePlaylist = async (p) => {
             if (!(await askConfirm({ title: `Delete “${p.name}”?`, body: 'The songs stay on your list; only the playlist goes.', ok: 'Delete' }))) return;
@@ -4548,8 +4517,6 @@ createApp({
         const plOpenList = computed(() => playlists.value.find(p => p.id === plOpen.value) || null);
         const plCovers = (p) => [...new Set((p.songs || []).map(s => s.coverImage?.large).filter(Boolean))].slice(0, 4);
         const plLength = (p) => { const ms = (p.songs || []).reduce((a, s) => a + (s.durationMs || 0), 0); const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
-        // the song editor's "Add to playlist" picker
-        const plAddSongs = computed(() => { const p = plOpenList.value; return p ? soloList.value.filter(i => typeOf(i) === 'SONG' && !inPlaylist(p, i.anime)) : []; });
 
         // ---------- the song player: one for the whole site (bar at the bottom) ----------
         // Full songs: each song is looked up on YouTube and played in YouTube's own player, kept out of sight (sound only;
@@ -4894,7 +4861,7 @@ createApp({
             if (!player.song) return;
             if (e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious') { e.preventDefault(); skipSong(e.key === 'MediaTrackNext' ? 1 : -1); return; }
             const el = document.activeElement;
-            if (/INPUT|TEXTAREA|SELECT/.test(el?.tagName || '') || el?.isContentEditable || rd.open || vp.open) return;
+            if (/INPUT|TEXTAREA|SELECT/.test(el?.tagName || '') || el?.isContentEditable || rd.open) return;
             const k = e.key.toLowerCase(), shiftOnly = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey, ctrlOnly = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey;
             if ((shiftOnly && k === 'n') || (ctrlOnly && e.key === 'ArrowRight')) { e.preventDefault(); skipSong(1); }
             else if ((shiftOnly && k === 'p') || (ctrlOnly && e.key === 'ArrowLeft')) { e.preventDefault(); skipSong(-1); }
@@ -4966,7 +4933,6 @@ createApp({
             return counts;
         });
         // v10 the solo list of anime / movies & TV also has "Wanna Rewatch" (titles can be in it and in their status)
-        const rewishOn = computed(() => activeTab.value === 'solo' && REWISH_TYPES.includes(UNIT.type));
         const extraLists = computed(() => activeTab.value !== 'solo' ? [] : [...(REWISH_TYPES.includes(UNIT.type) ? ['REWISH'] : []), ...(ROTATION_TYPES.includes(UNIT.type) ? ['ROTATION'] : [])]);
         const listStatusOpts = computed(() => ['ALL', ...statusPick(), ...extraLists.value]);
         watch(extraLists, (l) => { if (FLAG_OF[listFilterStatus.value] && !l.includes(listFilterStatus.value)) listFilterStatus.value = 'ALL'; });
@@ -5051,7 +5017,6 @@ createApp({
 
         const profileStats = computed(() => statsFor(uniqueItems.value));
         const profileStatCards = computed(() => withSeries(statCards(profileStats.value, daysActive.value), uniqueItems.value));
-        const rankedAnime = computed(() => uniqueItems.value.filter(i => i.score > 0).sort((a, b) => b.score - a.score));
         // ---------- drag to reorder (shared by rankings + a game series' story order) ----------
         // Grab a row (on phones: its grip) and drop it on a new spot; the row follows the pointer, the others slide aside.
         const makeSortable = (onMove, canDrag) => {
@@ -5198,6 +5163,13 @@ createApp({
             return out.slice(0, 16);
         });
         const progressPct = (item) => item.anime?.episodes ? Math.min(100, (item.progress || 0) / item.anime.episodes * 100) : 0;
+        // v1.5 "2 new": episodes of an airing anime that are out and that you haven't counted yet (not on a rewatch)
+        const newEps = (item) => {
+            const a = item?.anime; if (!a || (a.type || 'ANIME') !== 'ANIME' || a.status !== 'RELEASING' || item.repeatNo) return 0;
+            const n = a.nextAiringEpisode; if (!n?.episode) return 0;
+            const aired = n.airingAt && n.airingAt * 1000 < Date.now() ? n.episode : n.episode - 1;
+            return Math.max(0, aired - (item.progress || 0));
+        };
         const bumpEpisode = async (item) => {
             if (item.source === 'solo') { quickSolo(item.anime, 'EP'); return; }
             const eps = item.anime.episodes || null;
@@ -5273,7 +5245,6 @@ createApp({
 
         // ---------- friend profiles ----------
         const viewedUser = ref(null);             // { profile, entries, favs, days, loading }
-        const viewedTab = ref('ALL');
         const viewedSection = ref('overview');   // overview | compare
         const openUser = (userId) => {
             if (!userId) return;
@@ -5281,7 +5252,6 @@ createApp({
             navigate(() => { viewUserId.value = userId; selectedAnime.value = null; entity.value = null; currentAppView.value = 'tracker'; });
         };
         const loadViewedUser = async (userId) => {
-            viewedTab.value = 'ALL';
             viewedUser.value = { profile: personOf(userId), entries: [], favs: [], favStaff: [], days: 0, hidden: [], stats: null, loading: true };
             viewedSection.value = 'overview';
             const [{ data: prof }, { data: entries }, { data: favs }, days, { data: hidden }, { data: stats }, { data: favStaffRows }] = await Promise.all([
@@ -5336,11 +5306,6 @@ createApp({
             if (userId === uid()) myRecent.value = rows; else if (viewUserId.value === userId) viewedRecent.value = rows;
         };
         // profile "Activity" button: list updates + posts. People can hide theirs (Edit profile → decor.hideActivity)
-        const viewedRanked = computed(() => (viewedUser.value?.entries || []).filter(i => i.score > 0).sort((a, b) => b.score - a.score).slice(0, 10));
-        const viewedList = computed(() => {
-            const e = viewedUser.value?.entries || [];
-            return viewedTab.value === 'ALL' ? e : e.filter(i => i.status === viewedTab.value);
-        });
         const viewedIsFriend = computed(() => friendsList.value.some(f => f.id === viewUserId.value));
         // Their list, laid out like your own Solo list (read-only: open titles to comment, + adds to YOUR list)
         const theirList = reactive({ type: 'ANIME', status: 'ALL', q: '' });
@@ -5358,6 +5323,13 @@ createApp({
             STATUS_ORDER.forEach(st => { const g = items.filter(i => i.status === st); if (g.length) out[st] = sortEntries(g, PREFS.listOrder); });
             return out;
         });
+        // v1.5 long lists show in steps: the first 60 of each group, then more as you scroll near the end (hundreds of
+        // posters drawn at once made Lists slow to open, above all on phones). Opening another list starts over.
+        const LIST_STEP = 60;
+        const listShown = reactive({});
+        const shownIn = (k) => listShown[k] || LIST_STEP;
+        const moreIn = (k) => { listShown[k] = shownIn(k) + LIST_STEP; recheckInfinite(); };
+        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFilterGroup.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q].join('|'), () => { for (const k in listShown) delete listShown[k]; });
         // stat cards on a friend's profile: list-type cards open their list, the rest keep the breakdown pop-up
         const openFriendLists = async (id) => { friendsOpen.value = false; if (id !== viewUserId.value) { openUser(id); await nextTick(); } openTheirList('ANIME'); };
         const openFriendsManage = () => { friendsOpen.value = false; openTracker('profile'); setTimeout(() => document.getElementById('friends')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); };
@@ -5583,7 +5555,6 @@ createApp({
             activeTab.value = tab;
             selectedAnime.value = null; viewUserId.value = null; entity.value = null;
         });
-        const closeAnimeDetails = () => navigate(() => { selectedAnime.value = null; });
         // v10 the 🔍 in the header (on every page): Browse of the section you're in, with the search box ready to type in
         // v10.1 the 🔍 opens a small search box in the header: results from the section you're in as you type (most
         // popular first); a result opens its page, Enter shows every result in Browse
@@ -5760,7 +5731,6 @@ createApp({
         };
         // v10 "Wanna rewatch" on / off · v10.1 also "Wanna reread" (manga), "Wanna replay" and "In rotation" (games).
         // A title that isn't on your list yet goes in as Completed (Wanna …) or Playing (In rotation).
-        const isRewish = (id) => !!soloEntry(id)?.rewish;
         const isFlagged = (id, key) => !!soloEntry(id)?.[FLAG_OF[key]];
         const toggleFlag = async (anime, key) => {
             const flag = FLAG_OF[key];
@@ -5783,7 +5753,6 @@ createApp({
                 showToast(entry[flag] ? `${titleOf(anime)} → ${label}${cur || entry.status === 'NONE' ? '' : ' (and ' + statusLabelFor(anime.type, entry.status) + ')'}` : `${titleOf(anime)} is off ${label}`);
             } catch (err) { if (cur) setSoloLocal(cur); else fetchSolo(); showToast('Could not save: ' + (err.message || err), 'error'); }
         };
-        const toggleRewish = (anime) => toggleFlag(anime, 'REWISH');
         // v10 the small "add to list" buttons (random pick, recommendations, franchise): plan / now / done (+ the marks)
         const ADD_ICONS = { PLANNING: 'fa-bookmark', WATCHING: 'fa-play', COMPLETED: 'fa-check', REWISH: 'fa-rotate-right', ROTATION: 'fa-arrows-spin' };
         const addStatuses = (m) => { const t = m?.type || 'ANIME'; return ['PLANNING', 'WATCHING', 'COMPLETED', ...(REWISH_TYPES.includes(t) ? ['REWISH'] : []), ...(ROTATION_TYPES.includes(t) ? ['ROTATION'] : [])]; };
@@ -5801,7 +5770,7 @@ createApp({
             const cur = soloEntry(anime.id); if (!cur) return;
             soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
             if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
-            try { await deleteSolo(anime.id); showToast(msg || `${titleOf(anime)} is off your list`); }
+            try { await deleteSolo(anime.id); showToast(msg || `${titleOf(anime)} is off your list`, 'success', undoOf({ solo: [cur], coop: [] }, `${titleOf(anime)} is back`)); }
             catch (err) { setSoloLocal(cur); showToast('Could not save: ' + (err.message || err), 'error'); }
         };
         const uncheckStatus = async (anime) => {
@@ -5811,7 +5780,7 @@ createApp({
             const entry = { ...cur, status: 'NONE' };
             setSoloLocal(entry);
             if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
-            try { await upsertSolo(entry); showToast(`${titleOf(anime)} is off ${label}`); }
+            try { await upsertSolo(entry); showToast(`${titleOf(anime)} is off ${label}`, 'success', undoOf({ solo: [cur], coop: [] }, `${titleOf(anime)} is back in ${label}`)); }
             catch (err) { setSoloLocal(cur); showToast('Could not save: ' + (err.message || err), 'error'); }
         };
         const quickSolo = async (anime, action) => {
@@ -5954,8 +5923,7 @@ createApp({
             const aa = soloEntry(a.id)?.anime || a;
             openWatchWindow(info.url, { title: titleOf(aa), cover: aa.coverImage?.large || a.coverImage?.large, banner: a.bannerImage || aa.bannerImage, ep: aa.format === 'MOVIE' || wlAtEnd(a) ? null : nextEpOf(a.id), site: info.site });
             if (wlAtEnd(a)) return;
-            const e = soloEntry(a.id), total = totalOf(e?.anime || a);
-            const left = total ? Math.max(1, total - nextEpOf(a.id) + 1) : 999;
+            const e = soloEntry(a.id);
             watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: 1 }; keepAsk();   // v1.4 always starts at 1 (the owner's choice)
         };
         // v1.1 a pop-up window over anicoop (streaming sites refuse to be shown inside another site, so a window of its
@@ -6039,6 +6007,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 if (watchAsk.value) { watchClosed.value = true; setTimeout(() => { watchClosed.value = false; }, 2400); }
             }, 700);
         };
+        // v1.5 a new-episode alert (bell) for an anime you have a watch link for gets a Watch button: your next episode
+        const alertAnime = (n) => soloEntry(n.media_id)?.anime || { id: n.media_id, type: n.media_type || 'ANIME', title: { romaji: n.media_title || '' }, coverImage: { large: n.media_cover || null } };
+        const alertWatch = (n) => n?.kind === 'media_episode' && n.media_id && (n.media_type || 'ANIME') === 'ANIME' ? linkInfo(alertAnime(n)) : null;
+        const watchFromAlert = (n) => {
+            notifOpen.value = false;
+            if (!n.read) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); }
+            openMyLink(alertAnime(n));
+        };
         // v10.6 send the link (on the episode you're at) to a friend in chat
         const sendMyLink = (a) => {
             const info = linkInfo(a); if (!info) return;
@@ -6110,7 +6086,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (m) await fetchAnimeDetails(m);
         };
         const TOUR_STEPS = [
-            { icon: 'fa-wand-magic-sparkles', title: 'Welcome to anicoop 1.0', body: 'Track anime, manga & manhwa, movies & TV and games with your friends. This tour shows the important parts in a couple of minutes. Skip it whenever you like; it’s in Settings → Account to watch again.', hero: true },
+            { icon: 'fa-wand-magic-sparkles', title: 'Welcome to anicoop', body: 'Track anime, manga & manhwa, movies & TV and games with your friends. This tour shows the important parts in a couple of minutes. Skip it whenever you like; it’s in Settings → Account to watch again.', hero: true },
             { icon: 'fa-layer-group', title: 'Pick a section', body: 'Anime, Manga & Manhwa, Movies & TV or Games. Browse, your lists and the rankings all follow the section you’re in.', go: () => openTracker('browse'), sel: ['.section-switch'] },
             { icon: 'fa-compass', title: 'Your main pages', body: 'Browse finds new things, Leaderboard ranks what’s popular, Feed shows what your friends are up to, Lists holds everything you track, and Profile is your page.', sel: ['nav.seg', '.mnav'] },
             { icon: 'fa-magnifying-glass', title: 'Search from anywhere', body: 'Tap the magnifier, type a title and pick it from the results. Press Enter to see every result.', sel: ['.hdr-search'] },
@@ -6224,7 +6200,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const endTour = (skipped = false) => {
             tour.on = false; clearTimeout(tourT); tourEl = null; extOpen.value = false;
             PREFS.tourDone = true;
-            try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+            try { localStorage.setItem(TOUR_KEY + ':' + uid(), '1'); } catch {}   // (v1.5 per account: a new account on this device still gets it)
             if (section.value !== tour.from && SECTIONS[tour.from]) openSection(tour.from);
             else if (!skipped) openTracker('browse');
         };
@@ -6237,8 +6213,69 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             try { await navigator.clipboard.writeText(text); tour.copied = true; }
             catch { showToast('Copy it from the card: ' + text); }
         };
+        // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
+        // device). Someone new gets the tour instead. Settings → Account opens it again.
+        // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
+        const APP_VERSION = '1.5';
+        const WHATS_NEW = {
+            '1.5': [
+                { icon: 'fa-bell', t: 'New episodes at a glance', d: 'Continue watching cards show “2 new” when an airing anime has episodes out that you haven’t counted yet.' },
+                { icon: 'fa-circle-play', t: 'Watch from your alerts', d: 'New-episode alerts in the bell have a Watch button that opens your saved link on your next episode.' },
+                { icon: 'fa-rotate-left', t: 'Undo', d: 'Removed a title or unchecked a status by mistake? Tap Undo on the message at the bottom.' },
+                { icon: 'fa-gamepad', t: 'Steam, kept up to date', d: 'Hours played on your Steam games update by themselves once a day, and your game posters show your achievements (like 45/78).' },
+                { icon: 'fa-file-arrow-down', t: 'Download your lists', d: 'Settings → Import & sync saves all your lists as a backup file or a spreadsheet.' },
+                { icon: 'fa-bolt', t: 'Faster and safer', d: 'Lists open quickly even with hundreds of titles, saving a change no longer reloads everything, profile pictures load lighter, and links in posts and chats can’t hide scripts.' },
+            ],
+        };
+        const WHATS_NEW_KEY = 'anicoop_seen_version';
+        const whatsNew = reactive({ open: false });
+        const whatsNewItems = computed(() => WHATS_NEW[APP_VERSION] || []);
+        const markWhatsNewSeen = () => { try { localStorage.setItem(WHATS_NEW_KEY, APP_VERSION); } catch {} };
+        const maybeWhatsNew = () => {
+            let seen = null; try { seen = localStorage.getItem(WHATS_NEW_KEY); } catch {}
+            if (seen === APP_VERSION || !whatsNewItems.value.length) return;
+            const t0 = Date.now();
+            const tryShow = () => {
+                if (!currentUser.value) return;
+                let toured = false; try { toured = localStorage.getItem(TOUR_KEY + ':' + uid()) === '1'; } catch {}
+                if (tour.on || !(PREFS.tourDone || toured)) { markWhatsNewSeen(); return; }   // someone new: the tour shows everything
+                if (introMode.value !== 'done' && Date.now() - t0 < 10000) { setTimeout(tryShow, 400); return; }
+                markWhatsNewSeen(); whatsNew.open = true;
+            };
+            setTimeout(tryShow, 2500);
+        };
+        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.open = true; };
+        // ---------- v1.5 download your lists: a backup file (everything) or a spreadsheet (one row per title) ----------
+        const downloadFile = (name, text, type) => {
+            const url = URL.createObjectURL(new Blob([text], { type }));
+            const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        };
+        const exportLists = (kind = 'json') => {
+            if (!soloList.value.length && !coopList.value.length) { showToast('Your lists are empty', 'error'); return; }
+            const who = String(currentProfile.value?.username || 'me').replace(/[^\w.-]+/g, '_'), day = localDay();
+            const sec = (t) => SECTIONS[SECTION_OF_TYPE[t]]?.short || t;
+            const marks = (e) => [e.rewish ? statusLabelFor(typeOf(e), 'REWISH') : '', e.rotation ? statusLabelFor(typeOf(e), 'ROTATION') : ''].filter(Boolean).join(', ');
+            const date = (d) => d ? String(d).slice(0, 10) : '';
+            if (kind === 'csv') {
+                const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                const head = ['Section', 'Title', 'Status', 'Progress', 'Of', 'Unit', 'Score (0-10)', 'Rewatches', 'Marks', 'Watch link', 'Added', 'Updated'];
+                const rows = soloList.value.map(e => { const t = typeOf(e); return [sec(t), titleOf(e.anime), statusLabelFor(t, e.status), e.progress || 0, totalOf(e.anime) || '', (LABEL_SETS[t] || LABEL_SETS.ANIME).ep.toLowerCase() + 's', e.score || '', (e.repeats || []).length || '', marks(e), e.watchLink || '', date(e.createdAt), date(e.updatedAt)]; });
+                downloadFile(`anicoop-${who}-${day}.csv`, '﻿' + [head, ...rows].map(r => r.map(q).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+            } else {
+                const data = {
+                    app: 'anicoop', version: APP_VERSION, exported: new Date().toISOString(), user: currentProfile.value?.username || null,
+                    lists: soloList.value.map(e => ({ status: e.status, score: e.score || 0, progress: e.progress || 0, repeats: e.repeats || [], rewish: !!e.rewish, rotation: !!e.rotation, watchLink: e.watchLink || '', readPos: e.readPos || null, added: e.createdAt || null, updated: e.updatedAt || null, media: slimAnime(e.anime) })),
+                    squads: squads.value.map(s => ({ name: s.name, members: s.members.map(m => m.username), entries: coopList.value.filter(i => i.squadId === s.id).map(i => ({ status: i.status, score: i.score || 0, progress: i.progress || 0, media: slimAnime(i.anime) })) })),
+                    favorites: { characters: favCharacters.value, people: favStaff.value },
+                    playlists: playlists.value.map(p => ({ name: p.name, songs: p.songs || [] })),
+                };
+                downloadFile(`anicoop-${who}-${day}.json`, JSON.stringify(data, null, 1), 'application/json');
+            }
+            showToast(kind === 'csv' ? 'Spreadsheet saved to your device' : 'Backup saved to your device');
+        };
         const maybeStartTour = () => {
-            let seen = false; try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch {}
+            let seen = false; try { seen = localStorage.getItem(TOUR_KEY + ':' + uid()) === '1'; } catch {}
             if (PREFS.tourDone || seen || tour.on || !currentUser.value) return;
             // after the sign-in intro animation and once your lists had a moment to load
             const t0 = Date.now();
@@ -6333,10 +6370,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 if (!(await askConfirm({ title: `Remove ${list.length} titles from all your lists?`, body: inSquads ? 'Some of them are on squad lists too — they’re removed there for everyone.' : '', ok: `Remove ${list.length}` }))) return;
             }
             batchBusy.value = true;
+            const snap = snapshotOf(list.map(a => a.id));
             try {
                 const n = await removeMany(list);
                 clearSelected();
-                showToast(`Removed ${n} title${n === 1 ? '' : 's'} from all lists`);
+                showToast(`Removed ${n} title${n === 1 ? '' : 's'} from all lists`, 'success', undoOf(snap, `${n} title${n === 1 ? ' is' : 's are'} back on your lists`));
             } catch (err) { showToast('Could not remove: ' + (err.message || err), 'error'); }
             finally { batchBusy.value = false; }
         };
@@ -6738,7 +6776,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             } catch (err) { console.warn('shelves', type, err.message || err); }
             finally { shelvesBusy[type] = false; }
         };
-        const loadGameShelves = (force) => loadShelves('GAME', force);
         const shelfSub = (s) => typeof s.sub === 'function' ? s.sub() : s.sub;
         const seeShelf = (s) => {
             const see = typeof s.see === 'function' ? s.see() : s.see;
@@ -7091,8 +7128,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const { data, error } = await sb.from('favorite_staff').select('*').eq('user_id', uid()).order('created_at');
             if (!error) favStaff.value = (data || []).map(r => ({ ...r.data, kind: r.kind }));
         };
-        const favVAs = computed(() => favStaff.value.filter(x => x.kind === 'va'));
-        const favStaffOnly = computed(() => favStaff.value.filter(x => x.kind !== 'va'));
         const isFavStaff = (id) => favStaff.value.some(x => x.id === id);
         const toggleFavStaff = async (person, kind = 'staff') => {
             if (!person?.id) return;
@@ -7144,17 +7179,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (a) openArtist(a.id, a.name); else showToast(`Couldn’t find ${name} on Apple Music`, 'error');
         };
         const openSongArtist = (s) => { const id = s?.artistInfo?.id || s?.artistId; if (id) openArtist(id, s?.artistInfo?.name || (s?.artists || [])[0]); else openArtistByName(s?.artistInfo?.name || (s?.artists || [])[0]); };
-        const artistView = reactive({ shown: 24, album: null, albumSongs: [], albumLoading: false });
-        watch(() => entity.value?.type === 'artist' && entity.value.id, () => Object.assign(artistView, { shown: 24, album: null, albumSongs: [], albumLoading: false }));
-        const openAlbum = async (al) => {
-            if (artistView.album?.id === al.id) { artistView.album = null; return; }
-            Object.assign(artistView, { album: al, albumSongs: [], albumLoading: true });
-            try { const list = await songApi.album(al.id); if (artistView.album?.id === al.id) artistView.albumSongs = list; }
-            catch (err) { showToast(err.message || 'Could not load the album', 'error'); }
-            finally { artistView.albumLoading = false; }
-            nextTick(() => document.getElementById('artist-album')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-        };
-        // a song's album: its artist's page, opened on that album (the album's songs are listed there)
         // a song's album: the album's own page (older Spotify songs have no Apple album, so their artist page)
         const openSongAlbum = (s) => {
             const id = s?.albumId; if (!id || !/^\d+$/.test(String(id))) { openSongArtist(s); return; }
@@ -7432,43 +7456,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 return { ...e, n: m ? Number(m[1]) : null, name, i };
             }).sort((a, b) => (a.n ?? 1e6) - (b.n ?? 1e6) || a.i - b.i);
         });
-        const watchLinks = computed(() => (selectedAnime.value?.externalLinks || []).filter(l => l.type === 'STREAMING' && l.url));
-        // More legal places to watch an anime: official free YouTube channels (region-locked) + JustWatch for your country
-        const moreWatch = computed(() => {
-            const a = selectedAnime.value; if (!a || a.type !== 'ANIME') return [];
-            const q = encodeURIComponent(a.title?.english || a.title?.romaji || titleOf(a));
-            const cc = (/-([A-Z]{2})$/.exec(navigator.language || '') || [])[1]?.toLowerCase() || 'us';
-            return [
-                { id: 'muse', site: 'Muse Asia (free, YouTube)', url: `https://www.youtube.com/@MuseAsia/search?query=${q}`, color: '#e11d48', icon: 'fa-brands fa-youtube' },
-                { id: 'anione', site: 'Ani-One Asia (free, YouTube)', url: `https://www.youtube.com/@AniOneAsia/search?query=${q}`, color: '#e11d48', icon: 'fa-brands fa-youtube' },
-                { id: 'jw', site: 'Everywhere it streams in your country (JustWatch)', url: `https://www.justwatch.com/${cc}/search?q=${q}`, color: '#1c2b3a', icon: 'fa-solid fa-magnifying-glass' },
-            ];
-        });
 
         // ---------- manga & manhwa: where to read + chapter list (MangaDex), like picking a source in Mihon ----------
         const reader = reactive({ id: null, lang: 'en', chapters: [], total: 0, loading: false, error: '', shown: 40 });
-        const MD_LINKS = {
-            engtl: ['Official English', null], raw: ['Original (raw)', null], bw: ['BookWalker', 'https://bookwalker.jp/{}'], amz: ['Amazon', null],
-            ebj: ['eBookJapan', null], cdj: ['CDJapan', null], mu: ['MangaUpdates', 'https://www.mangaupdates.com/series/{}'],
-        };
         const LANG_NAMES = { en: 'English', 'es-la': 'Spanish (LatAm)', es: 'Spanish', 'pt-br': 'Portuguese (BR)', pt: 'Portuguese', fr: 'French', de: 'German', it: 'Italian', ru: 'Russian', id: 'Indonesian', vi: 'Vietnamese', tr: 'Turkish', ar: 'Arabic', pl: 'Polish', th: 'Thai', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', 'zh-hk': 'Chinese (HK)' };
         const readInfo = computed(() => selectedAnime.value?.type === 'MANGA' ? mangaInfo[selectedAnime.value.id] || null : null);
         const readLangs = computed(() => { const l = readInfo.value?.langs || []; return [...new Set(['en', ...l])].filter(x => l.includes(x) || x === 'en').map(v => ({ v, l: LANG_NAMES[v] || v })); });
-        // official reading sites from AniList + MangaDex's links + MangaDex itself (one per website)
-        const readSources = computed(() => {
-            const a = selectedAnime.value; if (!a || a.type !== 'MANGA') return [];
-            const out = [];
-            (a.externalLinks || []).filter(l => l.url && l.type !== 'SOCIAL').forEach(l => out.push({ id: 'al' + l.id, site: l.site, url: l.url, color: l.color || '#3b82f6', icon: l.icon || null, note: l.language || (l.type === 'STREAMING' ? 'official' : '') }));
-            const info = readInfo.value;
-            Object.entries(info?.links || {}).forEach(([k, v]) => {
-                const def = MD_LINKS[k]; if (!def || !v) return;
-                const url = /^https?:\/\//.test(v) ? v : def[1] ? def[1].replace('{}', v) : null;
-                if (url) out.push({ id: 'md-' + k, site: def[0], url, color: k === 'engtl' ? '#22c55e' : '#52525b', note: k === 'raw' ? 'original language' : '' });
-            });
-            if (info?.md) out.push({ id: 'mdx', site: 'MangaDex', url: `https://mangadex.org/title/${info.md}`, color: '#ff6740', note: 'all chapters' });
-            const seen = new Set();
-            return out.filter(s => { let h = s.url; try { h = new URL(s.url).hostname.replace(/^www\./, ''); } catch {} if (seen.has(h)) return false; seen.add(h); return true; });
-        });
         const loadChapters = async (more = false) => {
             const a = selectedAnime.value; const info = readInfo.value;
             if (!a || !info?.md) return;
@@ -7529,18 +7522,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         //  • MangaDex: MangaDex's official API (it allows third-party readers); pages stream from MangaDex's own image servers
         //  • Local files: CBZ / ZIP archives or images from your device, opened in the browser — nothing is uploaded
         // the Read / Watch window on a title page (sources + chapters / episodes)
-        const wp = reactive({ open: false, season: 1 });
+        const wp = reactive({ open: false });
         const EXTENSIONS = [
             { id: 'mangadex', kinds: ['manga'], name: 'MangaDex', icon: 'fa-book-open-reader', color: '#ff6740', lang: 'Multi-language', version: '1.0',
               desc: 'Read MangaDex chapters right here, no ads or trackers. Official releases that MangaDex only links to still open on the publisher’s site.' },
             { id: 'local', kinds: ['manga'], name: 'Local files', icon: 'fa-file-zipper', color: '#3b82f6', lang: 'Any', version: '1.0',
               desc: 'Open CBZ / ZIP comic archives or a set of images from your device. Stays on your device, nothing is uploaded.' },
-            { id: 'archive', kinds: ['tv'], name: 'Internet Archive', icon: 'fa-building-columns', color: '#71717a', lang: 'Multi-language', version: '1.0',
-              desc: 'Public-domain and freely licensed films and shows (classics, old cartoons, documentaries), played straight from archive.org with no ads.' },
-            { id: 'youtube', kinds: ['anime', 'tv'], name: 'YouTube', icon: 'fa-play', color: '#ff0033', lang: 'Multi-language', version: '1.0',
-              desc: 'Full episodes and films that studios and distributors post for free on YouTube (Muse Asia, Ani-One, TMS, GundamInfo and others), played in YouTube’s own player. Not every title is there.' },
-            { id: 'localvideo', kinds: ['anime', 'tv'], name: 'Local video files', icon: 'fa-file-video', color: '#3b82f6', lang: 'Any', version: '1.0',
-              desc: 'Play an MP4 / WebM file from your device. Stays on your device, nothing is uploaded.' },
         ];
         // which section the Extensions window is managing, and the title it was opened from ("Find readable sources" checks that title)
         const extOpen = ref(false);
@@ -7677,11 +7664,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             catch (err) { throw new Error(friendlyErr(err)); }
             if (/<title>\s*just a moment|cf-chl-|challenge-platform|cf_chl_opt/i.test(h)) throw new Error(CF_MSG);
             const probe = async (template) => { try { return (await sourceApi.search({ id: 'probe', name: 'probe', baseUrl: baseUrl.replace(/\/+$/, ''), template }, 'the')).length >= 3; } catch { return false; } };
-            if (kind !== 'manga') {
-                if (/themes\/animestream|class="eplister|class="mirror"|animestream|class="bixbox/i.test(h)) return 'animestream';
-                if (/themes\/dooplay|dooplay|doo_player|dtAjax/i.test(h)) return 'dooplay';
-                return (await probe('genericvideo')) ? 'genericvideo' : null;
-            }
             if (/wp-manga|themes\/madara|manga_get_chapters|c-tabs-item|madara/i.test(h)) return 'madara';
             if (/ts_reader|mangathemesia|themes\/mangareader|class="listupd|themesia/i.test(h)) return 'mangathemesia';
             return (await probe('generic')) ? 'generic' : null;
@@ -7689,7 +7671,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // does a chapter give page images / an episode give a player?
         const opensHere = async (s, list) => {
             for (const c of [list[list.length - 1], list[0], list[Math.floor(list.length / 2)]].filter((c, n, all) => c && all.indexOf(c) === n).slice(0, 2)) {
-                try { if (isVideoSrc(s) ? (await sourceApi.videos(s, c.link)).length : (await sourceApi.pages(s, c.link)).length >= 2) return true; } catch {}
+                try { if ((await sourceApi.pages(s, c.link)).length >= 2) return true; } catch {}
             }
             return false;
         };
@@ -7718,10 +7700,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         // site checks are remembered for a week (a site that can't be read stays that way); title checks for this visit
         const CHECK_KEY = 'anicoop_srccheck_v1';
-        const repoState = reactive(Object.fromEntries(Object.entries(readJSON(CHECK_KEY) || {}).filter(([, v]) => Date.now() - v.at < 7 * 864e5).map(([k, v]) => [k, v.v])));   // baseUrl → 'checking' | 'unsupported' | 'ok:<template>' | message
-        watch(repoState, debounce(() => {
-            try { localStorage.setItem(CHECK_KEY, JSON.stringify(Object.fromEntries(Object.entries(repoState).filter(([, v]) => v && v !== 'checking').map(([k, v]) => [k, { v, at: Date.now() }])))); } catch {}
-        }, 1500), { deep: true });
+        const savedChecks = Object.fromEntries(Object.entries(readJSON(CHECK_KEY) || {}).filter(([, v]) => Date.now() - v.at < 7 * 864e5));
+        const repoState = reactive(Object.fromEntries(Object.entries(savedChecks).map(([k, v]) => [k, v.v])));   // baseUrl → 'checking' | 'unsupported' | 'ok:<template>' | message
+        // v1.5 saved after each check (it was a deep watcher: thousands of sites re-read on every single change of a scan),
+        // and a result keeps the day it was found, so it's really checked again after a week (every save used to renew them all)
+        const saveChecks = debounce(() => {
+            const now = Date.now();
+            Object.entries(repoState).forEach(([k, v]) => { if (v && v !== 'checking' && savedChecks[k]?.v !== v) savedChecks[k] = { v, at: now }; });
+            try { localStorage.setItem(CHECK_KEY, JSON.stringify(savedChecks)); } catch {}
+        }, 1500);
         const titleState = reactive({});   // "titleId|baseUrl" → 'checking' | 'ok' | 'notfound' | 'noopen'
         const titleKey = (x) => `${extFor.value?.id}|${x.baseUrl}`;
         const tplName = (x) => (SOURCE_TEMPLATES[String(repoState[x.baseUrl] || '').slice(3)] || {}).label?.split(' (')[0] || '';
@@ -7762,19 +7749,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             try {
                 const template = known || await detectTemplate(x.baseUrl, extKind.value);
                 if (!template) { repoState[x.baseUrl] = 'unsupported'; return; }
-                // anime / movie sites: only install one whose episodes really play here (many hide their players behind code of their own)
-                if (extKind.value !== 'manga') {
-                    if (a) {
-                        const key = `${a.id}|${x.baseUrl}`;
-                        if (titleState[key] !== 'ok') { titleState[key] = 'checking'; titleState[key] = await verifyTitle(x, template, a).catch(() => 'notfound'); }
-                        if (titleState[key] !== 'ok') { repoState[x.baseUrl] = 'ok:' + template; showToast(`${x.name} doesn’t play “${titleOf(a)}” here`, 'error'); return; }
-                    } else if (!known && (await verifySource(x, template)) !== 'ok') { repoState[x.baseUrl] = 'unsupported'; showToast(`${x.name}'s episodes don’t play here`, 'error'); return; }
-                }
                 repoState[x.baseUrl] = 'ok:' + template;
                 const s = await addSource({ ...x, template, kind: extKind.value }, { quiet: true });
                 if (s) { remember(s); showToast(`${x.name} installed (${SOURCE_TEMPLATES[template].label.split(' (')[0]})`); if (wp.open && playKind.value === s.kind) readSrc.value = s.id; }
                 else showToast(srcForm.msg || 'Could not install', 'error');
             } catch (err) { repoState[x.baseUrl] = err.message || 'Could not reach the site'; }
+            finally { saveChecks(); }
         };
         // check every source in the current list (6 at a time) and pin the working ones to the top.
         // Opened from a title → each site is checked for THAT title, so it works again on the next title.
@@ -7804,7 +7784,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     } catch (err) {
                         if (key && titleState[key] === 'checking') titleState[key] = 'notfound';
                         if (repoState[x.baseUrl] === 'checking') repoState[x.baseUrl] = err.message || 'unsupported';
-                    } finally { repoScan.done++; }
+                    } finally { repoScan.done++; saveChecks(); }
                 }
             };
             await Promise.all(Array.from({ length: 6 }, worker));
@@ -7858,51 +7838,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const mihonShown = computed(() => { const q = mihonUi.q.trim().toLowerCase(); return mihonUi.list.filter(x => !q || `${x.displayName} ${x.name}`.toLowerCase().includes(q)); });   // (the server is yours: its sources show whatever the 18+ setting)
         watch(() => extOpen.value && extKind.value === 'manga', (on) => { if (on && mihonCfg.url && !mihonUi.list.length && !mihonUi.busy) connectMihon(); });
 
-        // ---- player links (anime, movies & TV): an address with blanks the app fills in for the episode you pick ----
-        // e.g. https://player.example/embed/{tmdb}/{season}/{episode}. Nothing is searched or scraped: the address plays as it is.
-        const playerLinks = computed(() => PREFS.players || []);
-        const kindPlayers = (k) => playerLinks.value.filter(p => p.kind === k);
-        const extPlayers = computed(() => kindPlayers(extKind.value));
-        const plForm = reactive({ name: '', url: '', movieUrl: '', msg: '' });
-        const PLAYER_BLANK = /\{(tmdb|imdb|anilist|mal|title)\}/;
-        const checkPlayerUrl = (raw, need = true) => {
-            let u; try { u = new URL(raw.replace(/\{[a-z]+\}/g, '1')); } catch { throw new Error('Enter the full address, starting with https://'); }
-            if (u.protocol !== 'https:') throw new Error('The address must start with https://');
-            if (need && !PLAYER_BLANK.test(raw)) throw new Error('The address needs {tmdb}, {imdb}, {anilist}, {mal} or {title} in it, so the player knows which title to play.');
-            return u;
-        };
-        const addPlayerLink = () => {
-            const raw = plForm.url.trim(), movie = plForm.movieUrl.trim();
-            try {
-                const u = checkPlayerUrl(raw); if (movie) checkPlayerUrl(movie);
-                PREFS.players = [...(PREFS.players || []), { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: extKind.value, name: (plForm.name.trim() || u.hostname.replace(/^www\./, '')).slice(0, 40), url: raw, movieUrl: movie || null }];
-                showToast(`${PREFS.players.at(-1).name} added`);
-                Object.assign(plForm, { name: '', url: '', movieUrl: '', msg: '' });
-                if (wp.open && playKind.value === extKind.value) readSrc.value = PREFS.players.at(-1).id;
-            } catch (err) { plForm.msg = err.message; }
-        };
-        const removePlayerLink = (id) => {
-            PREFS.players = (PREFS.players || []).filter(p => p.id !== id);
-            if (readSrc.value === id) readSrc.value = readTabs.value[0]?.id || null;
-        };
-        // the source playing right now is a player link or YouTube (not a website with an episode list)
-        const directSrc = computed(() => {
-            if (readSrc.value === 'youtube') return { id: 'youtube', type: 'youtube', name: 'YouTube' };
-            const p = playerLinks.value.find(x => x.id === readSrc.value);
-            return p && p.kind === playKind.value ? { id: p.id, type: 'link', name: p.name, p } : null;
-        });
-        const ARCHIVE_SRC = { id: 'archive', name: 'Internet Archive', baseUrl: IA, template: 'archive', kind: 'tv' };
-        const readTabs = computed(() => {
-            const k = playKind.value; if (!k) return [];
-            return [
-                ...(k !== 'manga' ? kindPlayers(k).map(p => ({ id: p.id, name: p.name, icon: 'fa-link' })) : []),
-                ...(k !== 'manga' && extOn('youtube') ? [{ id: 'youtube', name: 'YouTube', icon: 'fa-play' }] : []),
-                ...(k === 'manga' && extOn('mangadex') ? [{ id: 'mangadex', name: 'MangaDex', icon: 'fa-book-open-reader' }] : []),
-                ...(k === 'tv' && extOn('archive') ? [{ id: 'archive', name: 'Internet Archive', icon: 'fa-building-columns' }] : []),
-                ...kindSources(k).map(s => ({ id: s.id, name: s.name, icon: 'fa-globe' })),
-            ];
-        });
-        const currentSite = computed(() => readSrc.value === 'archive' ? ARCHIVE_SRC : siteSources.value.find(s => s.id === readSrc.value) || null);
+        // the Read window's sources (manga): MangaDex + your website / Mihon sources
+        const readTabs = computed(() => playKind.value !== 'manga' ? [] : [
+            ...(extOn('mangadex') ? [{ id: 'mangadex', name: 'MangaDex', icon: 'fa-book-open-reader' }] : []),
+            ...kindSources('manga').map(s => ({ id: s.id, name: s.name, icon: 'fa-globe' })),
+        ]);
+        const currentSite = computed(() => siteSources.value.find(s => s.id === readSrc.value) || null);
         const chapterList = computed(() => readSrc.value === 'mangadex' ? reader.chapters : srcView.chapters);
         const loadSourceFor = async (q = null) => {
             const a = selectedAnime.value; const s = currentSite.value;
@@ -7933,10 +7874,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // A hit is saved as that source's match (so Read / Watch opens it straight away); a miss is remembered for this visit.
         const availNo = reactive({});   // "titleId:sourceId" → 'checking' | 'no' | 'error'
         let availTok = 0;
-        const availSources = (k) => [
-            ...(k === 'tv' && extOn('archive') ? [ARCHIVE_SRC] : []),
-            ...kindSources(k),
-        ];
+        const availSources = (k) => kindSources(k);
         const availRows = computed(() => {
             // v10.7 manga only: anime / TV watch through your watch link now, so their sources aren't listed or checked
             const a = selectedAnime.value, k = playKind.value; if (!a || k !== 'manga') return [];
@@ -8062,7 +8000,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             })();
             job.catch(() => pageCache.delete(c.id));
             pageCache.set(c.id, job);
-            if (pageCache.size > 6) pageCache.delete(pageCache.keys().next().value);   // v9.9 was 10 (less memory)
+            if (pageCache.size > 6) {   // v9.9 was 10 (less memory)
+                const k = pageCache.keys().next().value, old = pageCache.get(k); pageCache.delete(k);
+                // v1.5 pages kept in memory (a Mihon server with a login) are let go with their chapter
+                old.then(r => r.pages.forEach(u => { if (u.startsWith('blob:') && !rd.pages.includes(u)) URL.revokeObjectURL(u); }), () => {});
+            }
             return job;
         };
         const prefetchNext = () => {
@@ -8159,7 +8101,9 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (e.readPos && e.readPos.chId === p.chId && e.readPos.page === p.page) return;
             const entry = { ...e, readPos: { ...p } };
             setSoloLocal(entry);
+            ownWrites.set(id, Date.now());
             try { await sb.from('list_entries').update({ media_data: entryData(entry) }).eq('user_id', uid()).eq('media_id', id); } catch {}
+            ownWrites.set(id, Date.now());
         };
         const rpTimers = {};
         const syncReadPosSoon = (id) => { clearTimeout(rpTimers[id]); rpTimers[id] = setTimeout(() => syncReadPos(id), 5000); };
@@ -8371,25 +8315,9 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const openHistoryItem = (x) => { histOpen.value = false; fetchAnimeDetails(x.media || { id: x.id, type: x.type }); };
         const histTime = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-        // ---------- Read / Watch window ----------
-        const isVideoKind = computed(() => playKind.value === 'anime' || playKind.value === 'tv');
-        const isMovie = computed(() => selectedAnime.value?.type === 'TV' && selectedAnime.value.format === 'MOVIE');
-        const seasonsOf = (a) => (a?.seasons || []).filter(x => x.episodes > 0);
-        // TV progress counts every episode of the show, so "S2 E3" is episode (all of season 1) + 3
-        const absOf = (a, season, ep) => { if (!season) return ep; let n = 0; for (const x of seasonsOf(a)) { if (x.n >= season) break; n += x.episodes; } return n + ep; };
-        const seasonForAbs = (a, abs) => { let n = 0; for (const x of seasonsOf(a)) { if (abs <= n + x.episodes) return x.n; n += x.episodes; } return seasonsOf(a).slice(-1)[0]?.n || 1; };
+        // ---------- Read window (manga) ----------
+        const isMovie = computed(() => selectedAnime.value?.type === 'TV' && selectedAnime.value.format === 'MOVIE');   // (the Watch buttons' wording)
         const myProgress = (a) => soloEntry(a?.id)?.progress || myEntry(a?.id)?.progress || 0;
-        // TV episode guide from TMDB, one season at a time
-        const tvSeasons = reactive({});   // "titleId:season" → [{ n, name, overview, still, runtime, air }] | 'loading' | 'error'
-        const loadTvSeason = async (n) => {
-            const a = selectedAnime.value; if (!a || a.type !== 'TV' || a.format === 'MOVIE' || !a.extId) return;
-            const key = `${a.id}:${n}`; if (Array.isArray(tvSeasons[key]) || tvSeasons[key] === 'loading') return;
-            tvSeasons[key] = 'loading';
-            try {
-                const d = await tmdbCall(`tv/${a.extId}/season/${n}`);
-                tvSeasons[key] = (d.episodes || []).map(e => ({ n: e.episode_number, name: e.name, overview: e.overview || '', still: TMDB_IMG(e.still_path, 'w300'), runtime: e.runtime || null, air: e.air_date || null }));
-            } catch { tvSeasons[key] = 'error'; }
-        };
         // v9.8 "Continue reading / watching" cards: open the title with its Read / Watch window already up
         const continueItem = async (item) => {
             const a = item?.anime; if (!a) return;
@@ -8451,218 +8379,20 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             rd.resume = 0;
         };
         const openWatch = () => {
-            const a = selectedAnime.value; if (!a || !playKind.value) return;
+            const a = selectedAnime.value; if (!a || playKind.value !== 'manga') return;
             if (!readSrc.value || !readTabs.value.some(t => t.id === readSrc.value)) readSrc.value = readTabs.value[0]?.id || null;
             // the source picked doesn't have this title but another one does → start on that one
             const here = availRows.value.find(r => r.id === readSrc.value), yes = availRows.value.find(r => r.st === 'yes');
             if (here && here.st === 'no' && yes && readTabs.value.some(t => t.id === yes.id)) readSrc.value = yes.id;
-            if (a.type === 'TV' && !isMovie.value) {
-                const seasons = seasonsOf(a);
-                if (!seasons.some(x => x.n === wp.season) || wp.id !== a.id) wp.season = seasons.length ? seasonForAbs(a, myProgress(a) + 1) : 1;
-                loadTvSeason(wp.season);
-            }
             wp.id = a.id; wp.open = true;
         };
-        watch(() => wp.season, (n) => { if (wp.open) loadTvSeason(n); });
         watch(() => selectedAnime.value?.id, () => { wp.open = false; });
-        const srcEps = computed(() => isVideoKind.value && readSrc.value !== 'mangadex' && !directSrc.value && !srcView.picking ? srcView.chapters : []);
-        const noSeasons = computed(() => srcEps.value.every(c => !c.season));
-        // the source's episode for a row of the guide
-        const srcEpFor = (season, ep, abs) => {
-            const list = srcEps.value; if (!list.length) return null;
-            return list.find(c => c.season === season && c.ep === ep) || (noSeasons.value ? list.find(c => c.ep === abs) || (season === 1 ? list.find(c => c.ep === ep) : null) : null) || null;
-        };
-        const plainText = (html) => String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-        // Netflix-style rows (number, picture, name, length, summary); "item" is the source's episode that plays
-        const wpRows = computed(() => {
-            const a = selectedAnime.value; const k = playKind.value;
-            if (!a || !k || k === 'manga') return [];
-            const prog = myProgress(a); const done = myEntry(a.id)?.status === 'COMPLETED';
-            const direct = !!directSrc.value;   // a player link / YouTube can play any episode of the guide
-            const row = (r) => ({ ...r, play: !!r.item || direct, watched: done || (r.abs != null && r.abs > 0 && prog >= r.abs) });
-            if (isMovie.value) return [row({ key: 'movie', n: 1, abs: 1, title: titleOf(a), desc: plainText(a.description).slice(0, 320), thumb: a.bannerImage || a.coverImage?.large, runtime: a.runtime, item: srcEps.value[0] || null })];
-            if (a.type === 'TV') {
-                const eps = tvSeasons[`${a.id}:${wp.season}`];
-                if (Array.isArray(eps) && eps.length) return eps.map(e => { const abs = absOf(a, wp.season, e.n); return row({ key: `s${wp.season}e${e.n}`, n: e.n, abs, title: e.name || `Episode ${e.n}`, desc: e.overview, thumb: e.still, runtime: e.runtime, air: e.air, item: srcEpFor(wp.season, e.n, abs) }); });
-                // no episode guide: the source's own list for this season
-                return srcEps.value.filter(c => noSeasons.value || c.season === wp.season).map(c => row({ key: c.id, n: c.ep, abs: c.season ? absOf(a, c.season, c.ep) : c.ep, title: c.title, desc: '', thumb: null, item: c }));
-            }
-            // anime: the source's episodes, with AniList's episode pictures and names where it has them
-            const thumbs = new Map(detailEpisodes.value.filter(e => e.n).map(e => [e.n, e]));
-            if (srcEps.value.length) return srcEps.value.map(c => {
-                const n = c.ep != null ? Math.floor(c.ep) : null; const t = thumbs.get(n);
-                return row({ key: c.id, n: c.ep ?? '–', abs: n, title: (c.title && !/^Episode [\d.]+$/.test(c.title) ? c.title : '') || t?.name || c.title || 'Episode', desc: '', thumb: t?.thumbnail || null, item: c });
-            });
-            const total = a.episodes || (a.nextAiringEpisode?.episode ? a.nextAiringEpisode.episode - 1 : 0) || detailEpisodes.value.length;
-            return Array.from({ length: Math.min(total, 2000) }, (_, i) => { const t = thumbs.get(i + 1); return row({ key: 'e' + (i + 1), n: i + 1, abs: i + 1, title: t?.name || `Episode ${i + 1}`, desc: '', thumb: t?.thumbnail || null, item: null }); });
-        });
-        const wpShown = ref(40);
-        watch(() => [selectedAnime.value?.id, wp.season, readSrc.value], () => { wpShown.value = 40; });
         // the big button: the next thing you haven't read / watched yet
-        const wpContinue = computed(() => {
-            if (playKind.value === 'manga') return continueChapter.value ? { label: `ch ${continueChapter.value.ch}`, chapter: continueChapter.value } : null;
-            const prog = myProgress(selectedAnime.value);
-            const r = wpRows.value.find(x => x.play && x.abs > prog) || (prog ? null : wpRows.value.find(x => x.play));
-            return r ? { label: isMovie.value ? '' : selectedAnime.value?.type === 'TV' ? `S${wp.season} E${r.n}` : `ep ${r.n}`, row: r } : null;
-        });
-        const playContinue = () => { const c = wpContinue.value; if (!c) return; if (c.chapter) openChapter(c.chapter); else playRow(c.row); };
+        const wpContinue = computed(() => continueChapter.value ? { label: `ch ${continueChapter.value.ch}`, chapter: continueChapter.value } : null);
+        const playContinue = () => { const c = wpContinue.value; if (c) openChapter(c.chapter); };
         const wpStarted = computed(() => myProgress(selectedAnime.value) > 0);
-        const playRow = (r) => {
-            if (r.item) return openEpisode(r.item, selectedAnime.value, r);
-            if (directSrc.value) return openDirect(r);
-            if (!readTabs.value.length) { openExtensions(); return; }
-            if (srcView.loading) { showToast(`Still looking on ${currentSite.value?.name || 'the source'}…`); return; }
-            showToast(srcView.picking ? 'Pick the right title first' : `${currentSite.value?.name || 'This source'} doesn’t have this one. Try another source.`, 'error');
-        };
-        const toggleRowWatched = (r) => { const a = selectedAnime.value; if (!a || r.abs == null) return; setProgressTo(a, r.watched ? Math.max(0, r.abs - 1) : r.abs, { ask: false }); };
-
-        // ---------- video player (anime, movies & TV) ----------
-        // A site's player is shown in a sandboxed frame: it plays, but can't open pop-ups or send you to other websites.
-        const vp = reactive({ open: false, anime: null, ep: null, abs: null, label: '', servers: [], i: 0, loading: false, error: '', safe: true, marked: false, local: false });
-        let hls = null, localUrl = null;
-        const vpLabel = (a, c, r) => c?.movie || a?.format === 'MOVIE' ? 'Movie' : c?.season ? `S${c.season} E${c.ep}` : a?.type === 'TV' && r ? `S${wp.season} E${r.n}` : `Episode ${c?.ep ?? r?.n ?? '?'}`;
-        const stopVideo = () => { if (hls) { try { hls.destroy(); } catch {} hls = null; } };
-        const openEpisode = async (c, anime = selectedAnime.value, r = null) => {
-            const s = c.src === 'archive' ? ARCHIVE_SRC : siteSources.value.find(x => x.id === c.src);
-            stopVideo();
-            const abs = r?.abs ?? (c.movie ? 1 : anime?.type === 'TV' && c.season ? absOf(anime, c.season, c.ep) : Math.floor(c.ep || 0) || null);
-            pauseSong();
-            Object.assign(vp, { open: true, anime, ep: c, abs, label: vpLabel(anime, c, r), servers: [], i: 0, loading: true, error: '', marked: false, local: false });
-            addHistory(anime, { key: 'ep:' + vp.label, label: vp.label, sub: s?.name || '' });
-            try {
-                if (!s) throw new Error('That source was removed.');
-                const list = await sourceApi.videos(s, c.link);
-                if (vp.ep?.id !== c.id) return;
-                if (!list.length) throw new Error(`${s.name} didn’t show a player for this episode. The site probably loads its player with protected code of its own, which only its Aniyomi extension can run. Try another source: "Find sources with this title" in Extensions only marks ones that play here.`);
-                vp.servers = list.sort((x, y) => (x.kind === 'embed') - (y.kind === 'embed'));   // plain video files first: they play with nothing around them
-            } catch (err) { if (vp.ep?.id === c.id) vp.error = friendlyErr(err); }
-            finally { if (vp.ep?.id === c.id) vp.loading = false; }
-        };
-        // ---- player links + YouTube: build the player for one row of the episode guide ----
-        const extIds = reactive({});   // "anilistId" → { tmdb, imdb, mal } found for player links
-        const idsFor = async (a, need) => {
-            const k = String(a.id); const have = extIds[k] || (extIds[k] = {});
-            const movie = a.format === 'MOVIE';
-            if (need.tmdb || need.imdb) {
-                if (have.tmdb == null) {
-                    if (a.type === 'TV') have.tmdb = a.extId;
-                    else {   // an anime: find it on TMDB by name (AniList has no TMDB link)
-                        const q = a.title?.english || a.title?.romaji || titleOf(a);
-                        const d = await tmdbCall(movie ? 'search/movie' : 'search/tv', { query: q, ...(a.seasonYear ? { [movie ? 'year' : 'first_air_date_year']: a.seasonYear } : {}) }).catch(() => null);
-                        const d2 = d?.results?.length ? d : await tmdbCall(movie ? 'search/movie' : 'search/tv', { query: q }).catch(() => null);
-                        have.tmdb = d2?.results?.[0]?.id || 0;
-                    }
-                }
-                if (!have.tmdb) throw new Error('Couldn’t find this title on TMDB, which this player link needs ({tmdb} / {imdb}).');
-            }
-            if (need.imdb && have.imdb == null) {
-                const d = await tmdbCall(`${movie ? 'movie' : 'tv'}/${have.tmdb}/external_ids`).catch(() => null);
-                have.imdb = d?.imdb_id || '';
-                if (!have.imdb) throw new Error('Couldn’t get the IMDb number for this title. Use {tmdb} in the player link, or redeploy the Edge Function (the IMDb lookup needs the latest one).');
-            }
-            if (need.mal && have.mal == null) {
-                if (a.type !== 'ANIME' && a.type !== 'MANGA') throw new Error('{mal} only works for anime.');
-                const d = await anilist('query ($id: Int) { Media(id: $id) { idMal } }', { id: a.id }).catch(() => null);
-                have.mal = d?.Media?.idMal || 0;
-                if (!have.mal) throw new Error('This anime has no MyAnimeList number.');
-            }
-            return have;
-        };
-        const linkServer = async (p, a, c) => {
-            const tpl = (c.movie && p.movieUrl) || p.url;
-            const need = { tmdb: /\{tmdb\}/.test(tpl), imdb: /\{imdb\}/.test(tpl), mal: /\{mal\}/.test(tpl) };
-            if (/\{anilist\}/.test(tpl) && a.type !== 'ANIME') throw new Error('{anilist} only works for anime.');
-            const ids = await idsFor(a, need);
-            const url = tpl.replace(/\{(tmdb|imdb|anilist|mal|season|episode|title)\}/g, (_, k) => encodeURIComponent(
-                k === 'tmdb' ? ids.tmdb : k === 'imdb' ? ids.imdb : k === 'mal' ? ids.mal : k === 'anilist' ? a.id : k === 'season' ? (c.season || 1) : k === 'episode' ? (c.ep || 1) : (a.title?.english || a.title?.romaji || titleOf(a))));
-            return { name: p.name, url, kind: /\.m3u8(\?|$)/i.test(url) ? 'hls' : /\.(mp4|webm|m4v)(\?|$)/i.test(url) ? 'file' : 'embed' };
-        };
-        // YouTube: the free, official uploads of this episode (studios' and distributors' own channels first)
-        const OFFICIAL_YT = /muse asia|muse indonesia|muse india|ani-one|tms anime|gundam ?info|tezuka|toei anim|crunchyroll|aniplex|viz media|discotek|retrocrush|pok[eé]mon|sentai|kadokawa|bandai namco|sunrise|nippon animation|dreamworks|pbs kids|cartoon network|nickelodeon|disney|warner bros|lionsgate|mgm|paramount|sony pictures|popcornflix|filmrise|moviesphere|youtube movies/i;
-        const ytEpisodeServers = async (a, c) => {
-            const names = [...new Set([a.title?.english, a.title?.romaji, titleOf(a)].filter(Boolean))];
-            const movie = !!c.movie;
-            const q = movie ? `${names[0]} full movie` : a.type === 'TV' && c.season ? `${names[0]} season ${c.season} episode ${c.ep}` : `${names[0]} episode ${c.ep}`;
-            const list = [...await ytSearch(q), ...(names[1] && !movie ? await ytSearch(`${names[1]} episode ${c.ep}`).catch(() => []) : [])];
-            const words = names.map(n => normTitle(n).split(' ').filter(w => w.length > 2));
-            const epRx = new RegExp(`(?:ep(?:isode)?\\.?\\s*|#|\\be)0*${c.ep}(?!\\d)|\\b0*${c.ep}\\s*(?:[:\\-|–]|$)`, 'i');
-            const seen = new Set();
-            const hits = list.filter(v => {
-                if (seen.has(v.id)) return false; seen.add(v.id);
-                if (!v.secs || v.secs < (movie ? 45 * 60 : 6 * 60)) return false;   // trailers, clips, Shorts
-                const t = normTitle(v.title);
-                if (!words.some(ws => ws.length && ws.every(w => t.includes(w)))) return false;
-                if (/\b(trailer|teaser|preview|clip|opening|ending|amv|reaction|review|recap|explained|compilation)\b/i.test(v.title)) return false;
-                return movie || epRx.test(v.title);
-            }).map(v => ({ v, sc: (OFFICIAL_YT.test(v.channel) ? 30 : 0) + (v.badge ? 10 : 0) }))
-              .sort((x, y) => y.sc - x.sc).slice(0, 6);
-            return hits.map(({ v }) => ({ name: `${v.channel || 'YouTube'} · ${fmtClock(v.secs)}`, url: `https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&rel=0&playsinline=1&iv_load_policy=3`, kind: 'embed', yt: true }));
-        };
-        const openDirect = async (r, anime = selectedAnime.value) => {
-            const d = directSrc.value; if (!d || !anime) return;
-            const movie = isMovie.value || anime.format === 'MOVIE';
-            const tv = anime.type === 'TV' && !movie;
-            const c = { id: `direct:${d.id}:${anime.id}:${r.key}`, key: r.key, title: r.title, season: tv ? wp.season : null, ep: movie ? null : r.n, movie, src: d.id, direct: true };
-            pauseSong(); stopVideo();
-            Object.assign(vp, { open: true, anime, ep: c, abs: r.abs, label: vpLabel(anime, c, r), servers: [], i: 0, loading: true, error: '', marked: false, local: false });
-            addHistory(anime, { key: 'ep:' + vp.label, label: vp.label, sub: d.name });
-            try {
-                const list = d.type === 'youtube' ? await ytEpisodeServers(anime, c) : [await linkServer(d.p, anime, c)];
-                if (vp.ep?.id !== c.id) return;
-                if (!list.length) throw new Error(`YouTube has no free upload of ${movie ? 'this film' : 'this episode'}. Try another source.`);
-                vp.servers = list;
-            } catch (err) { if (vp.ep?.id === c.id) vp.error = friendlyErr(err); }
-            finally { if (vp.ep?.id === c.id) vp.loading = false; }
-        };
-        const loadHls = () => window.Hls ? Promise.resolve(window.Hls) : new Promise((ok, bad) => {
-            const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
-            sc.onload = () => ok(window.Hls); sc.onerror = () => bad(new Error('Couldn’t load the stream player. Try another server.')); document.head.appendChild(sc);
-        });
-        const vpServer = computed(() => vp.servers[vp.i] || null);
-        watch(() => vp.open && vpServer.value?.url, async () => {
-            stopVideo();
-            const sv = vpServer.value; if (!vp.open || !sv || sv.kind === 'embed') return;
-            await nextTick();
-            const el = document.getElementById('vp-video'); if (!el) return;
-            if (sv.kind === 'hls' && !el.canPlayType('application/vnd.apple.mpegurl')) {
-                try {
-                    const Hls = await loadHls(); if (vpServer.value?.url !== sv.url) return;
-                    if (!Hls.isSupported()) throw new Error('This browser can’t play this stream. Try another server.');
-                    hls = new Hls(); hls.loadSource(sv.url); hls.attachMedia(el);
-                    hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) vp.error = 'This stream didn’t load (the site may only allow its own player). Try another server.'; });
-                } catch (err) { vp.error = err.message; }
-            } else el.src = sv.url;
-        });
-        const pickServer = (n) => { vp.i = n; vp.error = ''; };
-        const markEpisodeWatched = async () => {
-            const a = vp.anime; const n = vp.abs; if (!a || !n || vp.local) return;
-            vp.marked = true;
-            if (myProgress(a) < n) await setProgressTo(a, n, { ask: false });
-        };
-        const onVideoTime = (e) => { const v = e.target; if (!vp.marked && v.duration && v.currentTime / v.duration > 0.9) markEpisodeWatched(); };
-        const onVideoError = () => { if (vpServer.value && vpServer.value.kind !== 'embed' && !hls) vp.error = 'This video didn’t load. Try another server.'; };
-        const vpList = () => srcView.chapters.filter(c => c.src === vp.ep?.src);
-        const vpNeighbour = (d) => {
-            if (vp.ep?.direct) { const rows = wpRows.value; const k = rows.findIndex(r => r.key === vp.ep.key); return k === -1 ? null : rows[k + d] || null; }
-            const list = vpList(); const k = list.findIndex(c => c.id === vp.ep?.id); return k === -1 ? null : list[k + d] || null;
-        };
-        const vpGo = async (d) => {
-            const c = vpNeighbour(d); if (!c) return;
-            if (vp.ep?.direct) { if (d > 0 && !vp.marked) markEpisodeWatched(); openDirect(c, vp.anime); return; }
-            if (d > 0 && !vp.marked) markEpisodeWatched();   // moving on = you watched this one
-            if (c.season && selectedAnime.value?.type === 'TV') wp.season = c.season;
-            openEpisode(c, vp.anime, wpRows.value.find(r => r.item?.id === c.id) || null);
-        };
-        const closeVideo = () => { stopVideo(); vp.open = false; vp.servers = []; if (localUrl) { URL.revokeObjectURL(localUrl); localUrl = null; } };
-        const openLocalVideo = (e) => {
-            const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
-            closeVideo(); localUrl = URL.createObjectURL(f);
-            Object.assign(vp, { open: true, anime: selectedAnime.value, ep: { id: 'local', title: f.name }, abs: null, label: f.name, servers: [{ name: 'This device', url: localUrl, kind: 'file' }], i: 0, loading: false, error: '', marked: false, local: true });
-        };
         window.addEventListener('keydown', (e) => {
-            if (e.key !== 'Escape') return;
-            if (vp.open) closeVideo();
-            else if (wp.open && !extOpen.value && !rd.open) wp.open = false;
+            if (e.key === 'Escape' && wp.open && !extOpen.value && !rd.open) wp.open = false;
         });
 
         // ---------- OWNER: who may see 18+ content ----------
@@ -8866,7 +8596,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- CHAT ----------
         // GIFs (GIPHY, or Tenor) and the emoji list (emoji-api.com) come through the Edge Function, which keeps the keys.
         // Without the keys, GIF uploads / links still work and the emoji panel shows a built-in set.
-        const TENOR_KEY = true;   // (the GIF search box always shows; it says what's missing if the key isn't set)
         const makeSticker = (emoji, text, c1, c2) => 'data:image/svg+xml;utf8,' + encodeURIComponent(
             `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs>`
             + `<g transform="rotate(-6 100 100)"><rect x="18" y="26" width="164" height="148" rx="38" fill="#fff"/><rect x="26" y="34" width="148" height="132" rx="31" fill="url(#g)"/>`
@@ -9076,7 +8805,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // whichever pane is open (a DM or a group) gets the message
         const sendAny = (msg) => groupWith.value ? sendGroupMessage(msg) : sendMessage(msg);
         const sendText = async () => { const body = chatDraft.value.trim(); if (!body) return; if (await sendAny({ kind: 'text', body: body.slice(0, 4000) })) chatDraft.value = ''; };
-        const sendSticker = (st) => { chatPanel.value = ''; sendAny({ kind: 'sticker', payload: { id: st.id } }); };
         // v9.8 saved GIFs: star one (in the picker or in a chat) and it's in "Saved" on every device you sign in on
         const gifTab = ref('saved');
         const isGifSaved = (url) => (PREFS.savedGifs || []).some(g => g.url === url);
@@ -9277,7 +9005,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const peopleLoading = ref(false);
         const fetchPeople = async () => {
             peopleLoading.value = true;
-            const { data } = await sb.from('profiles').select('*').order('last_seen', { ascending: false, nullsFirst: false }).limit(300);
+            const { data } = await sb.from('profiles').select(PROFILE_COLS).order('last_seen', { ascending: false, nullsFirst: false }).limit(300);
             peopleLoading.value = false;
             people.value = (data || []).filter(p => p.id !== uid());
             const known = new Set(profileById.value.keys());
@@ -9760,6 +9488,9 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 if (ch.length && notifOn('media_changed')) notes.push({ user_id: me, kind: 'media_changed', media_id: g.id, media_type: 'GAME', media_title: titleOf(g), media_cover: g.coverImage?.large || null, text: ch.join(' · ') });
             });
             if (notes.length) { const { error } = await sb.from('notifications').insert(notes); if (!error) fetchNotifications(); }
+            // (v1.5 a game found through your Steam library keeps its Steam id: IGDB doesn't always list the Steam page,
+            // and losing it took "Play on Steam" and the achievements off that game the next day)
+            fresh.forEach(g => { const old = all.get(g.id); if (!g.steamId && old?.steamId) g.steamId = old.steamId; });
             const byId = new Map(fresh.map(g => [g.id, g]));
             const soloRows = soloList.value.filter(e => byId.has(e.anime.id) && JSON.stringify(slimAnime(byId.get(e.anime.id))) !== JSON.stringify(slimAnime(e.anime)))
                 .map(e => ({ user_id: me, media_id: e.anime.id, media_type: 'GAME', media_data: entryData(e, byId.get(e.anime.id)), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt }));
@@ -9831,31 +9562,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         setInterval(() => checkFollowed(), 30 * 60 * 1000);
 
-        // ---------- links you save on an anime page ----------
-        const mediaLinks = ref([]);
-        const linkDraft = reactive({ url: '', label: '', episode: '', busy: false });
-        const fetchMediaLinks = async (mediaId) => {
-            mediaLinks.value = [];
-            if (!uid() || !mediaId) return;
-            const { data, error } = await sb.from('media_links').select('*').eq('user_id', uid()).eq('media_id', mediaId).order('created_at', { ascending: false });
-            if (!error && selectedAnime.value?.id === mediaId) mediaLinks.value = data || [];
-        };
-        const saveMediaLink = async () => {
-            let url = linkDraft.url.trim(); if (!url || linkDraft.busy || !selectedAnime.value) return;
-            if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-            linkDraft.busy = true;
-            const row = { user_id: uid(), media_id: selectedAnime.value.id, url: url.slice(0, 2000), label: linkDraft.label.trim().slice(0, 120) || null, episode: linkDraft.episode ? Math.max(0, Math.floor(Number(linkDraft.episode))) : null };
-            const { data, error } = await sb.from('media_links').insert(row).select().single();
-            linkDraft.busy = false;
-            if (error) { showToast('Could not save link: ' + error.message + (/media_links/.test(error.message) ? ' — run the v7.2 SQL in Supabase' : ''), 'error'); return; }
-            mediaLinks.value = [data, ...mediaLinks.value];
-            Object.assign(linkDraft, { url: '', label: '', episode: '' });
-        };
-        const deleteMediaLink = async (l) => {
-            mediaLinks.value = mediaLinks.value.filter(x => x.id !== l.id);
-            await sb.from('media_links').delete().eq('id', l.id);
-        };
-        watch(() => selectedAnime.value?.id, (id) => { if (id) fetchMediaLinks(id); });
 
         // ---------- watch buddies: your Plan to watch lists stay in sync ----------
         const buddies = ref([]);        // rows from watch_buddies that involve you
@@ -9869,7 +9575,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const buddyWith = (userId) => buddies.value.find(b => b.requester === userId || b.addressee === userId) || null;
         const buddyState = (userId) => { const b = buddyWith(userId); if (!b) return 'none'; if (b.status === 'accepted') return 'buddies'; return b.requester === uid() ? 'sent' : 'incoming'; };
         const buddyRequests = computed(() => buddies.value.filter(b => b.status === 'pending' && b.addressee === uid()));
-        const buddyList = computed(() => buddies.value.filter(b => b.status === 'accepted').map(b => personOf(b.requester === uid() ? b.addressee : b.requester)));
         const askBuddy = async (userId) => {
             const { error } = await sb.from('watch_buddies').insert({ requester: uid(), addressee: userId });
             if (error) { showToast('Could not send: ' + error.message + (/watch_buddies/.test(error.message) ? ' — run the v7.2 SQL in Supabase' : ''), 'error'); return; }
@@ -9953,7 +9658,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // queue: one AniList request at a time, newest change per title wins
         const alQueue = new Map();
         let alRunning = false;
-        const alEnqueue = (id, op) => { if (!alLink.value || alSuppress || !id) return; alQueue.delete(id); alQueue.set(id, op); alSync.pending = alQueue.size; runAlQueue(); };
+        // (v1.5 only anime and manga: games, movies & TV and songs were sent to AniList too, which refused them and showed a sync error)
+        const alEnqueue = (id, op) => { if (!alLink.value || alSuppress || !id || id >= GAME_BASE) return; alQueue.delete(id); alQueue.set(id, op); alSync.pending = alQueue.size; runAlQueue(); };
         const runAlQueue = async () => {
             if (alRunning) return; alRunning = true;
             try {
@@ -10069,7 +9775,22 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             } catch (err) { steamAcc.error = err.message || String(err); }
             finally { steamAcc.busy = false; }
         };
-        const disconnectSteam = () => { PREFS.steam = null; Object.assign(steamAcc, { lib: null, at: 0, hidden: false, result: null, error: '' }); try { localStorage.removeItem(STEAM_LIB_KEY); } catch {} showToast('Steam unlinked'); };
+        const disconnectSteam = () => { PREFS.steam = null; Object.assign(steamAcc, { lib: null, at: 0, hidden: false, result: null, error: '' }); Object.keys(achByApp).forEach(k => delete achByApp[k]); try { localStorage.removeItem(STEAM_LIB_KEY); localStorage.removeItem(ACH_TOTAL_KEY); } catch {} showToast('Steam unlinked'); };
+        // v1.5 once a day (when anicoop opens) the hours of the Steam games on your list follow Steam — only ever up, and
+        // nothing else changes (status, score…)
+        const syncSteamHours = async () => {
+            const me = uid(); if (!me || !PREFS.steam?.id) return;
+            const KEY = `anicoop_steamsync:${me}`;
+            try { if (localStorage.getItem(KEY) === localDay()) return; } catch { return; }
+            if (!steamAcc.lib) await loadSteamLib();
+            const lib = steamAcc.lib; if (!lib) return;
+            try { localStorage.setItem(KEY, localDay()); } catch {}
+            const entries = soloList.value.filter(e => e.anime?.type === 'GAME' && e.anime.steamId && lib[e.anime.steamId])
+                .map(e => ({ e, h: Math.round(lib[e.anime.steamId].mins / 60) })).filter(x => x.h > (x.e.progress || 0)).map(x => ({ ...x.e, progress: x.h }));
+            if (!entries.length) return;
+            try { entries.forEach(setSoloLocal); await upsertSolo(entries); showToast(`Steam: hours played updated on ${entries.length} game${entries.length === 1 ? '' : 's'}`); }
+            catch (err) { console.warn('steam hours', err.message || err); fetchSolo(); }
+        };
         const steamCount = computed(() => steamAcc.lib ? Object.keys(steamAcc.lib).length : 0);
         const steamOwned = (appid) => appid && steamAcc.lib ? steamAcc.lib[appid] || null : null;
         const steamHours = (g) => g ? Math.round(g.mins / 6) / 10 : 0;
@@ -10111,12 +9832,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const loadAch = async (appid, force = false) => {
             const id = PREFS.steam?.id; if (!id || !appid) return;
             if (!force && ach.app === appid && ach.items.length) return;
+            // (v1.5 the list is emptied before the next game's loads: it used to keep the previous game's achievements)
+            const other = ach.app !== appid;
             Object.assign(ach, { app: appid, loading: true, error: '', private: false, shown: 24, reveal: {} });
-            if (ach.app !== appid || force) ach.items = [];
+            if (other || force) ach.items = [];
             try {
                 const d = await steamFn({ action: 'achievements', steamid: id, appid });
                 if (ach.app !== appid) return;
                 ach.items = d.items || []; ach.private = !!d.private;
+                if (ach.items.length && !ach.private) achByApp[appid] = { done: ach.items.filter(a => a.done).length, total: ach.items.length };   // (the poster count)
             } catch (err) { if (ach.app === appid) ach.error = err.message || String(err); }
             finally { if (ach.app === appid) ach.loading = false; }
         };
@@ -10135,7 +9859,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const achTotal = reactive({ done: 0, total: 0, perfect: 0, games: 0, loading: false, at: 0 });
         const loadAchTotal = async (force = false) => {
             const id = PREFS.steam?.id; if (!id || !steamAcc.lib || achTotal.loading) return;
-            if (!force) { try { const c = JSON.parse(localStorage.getItem(ACH_TOTAL_KEY) || 'null'); if (c?.id === id && Date.now() - c.at < 6 * 3600e3) { Object.assign(achTotal, c.v, { at: c.at }); return; } } catch {} }
+            if (!force) { try { const c = JSON.parse(localStorage.getItem(ACH_TOTAL_KEY) || 'null'); if (c?.id === id && Date.now() - c.at < 6 * 3600e3 && c.apps) { Object.assign(achTotal, c.v, { at: c.at }); Object.assign(achByApp, c.apps); return; } } catch {} }
             const apps = Object.values(steamAcc.lib).filter(g => g.mins > 0).sort((a, b) => b.mins - a.mins).map(g => g.appid).slice(0, 600);
             achTotal.loading = true;
             try {
@@ -10144,10 +9868,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 const vals = Object.values(all);
                 const v = { done: vals.reduce((n, x) => n + x.done, 0), total: vals.reduce((n, x) => n + x.total, 0), perfect: vals.filter(x => x.done === x.total).length, games: vals.length };
                 Object.assign(achTotal, v, { at: Date.now() });
-                try { localStorage.setItem(ACH_TOTAL_KEY, JSON.stringify({ id, at: achTotal.at, v })); } catch {}
+                Object.assign(achByApp, all);
+                try { localStorage.setItem(ACH_TOTAL_KEY, JSON.stringify({ id, at: achTotal.at, v, apps: all })); } catch {}
             } catch {} finally { achTotal.loading = false; }
         };
         watch(() => activeTab.value === 'profile' && !viewUserId.value && PREFS.steam?.id && steamCount.value ? PREFS.steam.id : null, (id) => { if (id) loadAchTotal(); });
+        // (v1.5 and in the Games section, for the posters)
+        watch(() => mediaType.value === 'GAME' && currentAppView.value === 'tracker' && PREFS.steam?.id && steamCount.value ? PREFS.steam.id : null, (id) => { if (id) loadAchTotal(); });
         // v1.4 Play on Steam: a small anicoop window while Steam starts the game (your hours and achievements in it)
         const steamPlay = reactive({ open: false, game: null, tries: 0 });
         const playOnSteam = (g) => {
@@ -10437,22 +10164,19 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
-            plForm, extPlayers, addPlayerLink, removePlayerLink, directSrc,
-            wp, openWatch, wpRows, wpShown, wpContinue, wpStarted, playContinue, playRow, toggleRowWatched, tvSeasons, seasonsOf, isMovie, isVideoKind,
-            vp, vpServer, pickServer, closeVideo, openLocalVideo, onVideoTime, onVideoError, vpGo, vpNeighbour, markEpisodeWatched,
-            gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
+                        wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
             siteSources, srcForm, SOURCE_TEMPLATES, installRepoItem, repoLangs, repoShown, repoState, addSource, testSource, removeSource, loadRepo, repoInstalled, readSrc, srcView, readTabs, currentSite, chapterList, loadSourceFor, chooseMatch, changeMatch, onPageError,
             EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdSeg, rdPageKey, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
-            moreWatch, reader, readInfo, readLangs, readSources, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, ytVol, setYtVol, ytQuality, ytNative, fmtClock, seriesLimit, seriesVisible,
+            reader, readInfo, readLangs, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, ytVol, setYtVol, ytQuality, ytNative, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,
             fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback,
             gameExtra, pickSeries, seriesShown, seriesTotals, movieTotals, fmtMins, storyEdit, storySort, openGameLink, playVideo, scrollRow, shotViewer, openShot, closeShot, stepShot, fmtHours,
             FAV_SECTIONS, favTab, favsIn, favSectionOf, openFavChar, activityOpen, toggleMyActivity, openViewedActivity, setActivityHidden, activityLine, openActivity, checkGames,
-            STATUS_ORDER, statusPick, MAX_REPEATS, lilBro, setFormStatus, repeatNow, repeatsDone, STATUS_LABELS, STATUS_SHORT, STATUS_COLORS, UNIT, ACCENTS, tabs,
+            STATUS_ORDER, statusPick, MAX_REPEATS, lilBro, setFormStatus, repeatNow, STATUS_LABELS, STATUS_SHORT, STATUS_COLORS, UNIT, ACCENTS, tabs,
             authReady, currentUser, currentProfile, isSignUp, authLoading, authForm, handleAuth, signOut,
             introMode, skipIntro, warmSection, ROLE_PERMS, ROLE_ICONS, AWARD_ICONS, ROLE_COLORS, roles, roleLinks, rolesReady, rolesOf, can, anyPower, canTouchRole, isOwnerId, roleDraft, editRole, toggleRolePerm, saveRole, deleteRole, moveRole, hasRole, toggleUserRole, adminLookup, adminFind, awardsOf, awardBox, openAwardBox, giveAward, removeAward, moderateProfile, adminMenu, heroPosters, heroPath, HERO_POINTS, heroSave, statusLabelFor, showToTop, scrollToTop,
             currentAppView, activeTab, openTracker, switchTab, canGoBack, goBack, goHome,
@@ -10463,37 +10187,34 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             editForm, inlineForm, isSaving, stepProgress, toggleFormSquad,
             listFilterStatus, listFilterGroup, listSearchQuery, filteredGroupedList, statusCounts, squadCount, listFiltersOn, clearListFilters,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
-            debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails, closeAnimeDetails,
-            profileStats, profileStatCards, rankedAnime, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
+            debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails,             profileStats, profileStatCards, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
-            titleOf, initialOf, timeAgo, personOf,
+            titleOf, timeAgo, personOf,
             quickMenuFor, soloEntry, myEntry, onPlusClick, quickSolo, sheetAnime, closeSheet, sheetAction,
             randomOpen, randomFilter, randomStatusOpts, randomFormatOpts, randomWideFiltered, randomPick, randomMore, randomCount, randomPicks, randomRolling, randomSpinKey, randomGenres, randomPool, randomSourceLabel, randomWide, randomWideType, openRandom, openRandomSoon, rollRandom, clearRandomFilters,
-            avatarInput, avatarUploading, changeProfilePic, onAvatarFile, removeProfilePic,
-            cropper, cropImgStyle, cropDown, cropMove, cropUp, cropWheel, closeCropper, applyCrop, CROP_VIEW,
-            profileEdit, openProfileEdit, saveProfileEdit,
+            avatarInput, avatarUploading, changeProfilePic, onAvatarFile,             cropper, cropImgStyle, cropDown, cropMove, cropUp, cropWheel, closeCropper, applyCrop, CROP_VIEW,
+            profileEdit, saveProfileEdit,
             installPrompt, installApp, dismissInstall,
             trailerOf, trailerUrl, trailerExternal, playTrailer, closeTrailer,
             squads, squadDraft, openSquadDraft, toggleDraftMember, draftAutoName, createSquad, squadAddMember, renameSquad, leaveSquad, friendsNotIn, squadAddOpen, squadById,
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
-            viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            viewUserId, viewedUser, viewedStats, viewedIsFriend, sharedSquads, openUser,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
             gifTab, isGifSaved, toggleSaveGif, gifMore, STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
-            incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendSticker, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
-            msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, TENOR_KEY, emoji, EMOJI_GROUPS, emojiShown, insertEmoji, noteCaret, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,
+            incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
+            msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, emoji, EMOJI_GROUPS, emojiShown, insertEmoji, noteCaret, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,
             statColumns, myRecent, viewedRecent,
             // v7
             confirmBox, closeConfirm,
             friendsOnAnime, isOnline, people, peopleTab, peopleLoading, peopleOnline, peopleOffline, lastSeenText, friendStateOf, addFriendById, viewedFriends,
             EFFECTS, NAME_STYLES, effectParticles, heroColors, decorOpen,
             personKind, FAV_PEOPLE, isPeopleTab, favTheirTab, favItems, favCount, openFavItem, removeFavItem, FAV_EMPTY, heroGlow, FRAMES, THEMES, BADGES, myBadges, viewedBadges, decorOf, decorDraft, togglePinBadge, toggleHideBadge, hideBadgeNow, myEarnedBadges, decorDirty, saveDecor, profileBg, pageBg, bgBannerChoices, setBgUrl, onBgFile, bgUrlDraft, bgUploading, bgInput,
-            debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, SECTIONS, SECTION_OF_TYPE, tierManhwaNow, tierChars, tierWho, tierPlaceholder, tierNoun, picOf, charPicFix, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
-            follows, isFollowing, toggleFollow, checkFollowed, mediaLinks, linkDraft, saveMediaLink, deleteMediaLink,
-            buddyState, buddyRequests, buddyList, askBuddy, acceptBuddy, endBuddy,
+            debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, SECTIONS, SECTION_OF_TYPE, tierManhwaNow, tierWho, tierPlaceholder, tierNoun, picOf, charPicFix, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
+            follows, isFollowing, toggleFollow, checkFollowed,             buddyState, buddyRequests, askBuddy, acceptBuddy, endBuddy,
             siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList, malLink, malSync, connectMal, disconnectMal, pushAllToMal,
             rankTab, RANK_CATS, myRankings, viewedRankings, shownOf, showMoreRank, rankEdit, moveRank, setRankPos, resetRankOrder, myRankOrders, rankDrag, onRankPointerDown, onRankPointerMove, onRankPointerUp, rankRowStyle,
             compareBig, compareAddable, theirList, openTheirList, theirCounts, theirGrouped, openFriendStat, setViewedSection, openFriendLists, openFriendsManage, friendsOpen, friendsQuery, friendsFiltered, friendCounts,
@@ -10502,10 +10223,10 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, favVAs, favStaffOnly, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, plAddPick, createPlaylist, togglePlaylistSong, inPlaylist, addPickToPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, plAddSongs, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, artistView, openAlbum, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, artistQ, artistHits, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
-            detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, watchLinks, setProgressTo,
-            COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost,
-            picker, openPicker, choosePick, clearOption, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,
+            favStaff, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, createPlaylist, togglePlaylistSong, inPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, artistQ, artistHits, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, setProgressTo,
+            COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost, safeHref,
+            picker, openPicker, choosePick, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,
             // v4
             PREFS, SCORE_FORMATS, THEME_ACCENTS, LIST_ORDERS, formatScore, formatAvg, epBadge, posterGrid, altTitleOf,
             settingsOpen, settingsTab, SETTINGS_TABS, openSettings, notifOn, toggleNotif, NOTIF_GROUPS,
@@ -10524,7 +10245,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
 }).component('quick-add', QuickAdd).component('track-row', TrackRow).component('poster-card', PosterCard).component('user-avatar', UserAvatar).component('score-input', ScoreInput).directive('infinite', InfiniteScroll).directive('dock-height', DockHeight).directive('drag-fab', DragFab).directive('focus-select', { mounted: (el) => setTimeout(() => { el.focus(); el.select?.(); }, 60) }).mount('#app');
 
 // Offline support + "install as app"
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+// (v1.5 not on this computer's own test server: app.js is served from the saved copy until its ?v= changes, which would
+// hide every edit made while testing)
+const LOCAL_TEST = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+if (LOCAL_TEST && 'serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(list => list.forEach(r => r.unregister())).catch(() => {});
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !LOCAL_TEST) {
     window.addEventListener('load', () => {
         // updateViaCache:'none' → the browser always re-downloads sw.js, so a new upload is noticed right away
         navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
