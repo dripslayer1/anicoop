@@ -314,6 +314,16 @@ These are cumulative; the README has one section per version.
   call) and saves through `saveImported` (no AniList / MAL echo). Game page: Play on Steam + hours / Get it on Steam.
   Verified: IGDB matching live (5/5), import statuses, UI; the Steam calls themselves only after the owner deploys.
   Note: a user could type any SteamID into their own settings (only shows that public library to themselves).
+- **v1.4** (cache tag `?v=1.4b` / `anicoop-v1.4b`; Edge Function changed): **status `NONE`** ("No status", grey) = only on a
+  mark list; list_entries.status has no check constraint, so no SQL. Grouping ignores it; `upsertSolo` sends AniList /
+  MAL a delete for it. `quickSolo` → `uncheckStatus` when the status is tapped again; `dropFromSolo` removes the solo
+  row only. `toggleFlag`: new ROTATION → NONE; removing the last mark from a NONE entry drops it. Title-page status
+  buttons don't uncheck (they also save squads). Watch question: always n = 1 (lastN / keepN removed). **Resume
+  reading:** readPos keeps `prog` (your count when saved); "moved on" = count went up since (the old date test misfired
+  because saving the spot updates the row). **Steam achievements:** `steamuser` actions `achievements` (GetSchemaForGame +
+  GetPlayerAchievements + global % v0002) and `achsummary` (40 apps per call, 8 at a time, cached 30 min). Client `ach` /
+  `achView` / `achStats` on game pages, `achTotal` on your own profile (played games, ≤ 600, kept 6 h). `playOnSteam` shows
+  `.steam-launch` and sets `location.href = steam://run/<id>` after 0.65 s.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
