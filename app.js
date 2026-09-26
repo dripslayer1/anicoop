@@ -205,7 +205,7 @@ const slimAnime = (a) => ({
 });
 // what a list row saves in media_data: the title's info + your repeat counters
 // (v10.3 + your own watch link for anime / TV, media_data.wl)
-const entryData = (e, anime = e.anime) => ({ ...slimAnime(anime), ...(e.repeats?.length ? { rep: e.repeats.slice(0, MAX_REPEATS) } : {}), ...(e.lilbro ? { lilbro: true } : {}), ...(e.rewish ? { rw: true } : {}), ...(e.rotation ? { rot: true } : {}), ...(e.watchLink ? { wl: e.watchLink } : {}) });
+const entryData = (e, anime = e.anime) => ({ ...slimAnime(anime), ...(e.repeats?.length ? { rep: e.repeats.slice(0, MAX_REPEATS) } : {}), ...(e.lilbro ? { lilbro: true } : {}), ...(e.rewish ? { rw: true } : {}), ...(e.rotation ? { rot: true } : {}), ...(e.watchLink ? { wl: e.watchLink } : {}), ...(e.readPos?.ch != null ? { rp: e.readPos } : {}) });
 const typeOf = (i) => i?.anime?.type || 'ANIME';
 const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const timeAgo = (iso) => {
@@ -219,7 +219,7 @@ const timeAgo = (iso) => {
 const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0, inSolo: false, squadIds: [], originalSquadIds: [], wasSolo: false });
 // rewatch counters (media_data.rep, one number per repeat) and the hidden "lil bro" flag live inside media_data, so they need no new column
 const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
-    repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '' });
+    repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
 // the fields every list/browse query asks AniList for
 const MEDIA_FIELDS = 'id type isAdult episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
 const LIST_ORDERS = [
@@ -2635,9 +2635,9 @@ createApp({
         };
         // saves that don't mention the repeat counters (status buttons, batch edits…) keep the ones already saved
         const withRepeats = (e) => {
-            if (e.repeats !== undefined && e.lilbro !== undefined && e.rewish !== undefined && e.rotation !== undefined && e.watchLink !== undefined) return e;
+            if (e.repeats !== undefined && e.lilbro !== undefined && e.rewish !== undefined && e.rotation !== undefined && e.watchLink !== undefined && e.readPos !== undefined) return e;
             const o = soloList.value.find(i => i.anime?.id === e.anime.id);
-            return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '' };
+            return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '', readPos: e.readPos ?? o?.readPos ?? null };
         };
         const soloRow = (e) => { e = withRepeats(e); return { user_id: uid(), media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score || 0, progress: e.progress || 0, updated_at: new Date().toISOString() }; };
         const upsertSolo = async (entries) => {
@@ -8125,9 +8125,26 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (!v || rd.loading || !rd.pages.length) return;
             const c = rd.chapter; if (Number.isNaN(chNum(c))) return;
             const seg = rdSeg.value, page = Math.min(rd.i - (seg?.start || 0), (seg?.count || rd.pages.length) - 1);
-            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), at: Date.now() };
+            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), n: seg?.count || rd.pages.length, at: Date.now() };
             saveReadPos();
+            syncReadPosSoon(rd.manga.id);
         });
+        // v1.2 your spot is also kept with the title on your list, so Continue reading works on your other devices.
+        // Saved straight to the row (not through the AniList / MyAnimeList sync: nothing changed for them).
+        const syncReadPos = async (id) => {
+            const e = soloEntry(id), p = readPos[id];
+            if (!e || !p || !uid()) return;
+            if (e.readPos && e.readPos.chId === p.chId && e.readPos.page === p.page) return;
+            const entry = { ...e, readPos: { ...p } };
+            setSoloLocal(entry);
+            try { await sb.from('list_entries').update({ media_data: entryData(entry) }).eq('user_id', uid()).eq('media_id', id); } catch {}
+        };
+        const rpTimers = {};
+        const syncReadPosSoon = (id) => { clearTimeout(rpTimers[id]); rpTimers[id] = setTimeout(() => syncReadPos(id), 5000); };
+        // closing the reader or leaving the page saves it right away
+        const flushReadPos = () => Object.keys(rpTimers).forEach(id => { clearTimeout(rpTimers[id]); delete rpTimers[id]; syncReadPos(Number(id) || id); });
+        watch(() => rd.open, (on) => { if (!on) flushReadPos(); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) flushReadPos(); });
         const appendNext = async () => {
             const segs = rd.segs || []; const last = segs[segs.length - 1]; if (!last || rd.appending || rd.local) return;
             const c = rdNeighbourOf(last.ch, 1); if (!c) return;
@@ -8371,10 +8388,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const until = (fn, ms = 15000) => new Promise((ok) => { const t0 = Date.now(); const tick = () => { let v = null; try { v = fn(); } catch {} if (v) ok(v); else if (Date.now() - t0 > ms) ok(null); else setTimeout(tick, 150); }; tick(); });
         // the chapter you were in (and the page), unless you've finished it since — then the next one you haven't read.
         // The Read window stays open underneath, so closing the reader shows every chapter.
+        // v1.2 always where you left off: the newest spot (this browser or your account) → that chapter and page; if you
+        // had reached its last page, the chapter after it. Only when your count moved past it since (you read or marked
+        // chapters somewhere else) does it go to the first chapter you haven't read.
         const resumeReading = async (a) => {
-            const pos = readPos[a.id], prog = myProgress(a);
-            const inIt = pos && Math.floor(parseFloat(pos.ch)) > prog;
-            const want = inIt ? parseFloat(pos.ch) : null;
+            const e = soloEntry(a.id), prog = myProgress(a);
+            const pos = [readPos[a.id], e?.readPos].filter(p => p?.ch != null && !Number.isNaN(parseFloat(p.ch))).sort((x, y) => (y.at || 0) - (x.at || 0))[0] || null;
+            const movedOn = pos && prog > Math.floor(parseFloat(pos.ch)) && e?.updatedAt && new Date(e.updatedAt).getTime() > (pos.at || 0) + 60000;
+            const want = pos && !movedOn ? parseFloat(pos.ch) : null;
+            const finished = want != null && pos.n > 0 && pos.page >= pos.n - 1;
             if (pos?.src && readTabs.value.some(t => t.id === pos.src)) readSrc.value = pos.src;   // the same source as last time
             const here = () => selectedAnime.value?.id === a.id && wp.open && !rd.open;
             const ready = await until(() => !here() || (!srcView.loading && !reader.loading && (rdChapters.value.length || srcView.picking || srcView.error || reader.error)), 20000);
@@ -8382,15 +8404,16 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             // MangaDex sends the newest 100 first: older chapters need the rest of the list
             const low = chNum(rdChapters.value[0]), need = want ?? prog + 1;
             if (readSrc.value === 'mangadex' && low > need && reader.chapters.length < reader.total) { await loadAllChapters(); if (!here()) return; }
-            const c = want != null ? rdChapters.value.find(x => chNum(x) === want) : continueChapter.value;
+            let c = null;
+            if (want != null) c = finished ? rdChapters.value.filter(x => chNum(x) > want).sort((x, y) => chNum(x) - chNum(y))[0] || rdChapters.value.find(x => chNum(x) === want) : rdChapters.value.find(x => chNum(x) === want);
+            if (!c) c = continueChapter.value;   // not on this source (or nothing saved yet): the first one you haven't read
             if (!c) return;
-            const page = want != null && chNum(c) === want ? pos.page || 0 : 0;
+            const page = want != null && !finished && chNum(c) === want ? pos.page || 0 : 0;
             await openChapter(c, a);
-            if (page > 0 && rd.chapter?.id === c.id && rd.pages.length) {
+            if (rd.chapter?.id === c.id && rd.pages.length) {
                 const p = Math.min(page, rd.pages.length - 1);
-                if (rd.mode !== 'vertical') rd.i = p;
-                else { rd.resume = p; scrollStripTo(p); }
-                showToast(`Back to chapter ${c.ch} · page ${p + 1}`);
+                if (p > 0) { if (rd.mode !== 'vertical') rd.i = p; else { rd.resume = p; scrollStripTo(p); } }
+                showToast(p > 0 ? `Back to chapter ${c.ch} · page ${p + 1}` : `Chapter ${c.ch}`);
             }
         };
         // webtoon mode: the pages above load first (so their height is known), then the strip scrolls to the page

@@ -296,6 +296,14 @@ These are cumulative; the README has one section per version.
   old links work too. Game pages: `steam://run/<steamId>` "Play on Steam". **Steam account linking not built:** it needs
   Steam OpenID sign-in checked by the Edge Function and a `STEAM_API_KEY` secret for GetOwnedGames (profile game details
   must be public) — offered to the owner.
+- **v1.2** (cache tag `?v=1.2b` / `anicoop-v1.2b`): **Bug since v1.0:** a `<transition name="toast">` meant for the
+  batch bar wrapped the header search panel, the tour and the episode question; a `<transition>` renders one child, so
+  the tour's inner `<transition>` took the slot and `.wask` never showed. Each now has its own wrapper. **Don't put two
+  elements inside one `<transition>`.** **Resume reading:** readPos records `n` (pages in the chapter) and is also
+  saved to the row (`media_data.rp`, `readPos` in listRow / entryData / withRepeats) by `syncReadPos` — a plain
+  `update` 5 s after the last page turn, or when the reader closes / the tab hides (no AniList / MAL push).
+  `resumeReading` takes the newest of local / account; last page reached → next chapter; only if progress passed it
+  and the row was updated after it → `continueChapter`. Tested with MangaDex (Ki ni Natteru Hito ga Otoko ja Nakatta).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

@@ -845,3 +845,12 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
 - **Play on Steam:** a game on Steam has a **Play on Steam** button on its page. It opens Steam and starts the game
   (Steam offers to install it if you don't have it).
 
+## v1.2 — Continue reading goes back to your spot · the episode question is back
+
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says **v1.2**.
+
+- **Continue reading** (Browse) always opens the chapter and page where you stopped. If you had reached the last page
+  of that chapter, it opens the next one. Your spot is saved with your list too, so it works on your other devices.
+  (Only if you read or marked chapters somewhere else after that does it start from the first unread chapter.)
+- **Fixed:** the "How many episodes did you watch?" question stopped showing after v1.0 (the tour's code hid it).
+
