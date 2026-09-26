@@ -2039,3 +2039,7 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .tour-fade-enter-active, .tour-fade-leave-active { transition: opacity .25s ease; }
 .tour-fade-enter-from, .tour-fade-leave-to { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .tour-spot, .tour-pos, .tour-bar i { transition: none; } .tour-card, .tour-icon, .tour-logo span, .tour-logo i, .tour-spot > i::after, .tour-confetti i { animation: none; } }
+
+/* ===== v1.0.2 during the tour: pages and posters appear at once (their fade-ins made the Lists step stutter) ===== */
+.tour-on .poster-in, .tour-on .view-enter-active, .tour-on .view-leave-active { animation: none !important; transition: none !important; }
+.tour-on .view-enter-from, .tour-on .view-leave-to { opacity: 1; transform: none; }

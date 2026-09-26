@@ -6136,6 +6136,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         let tourT = 0, tourQueued = false;
         const tourSoon = () => { if (tourQueued || !tour.on) return; tourQueued = true; requestAnimationFrame(() => { tourQueued = false; placeTour(); }); };
         const tourLoop = () => { if (!tour.on) return; placeTour(); tourT = setTimeout(tourLoop, 600); };   // late layout changes (images loading…)
+        // v1.0.2 wait until the browser has drawn the new page and has a quiet moment (at most ~0.4 s)
+        const tourSettle = () => new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (window.requestIdleCallback) requestIdleCallback(() => ok(), { timeout: 400 }); else setTimeout(ok, 60);
+        })));
+        // while the tour runs, pages and posters appear without their fade-in (hundreds of them made Lists stutter)
+        watch(() => tour.on, (on) => document.documentElement.classList.toggle('tour-on', on));
         const tourScene = (st) => {   // the section a step needs: manga steps in Manga, the rest in Anime
             const want = st.manga ? 'manga' : 'anime';
             if (section.value !== want && SECTIONS[want]) openSection(want);
@@ -6152,6 +6158,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     if (!st.hero || st.manga) tourScene(st);
                     if (st.go) { try { await st.go(); } catch {} }
                     await nextTick();
+                    await tourSettle();   // v1.0.2 let a big page (Lists) finish building before anything moves
                     tourEl = st.sel?.length ? await waitFor(st.sel) : null;
                     if (!tourEl && st.skipIfMissing) { n += dir; continue; }
                     break;

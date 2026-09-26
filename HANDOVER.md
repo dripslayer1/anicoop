@@ -283,6 +283,9 @@ These are cumulative; the README has one section per version.
   manga steps (`manga: true` → `tourScene` switches to Manga, others to Anime; the start section comes back in
   `endTour`), "add sources" opens Extensions and the repository box with `copy: MANGA_REPO` (keiyoushi). No Songs in
   the text (admins only).
+- **v1.0.2 (step 9 → 10 still lagged):** Lists mounts hundreds of `.poster-in` cards, each with its own staggered
+  fade-in. While the tour runs, `<html class="tour-on">` turns off `.poster-in` and the `view` page transition, and
+  `tourSettle` (2 animation frames + requestIdleCallback, max 0.4 s) runs after each step's `go` before the spotlight moves.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
