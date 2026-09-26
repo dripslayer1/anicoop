@@ -833,3 +833,15 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
 - **v1.0.3:** the tour's manga sources part is hands-on: **copy** the repository link, then **paste it & load it**
   yourself in the highlighted box (the page behind the card works during that step; "Do it for me" pastes and loads it),
   then **install your sources** from the loaded list.
+
+## v1.1 — card names, episode links without brackets, Play on Steam
+
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says **v1.1**.
+
+- **Continue watching:** tapping a show's **name** opens its page; the rest of the card still opens your watch link.
+- **Episode links just work:** paste an episode's link that ends in its number (…/episode-7, …-7/, …/7.html, ?ep=7) and
+  Watch opens your next episode. No curly brackets needed (they still work). Links already saved work too. Numbers
+  after "season" / "part" / "vol", and numbers bigger than the episode count (ids, years), are left alone.
+- **Play on Steam:** a game on Steam has a **Play on Steam** button on its page. It opens Steam and starts the game
+  (Steam offers to install it if you don't have it).
+

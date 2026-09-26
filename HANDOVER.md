@@ -290,6 +290,12 @@ These are cumulative; the README has one section per version.
   lets clicks through to the page, only the card catches them; `tourRepoState` shows loading / done / error;
   `tourPasteRepo` = "Do it for me"), install (`interactive`, spotlight `.tour-repo-list`). Hooks: `.tour-repo-form`,
   `.tour-repo-list` in the Extensions window. Tested against the real keiyoushi repo (2338 sources loaded).
+- **v1.1** (cache tag `?v=1.1b` / `anicoop-v1.1b`: `1.1` was used by the pop-up release): Continue watching name →
+  `.cw-name` opens the page. `epSlotOf(url, a)` turns a trailing episode number (after - / _ = .; 1–4 digits; not after
+  season / part / cour / vol / s; ≤ episode count + 1, else ≤ 3000) into `{ep}` when the link is used (`linkInfo`), so
+  old links work too. Game pages: `steam://run/<steamId>` "Play on Steam". **Steam account linking not built:** it needs
+  Steam OpenID sign-in checked by the Edge Function and a `STEAM_API_KEY` secret for GetOwnedGames (profile game details
+  must be public) — offered to the owner.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

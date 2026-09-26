@@ -2053,3 +2053,10 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .tour-status button { flex-shrink: 0; padding: 6px 10px; border-radius: 9px; font-size: 11px; font-weight: 700; color: rgb(var(--c-ink)); border: 1px solid rgb(var(--c-line2)); }
 @media (hover: hover) { .tour-status button:hover { border-color: rgb(var(--c-volt)); } }
 
+
+/* ===== v1.1 Continue watching: the name opens the page · Play on Steam ===== */
+.cw-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-weight: 600; color: rgb(var(--c-ink)); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color .15s; }
+@media (hover: hover) { .cw-name:hover { text-decoration-color: currentColor; } }
+.steam-play { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #1b2838, #2a475e); border: 1px solid #66c0f4; }
+.steam-play i { font-size: 14px; color: #66c0f4; }
+@media (hover: hover) { .steam-play:hover { background: linear-gradient(135deg, #2a475e, #1b2838); } }
