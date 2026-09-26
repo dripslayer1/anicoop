@@ -100,6 +100,7 @@ const defaultPrefs = () => ({
     watchService: 'any',                                    // v10.6 automatic watch links for anime: 'any' (Crunchyroll first), a site name, or 'off'
     watchOpen: 'popup',                                     // v1.1 watch links open in a pop-up window over anicoop ('popup') or a new tab ('tab')
     tourDone: false,                                        // v1.0 the welcome tour was finished or skipped (kept with your account)
+    steam: null,                                            // v1.3 your linked Steam account: { id, name, avatar, profile } (public info only)
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
 const PREFS = reactive(mergePrefs(defaultPrefs(), readJSON(PREFS_KEY)));
@@ -205,7 +206,7 @@ const slimAnime = (a) => ({
 });
 // what a list row saves in media_data: the title's info + your repeat counters
 // (v10.3 + your own watch link for anime / TV, media_data.wl)
-const entryData = (e, anime = e.anime) => ({ ...slimAnime(anime), ...(e.repeats?.length ? { rep: e.repeats.slice(0, MAX_REPEATS) } : {}), ...(e.lilbro ? { lilbro: true } : {}), ...(e.rewish ? { rw: true } : {}), ...(e.rotation ? { rot: true } : {}), ...(e.watchLink ? { wl: e.watchLink } : {}) });
+const entryData = (e, anime = e.anime) => ({ ...slimAnime(anime), ...(e.repeats?.length ? { rep: e.repeats.slice(0, MAX_REPEATS) } : {}), ...(e.lilbro ? { lilbro: true } : {}), ...(e.rewish ? { rw: true } : {}), ...(e.rotation ? { rot: true } : {}), ...(e.watchLink ? { wl: e.watchLink } : {}), ...(e.readPos?.ch != null ? { rp: e.readPos } : {}) });
 const typeOf = (i) => i?.anime?.type || 'ANIME';
 const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const timeAgo = (iso) => {
@@ -219,7 +220,7 @@ const timeAgo = (iso) => {
 const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0, inSolo: false, squadIds: [], originalSquadIds: [], wasSolo: false });
 // rewatch counters (media_data.rep, one number per repeat) and the hidden "lil bro" flag live inside media_data, so they need no new column
 const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
-    repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '' });
+    repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
 // the fields every list/browse query asks AniList for
 const MEDIA_FIELDS = 'id type isAdult episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
 const LIST_ORDERS = [
@@ -2635,9 +2636,9 @@ createApp({
         };
         // saves that don't mention the repeat counters (status buttons, batch edits…) keep the ones already saved
         const withRepeats = (e) => {
-            if (e.repeats !== undefined && e.lilbro !== undefined && e.rewish !== undefined && e.rotation !== undefined && e.watchLink !== undefined) return e;
+            if (e.repeats !== undefined && e.lilbro !== undefined && e.rewish !== undefined && e.rotation !== undefined && e.watchLink !== undefined && e.readPos !== undefined) return e;
             const o = soloList.value.find(i => i.anime?.id === e.anime.id);
-            return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '' };
+            return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '', readPos: e.readPos ?? o?.readPos ?? null };
         };
         const soloRow = (e) => { e = withRepeats(e); return { user_id: uid(), media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score || 0, progress: e.progress || 0, updated_at: new Date().toISOString() }; };
         const upsertSolo = async (entries) => {
@@ -2803,6 +2804,7 @@ createApp({
             settingsLoaded = true;
             if (!data) saveSettings();   // first time: upload what this browser had
             maybeStartTour();
+            finishSteamSignIn().then(() => loadSteamLib());   // v1.3
         };
         const saveSettings = debounce(async () => {
             if (!uid() || !settingsLoaded) return;
@@ -8125,9 +8127,26 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (!v || rd.loading || !rd.pages.length) return;
             const c = rd.chapter; if (Number.isNaN(chNum(c))) return;
             const seg = rdSeg.value, page = Math.min(rd.i - (seg?.start || 0), (seg?.count || rd.pages.length) - 1);
-            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), at: Date.now() };
+            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), n: seg?.count || rd.pages.length, at: Date.now() };
             saveReadPos();
+            syncReadPosSoon(rd.manga.id);
         });
+        // v1.2 your spot is also kept with the title on your list, so Continue reading works on your other devices.
+        // Saved straight to the row (not through the AniList / MyAnimeList sync: nothing changed for them).
+        const syncReadPos = async (id) => {
+            const e = soloEntry(id), p = readPos[id];
+            if (!e || !p || !uid()) return;
+            if (e.readPos && e.readPos.chId === p.chId && e.readPos.page === p.page) return;
+            const entry = { ...e, readPos: { ...p } };
+            setSoloLocal(entry);
+            try { await sb.from('list_entries').update({ media_data: entryData(entry) }).eq('user_id', uid()).eq('media_id', id); } catch {}
+        };
+        const rpTimers = {};
+        const syncReadPosSoon = (id) => { clearTimeout(rpTimers[id]); rpTimers[id] = setTimeout(() => syncReadPos(id), 5000); };
+        // closing the reader or leaving the page saves it right away
+        const flushReadPos = () => Object.keys(rpTimers).forEach(id => { clearTimeout(rpTimers[id]); delete rpTimers[id]; syncReadPos(Number(id) || id); });
+        watch(() => rd.open, (on) => { if (!on) flushReadPos(); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) flushReadPos(); });
         const appendNext = async () => {
             const segs = rd.segs || []; const last = segs[segs.length - 1]; if (!last || rd.appending || rd.local) return;
             const c = rdNeighbourOf(last.ch, 1); if (!c) return;
@@ -8371,10 +8390,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const until = (fn, ms = 15000) => new Promise((ok) => { const t0 = Date.now(); const tick = () => { let v = null; try { v = fn(); } catch {} if (v) ok(v); else if (Date.now() - t0 > ms) ok(null); else setTimeout(tick, 150); }; tick(); });
         // the chapter you were in (and the page), unless you've finished it since — then the next one you haven't read.
         // The Read window stays open underneath, so closing the reader shows every chapter.
+        // v1.2 always where you left off: the newest spot (this browser or your account) → that chapter and page; if you
+        // had reached its last page, the chapter after it. Only when your count moved past it since (you read or marked
+        // chapters somewhere else) does it go to the first chapter you haven't read.
         const resumeReading = async (a) => {
-            const pos = readPos[a.id], prog = myProgress(a);
-            const inIt = pos && Math.floor(parseFloat(pos.ch)) > prog;
-            const want = inIt ? parseFloat(pos.ch) : null;
+            const e = soloEntry(a.id), prog = myProgress(a);
+            const pos = [readPos[a.id], e?.readPos].filter(p => p?.ch != null && !Number.isNaN(parseFloat(p.ch))).sort((x, y) => (y.at || 0) - (x.at || 0))[0] || null;
+            const movedOn = pos && prog > Math.floor(parseFloat(pos.ch)) && e?.updatedAt && new Date(e.updatedAt).getTime() > (pos.at || 0) + 60000;
+            const want = pos && !movedOn ? parseFloat(pos.ch) : null;
+            const finished = want != null && pos.n > 0 && pos.page >= pos.n - 1;
             if (pos?.src && readTabs.value.some(t => t.id === pos.src)) readSrc.value = pos.src;   // the same source as last time
             const here = () => selectedAnime.value?.id === a.id && wp.open && !rd.open;
             const ready = await until(() => !here() || (!srcView.loading && !reader.loading && (rdChapters.value.length || srcView.picking || srcView.error || reader.error)), 20000);
@@ -8382,15 +8406,16 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             // MangaDex sends the newest 100 first: older chapters need the rest of the list
             const low = chNum(rdChapters.value[0]), need = want ?? prog + 1;
             if (readSrc.value === 'mangadex' && low > need && reader.chapters.length < reader.total) { await loadAllChapters(); if (!here()) return; }
-            const c = want != null ? rdChapters.value.find(x => chNum(x) === want) : continueChapter.value;
+            let c = null;
+            if (want != null) c = finished ? rdChapters.value.filter(x => chNum(x) > want).sort((x, y) => chNum(x) - chNum(y))[0] || rdChapters.value.find(x => chNum(x) === want) : rdChapters.value.find(x => chNum(x) === want);
+            if (!c) c = continueChapter.value;   // not on this source (or nothing saved yet): the first one you haven't read
             if (!c) return;
-            const page = want != null && chNum(c) === want ? pos.page || 0 : 0;
+            const page = want != null && !finished && chNum(c) === want ? pos.page || 0 : 0;
             await openChapter(c, a);
-            if (page > 0 && rd.chapter?.id === c.id && rd.pages.length) {
+            if (rd.chapter?.id === c.id && rd.pages.length) {
                 const p = Math.min(page, rd.pages.length - 1);
-                if (rd.mode !== 'vertical') rd.i = p;
-                else { rd.resume = p; scrollStripTo(p); }
-                showToast(`Back to chapter ${c.ch} · page ${p + 1}`);
+                if (p > 0) { if (rd.mode !== 'vertical') rd.i = p; else { rd.resume = p; scrollStripTo(p); } }
+                showToast(p > 0 ? `Back to chapter ${c.ch} · page ${p + 1}` : `Chapter ${c.ch}`);
             }
         };
         // webtoon mode: the pages above load first (so their height is known), then the strip scrolls to the page
@@ -9955,6 +9980,110 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
             } else if (q.get('error') && saved) { localStorage.removeItem(MAL_PKCE_KEY); sessionStorage.setItem(MAL_CODE_KEY, JSON.stringify({ denied: q.get('error_description') || q.get('error') })); history.replaceState(history.state, '', location.pathname + location.hash); }
         } catch {} })();
+        // ---------- v1.3 Steam account ----------
+        // "Sign in through Steam" goes to Steam's own page (OpenID); Steam sends you back here with a signed answer that
+        // the Edge Function checks with Steam. Only your public Steam id, name and picture are kept (PREFS.steam, with your
+        // settings). Your library comes from Steam through the Edge Function (STEAM_API_KEY), cached here for 30 minutes.
+        const STEAM_RETURN_KEY = 'anicoop_steam_return_v1';
+        const STEAM_LIB_KEY = 'anicoop_steam_lib_v1';
+        const steamAcc = reactive({ busy: false, error: '', lib: null, at: 0, hidden: false, importing: false, step: '', result: null,
+            played: (() => { try { return localStorage.getItem('anicoop_steam_played') || 'PAUSED'; } catch { return 'PAUSED'; } })(),
+            unplayed: (() => { try { return localStorage.getItem('anicoop_steam_unplayed') || 'SKIP'; } catch { return 'SKIP'; } })() });
+        (() => {
+            try {
+                const q = new URLSearchParams(location.search);
+                if (q.get('openid.mode') !== 'id_res' || !q.get('openid.claimed_id')) return;
+                const params = {}; q.forEach((v, k) => { if (k.startsWith('openid.')) params[k] = v; });
+                sessionStorage.setItem(STEAM_RETURN_KEY, JSON.stringify(params));
+                [...q.keys()].filter(k => k.startsWith('openid.')).forEach(k => q.delete(k));
+                history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+            } catch {}
+        })();
+        const steamFn = async (payload) => {
+            const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'steamuser', ...payload } });
+            if (error) {
+                let m = ''; try { m = (await error.context.json())?.error || ''; } catch {}
+                throw new Error(/not allowed/i.test(m) || /404|not found/i.test(error.message || '') && !m ? 'Steam needs the updated Edge Function (see README v1.3)' : m || 'Steam request failed');
+            }
+            const d = typeof data === 'string' ? JSON.parse(data) : data;
+            if (d?.error) throw new Error(d.error);
+            return d;
+        };
+        const connectSteam = () => {
+            if (!currentUser.value) { showToast('Sign in first', 'error'); return; }
+            const back = location.origin + location.pathname;
+            const p = new URLSearchParams({
+                'openid.ns': 'http://specs.openid.net/auth/2.0', 'openid.mode': 'checkid_setup', 'openid.return_to': back, 'openid.realm': location.origin,
+                'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select', 'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
+            });
+            location.href = 'https://steamcommunity.com/openid/login?' + p;
+        };
+        // back from Steam: check the answer, keep the account, read the library
+        const finishSteamSignIn = async () => {
+            let params = null; try { params = JSON.parse(sessionStorage.getItem(STEAM_RETURN_KEY) || 'null'); } catch {}
+            if (!params || !currentUser.value) return;
+            try { sessionStorage.removeItem(STEAM_RETURN_KEY); } catch {}
+            steamAcc.busy = true; steamAcc.error = '';
+            try {
+                const d = await steamFn({ action: 'verify', params });
+                PREFS.steam = { id: d.steamid, name: d.name || 'Steam user', avatar: d.avatar || '', profile: d.profile || '', at: Date.now() };
+                showToast('Steam linked' + (d.name ? ' as ' + d.name : ''));
+                await loadSteamLib(true);
+                openSettings('import');
+            } catch (err) { steamAcc.error = err.message || String(err); showToast('Couldn’t link Steam: ' + steamAcc.error, 'error'); }
+            finally { steamAcc.busy = false; }
+        };
+        const loadSteamLib = async (force = false) => {
+            const id = PREFS.steam?.id; if (!id) return;
+            if (!force) {
+                try { const c = JSON.parse(localStorage.getItem(STEAM_LIB_KEY) || 'null'); if (c?.id === id && Date.now() - c.at < 30 * 60000) { Object.assign(steamAcc, { lib: c.lib, at: c.at, hidden: !!c.hidden }); return; } } catch {}
+            }
+            steamAcc.busy = true; steamAcc.error = '';
+            try {
+                const d = await steamFn({ action: 'owned', steamid: id });
+                const lib = {}; (d.games || []).forEach(g => { lib[g.appid] = g; });
+                Object.assign(steamAcc, { lib, at: Date.now(), hidden: !!d.hidden && !(d.games || []).length });
+                try { localStorage.setItem(STEAM_LIB_KEY, JSON.stringify({ id, at: steamAcc.at, lib, hidden: steamAcc.hidden })); } catch {}
+            } catch (err) { steamAcc.error = err.message || String(err); }
+            finally { steamAcc.busy = false; }
+        };
+        const disconnectSteam = () => { PREFS.steam = null; Object.assign(steamAcc, { lib: null, at: 0, hidden: false, result: null, error: '' }); try { localStorage.removeItem(STEAM_LIB_KEY); } catch {} showToast('Steam unlinked'); };
+        const steamCount = computed(() => steamAcc.lib ? Object.keys(steamAcc.lib).length : 0);
+        const steamOwned = (appid) => appid && steamAcc.lib ? steamAcc.lib[appid] || null : null;
+        const steamHours = (g) => g ? Math.round(g.mins / 6) / 10 : 0;
+        // put your Steam games on your Games list: played in the last 2 weeks → Playing; played before → your pick;
+        // never played → your pick (or skip). Games already on your list only get their hours updated.
+        const importSteam = async () => {
+            if (steamAcc.importing || !steamAcc.lib) return;
+            try { localStorage.setItem('anicoop_steam_played', steamAcc.played); localStorage.setItem('anicoop_steam_unplayed', steamAcc.unplayed); } catch {}
+            steamAcc.importing = true; steamAcc.result = null; steamAcc.step = 'Matching your games…';
+            try {
+                const lib = Object.values(steamAcc.lib);
+                const onList = new Map(soloList.value.filter(e => e.anime?.type === 'GAME' && e.anime.steamId).map(e => [Number(e.anime.steamId), e]));
+                const statusOf = (g) => g.recent > 0 ? 'WATCHING' : g.mins >= 6 ? steamAcc.played : steamAcc.unplayed;
+                const entries = [];
+                lib.filter(g => onList.has(g.appid)).forEach(g => { const e = onList.get(g.appid), h = Math.round(g.mins / 60); if (h > (e.progress || 0)) entries.push({ ...e, progress: h }); });
+                const need = lib.filter(g => !onList.has(g.appid) && statusOf(g) !== 'SKIP');
+                const byApp = new Map(); let notFound = 0;
+                for (let i = 0; i < need.length; i += 100) {
+                    const chunk = need.slice(i, i + 100), ids = new Set(chunk.map(g => String(g.appid)));
+                    steamAcc.step = `Finding your games… ${Math.min(i + 100, need.length)} / ${need.length}`;
+                    const rows = await igdb('games', `fields ${GAME_FIELDS},external_games.uid,external_games.external_game_source; where external_games.external_game_source = 1 & external_games.uid = (${[...ids].map(x => '"' + x + '"').join(',')}); limit 500;`).catch(() => []);
+                    (rows || []).forEach(row => (row.external_games || []).forEach(x => { if (x.external_game_source === 1 && ids.has(String(x.uid)) && !byApp.has(Number(x.uid))) byApp.set(Number(x.uid), row); }));
+                }
+                const seen = new Set();
+                need.forEach(g => {
+                    const row = byApp.get(g.appid); if (!row) { notFound++; return; }
+                    const anime = { ...normGame(row), steamId: g.appid }; if (seen.has(anime.id)) return; seen.add(anime.id);
+                    entries.push({ anime, status: statusOf(g), score: 0, progress: Math.round(g.mins / 60), repeats: [], lilbro: false, rewish: false, rotation: false, watchLink: '', readPos: null });
+                });
+                steamAcc.step = 'Saving…';
+                const res = entries.length ? await saveImported(entries) : { added: 0, updated: 0, skipped: 0 };
+                steamAcc.result = { ...res, notFound };
+                showToast(`Steam: ${res.added} added, ${res.updated} updated`);
+            } catch (err) { steamAcc.error = err.message || String(err); showToast('Steam import failed: ' + steamAcc.error, 'error'); }
+            finally { steamAcc.importing = false; steamAcc.step = ''; }
+        };
         const malFn = async (payload) => {
             const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'mal', ...payload } });
             if (error) {
@@ -10278,7 +10407,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

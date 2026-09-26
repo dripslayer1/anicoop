@@ -845,3 +845,30 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
 - **Play on Steam:** a game on Steam has a **Play on Steam** button on its page. It opens Steam and starts the game
   (Steam offers to install it if you don't have it).
 
+## v1.2 — Continue reading goes back to your spot · the episode question is back
+
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says **v1.2**.
+
+- **Continue reading** (Browse) always opens the chapter and page where you stopped. If you had reached the last page
+  of that chapter, it opens the next one. Your spot is saved with your list too, so it works on your other devices.
+  (Only if you read or marked chapters somewhere else after that does it start from the first unread chapter.)
+- **Fixed:** the "How many episodes did you watch?" question stopped showing after v1.0 (the tour's code hid it).
+
+## v1.3 — link your Steam account
+
+**No SQL. The Edge Function changed: deploy it again** (same as for MyAnimeList). Needs the secret `STEAM_API_KEY`
+(Supabase → Edge Functions → Secrets), from steamcommunity.com/dev/apikey.
+
+1. Merge, then deploy the `igdb` Edge Function again (Supabase → Edge Functions → igdb → paste the new
+   `supabase/functions/igdb/index.ts` → Deploy, or `supabase functions deploy igdb`).
+2. Hard-refresh (Ctrl+Shift+R): the footer says **v1.3**.
+3. Settings → Import & sync → **Sign in through Steam**. You sign in on Steam's own page; anicoop only keeps your public
+   Steam id, name and picture (with your settings). Users don't need to have spent anything on Steam.
+4. If it says Steam didn't share your games: Steam → Profile → Edit Profile → Privacy Settings → **Game details: Public**.
+
+What it does:
+- **Import my Steam games** into Games: played in the last 2 weeks → Playing; played before → On Hold / Playing / Beaten
+  / don't add (your pick); never played → Plan to Play / don't add. Hours come from Steam. Free-to-play games you've
+  played count too. Games already on your list only get their hours updated. Run it again any time to refresh hours.
+- **Game pages:** "Play on Steam" shows your hours for games you own; games you don't own say "Get it on Steam" (store page).
+

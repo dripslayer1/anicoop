@@ -452,6 +452,58 @@ const malCall = async (body: Record<string, any>) => {
     }
     return json({ error: 'Not allowed' }, 400);
 };
+// ---- v1.3 Steam account: sign in through Steam (OpenID 2.0), then read your game library ----
+// Setup: add the secret STEAM_API_KEY (steamcommunity.com/dev/apikey). Nobody's password passes through here: Steam
+// signs you in on its own page and sends back a signed answer, which is checked with Steam before we trust the id.
+const STEAM_KEY = clean(Deno.env.get('STEAM_API_KEY'));
+const STEAM_ID = /^\d{17}$/;
+const steamUser = async (body: Record<string, any>) => {
+    const action = String(body.action || '');
+    const summary = async (id: string) => {
+        if (!STEAM_KEY) return null;
+        const r = await fetch(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(STEAM_KEY)}&steamids=${id}`);
+        const p = r.ok ? (await r.json())?.response?.players?.[0] : null;
+        return p ? { name: p.personaname || '', avatar: p.avatarfull || p.avatarmedium || '', profile: p.profileurl || '', open: p.communityvisibilitystate === 3 } : null;
+    };
+    if (action === 'verify') {
+        // the answer Steam sent back to the page: ask Steam whether it really signed it
+        const params = body.params && typeof body.params === 'object' ? body.params as Record<string, unknown> : {};
+        const form = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => { if (k.startsWith('openid.') && typeof v === 'string' && v.length < 2000) form.set(k, v); });
+        if (form.get('openid.op_endpoint') !== 'https://steamcommunity.com/openid/login') return json({ error: 'That sign-in didn’t come from Steam' }, 400);
+        const m = /^https:\/\/steamcommunity\.com\/openid\/id\/(\d{17})$/.exec(form.get('openid.claimed_id') || '');
+        if (!m) return json({ error: 'That sign-in didn’t come from Steam' }, 400);
+        form.set('openid.mode', 'check_authentication');
+        const r = await fetch('https://steamcommunity.com/openid/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form });
+        const text = await r.text();
+        if (!/is_valid\s*:\s*true/i.test(text)) return json({ error: 'Steam couldn’t confirm the sign-in. Try again.' }, 400);
+        const s = await summary(m[1]).catch(() => null);
+        return json({ steamid: m[1], ...(s || {}) });
+    }
+    if (action === 'owned') {
+        if (!STEAM_KEY) return json({ error: 'Steam isn’t set up yet: add STEAM_API_KEY to the Edge Function secrets' }, 500);
+        const id = String(body.steamid || '');
+        if (!STEAM_ID.test(id)) return json({ error: 'Not allowed' }, 400);
+        const key = 'steamlib\n' + id, hit = cache.get(key);
+        if (hit && Date.now() - hit.at < CACHE_MS / 2) return json(hit.body);
+        // free-to-play games you've played are included too
+        const r = await fetch(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(STEAM_KEY)}&steamid=${id}&include_appinfo=1&include_played_free_games=1&format=json`);
+        if (r.status === 403 || r.status === 401) return json({ error: 'Steam refused the API key: check STEAM_API_KEY in the Edge Function secrets' }, 500);
+        if (!r.ok) return json({ error: `Steam error (${r.status})` }, 502);
+        const d = (await r.json())?.response || {};
+        // a private profile (or private game details) gives an empty answer
+        const games = (d.games || []).map((g: any) => ({ appid: g.appid, name: g.name || '', mins: g.playtime_forever || 0, recent: g.playtime_2weeks || 0, last: g.rtime_last_played || 0 }));
+        const text = JSON.stringify({ games, count: d.game_count ?? games.length, hidden: d.game_count === undefined });
+        cache.set(key, { at: Date.now(), body: text });
+        return json(text);
+    }
+    if (action === 'summary') {
+        const id = String(body.steamid || '');
+        if (!STEAM_ID.test(id)) return json({ error: 'Not allowed' }, 400);
+        return json((await summary(id).catch(() => null)) || {});
+    }
+    return json({ error: 'Not allowed' }, 400);
+};
 const gifSearch = async (body: Record<string, any>) => {
     const q = String(body.q || '').trim().slice(0, 100);
     const giphy = Deno.env.get('GIPHY_API_KEY') || '', tenor = Deno.env.get('TENOR_API_KEY') || '';
@@ -499,6 +551,7 @@ Deno.serve(async (req) => {
     if (endpoint === 'emoji') return emojiList();
     if (endpoint === 'gif') return gifSearch(body);
     if (endpoint === 'mal') return malCall(body);
+    if (endpoint === 'steamuser') return steamUser(body);
     if (endpoint === 'tmdb') return tmdb(body);
     if (endpoint === 'spotify') return spotify(body);
 

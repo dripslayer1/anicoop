@@ -2060,3 +2060,9 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .steam-play { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #1b2838, #2a475e); border: 1px solid #66c0f4; }
 .steam-play i { font-size: 14px; color: #66c0f4; }
 @media (hover: hover) { .steam-play:hover { background: linear-gradient(135deg, #2a475e, #1b2838); } }
+
+/* ===== v1.3 Steam account ===== */
+.steam-signin { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #171a21, #2a475e); border: 1px solid #66c0f4; }
+.steam-signin i { font-size: 16px; color: #66c0f4; }
+.steam-signin:disabled { opacity: .5; }
+.steam-hrs { margin-left: 2px; padding: 1px 7px; border-radius: 999px; font-size: 10px; background: rgb(102 192 244 / .18); color: #66c0f4; }

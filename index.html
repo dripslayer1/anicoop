@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.1b">
+    <link rel="stylesheet" href="app.css?v=1.3">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=1.1b" defer></script>
+    <script src="app.js?v=1.3" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v1.3</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -636,7 +636,8 @@
                                 <button v-if="playKind === 'manga'" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
                                 <button v-else-if="playKind" @click="watchMine(selectedAnime)" class="play-cta md:!hidden"><i class="fa-solid fa-play"></i> {{ isMovie || !linkInfo(selectedAnime) || wlAtEnd(selectedAnime) ? 'Watch' : 'Watch ep ' + nextEpOf(selectedAnime.id) }}<span v-if="!linkInfo(selectedAnime)" class="opacity-70 font-semibold">· no link saved</span></button>
                                 <!-- v1.1 games on Steam: Steam opens and starts it (or offers to install it) -->
-                                <a v-if="selectedAnime.type === 'GAME' && selectedAnime.steamId" :href="'steam://run/' + selectedAnime.steamId" class="steam-play" title="Opens Steam and starts the game (Steam offers to install it if you don't have it yet)"><i class="fa-brands fa-steam"></i> Play on Steam</a>
+                                <a v-if="selectedAnime.type === 'GAME' && selectedAnime.steamId && (!steamAcc.lib || steamOwned(selectedAnime.steamId))" :href="'steam://run/' + selectedAnime.steamId" class="steam-play" title="Opens Steam and starts the game (Steam offers to install it if you don't have it yet)"><i class="fa-brands fa-steam"></i> Play on Steam<span v-if="steamOwned(selectedAnime.steamId)?.mins" class="steam-hrs">{{ steamHours(steamOwned(selectedAnime.steamId)) }} h</span></a>
+                                <a v-else-if="selectedAnime.type === 'GAME' && selectedAnime.steamId" :href="'https://store.steampowered.com/app/' + selectedAnime.steamId" target="_blank" rel="noopener" class="steam-play" title="Not in your Steam library: open its store page"><i class="fa-brands fa-steam"></i> Get it on Steam</a>
                                 <button v-if="selectedAnime.trailer?.id" @click="playTrailer(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-volt text-onvolt text-xs font-bold active:scale-95 transition-transform"><i class="fa-solid fa-play text-[10px]"></i> Watch trailer</button>
                                 <button @click="sendAnimeTo(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-paper-plane text-[10px] text-lilac"></i> Send to a friend</button>
                                 <button v-if="isAniListType(selectedAnime.type)" @click="toggleFollow(selectedAnime)" :class="isFollowing(selectedAnime.id) ? 'bg-volt text-onvolt border-volt' : 'bg-raised text-ink border-line2'" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold border" :title="isFollowing(selectedAnime.id) ? 'Turn off alerts' : 'Get notified about new episodes, seasons and updates'"><i class="fa-solid text-[11px]" :class="isFollowing(selectedAnime.id) ? 'fa-bell' : 'fa-bell-slash'"></i> {{ isFollowing(selectedAnime.id) ? 'Alerts on' : 'Get alerts' }}</button>
@@ -3169,7 +3170,8 @@
         </div>
     </transition>
 
-    <!-- ============ SELECTION BAR (batch edit) ============ -->
+    <!-- v10.1 header search (v1.2: its own transition — a <transition> shows only one child, and the tour sitting
+         next to the episode question in a shared one hid the question) -->
     <transition name="toast">
         <!-- v10.1 header search: a small box under the 🔍, results from the section you're in -->
         <div v-if="hs.open && currentUser" class="hs-panel" :class="{ 'on-home': currentAppView !== 'tracker' }" @click.stop>
@@ -3193,6 +3195,7 @@
             </div>
             <p v-else class="hs-note">Searching {{ currentSection.label.toLowerCase() }} · Enter shows every result</p>
         </div>
+    </transition>
         <!-- v1.0 the welcome tour: a spotlight slides to each feature, the card explains it
              (v1.0.1 both move with transforms only, so it stays smooth) -->
         <transition name="tour-fade">
@@ -3253,6 +3256,8 @@
             <button @click="saveAsk" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid fa-check"></i> Save</button>
             <button @click="closeAsk" class="wask-no" title="I didn't watch any">Not yet</button>
         </div>
+    <!-- ============ SELECTION BAR (batch edit) ============ -->
+    <transition name="toast">
         <div v-if="batchShown && currentAppView === 'tracker'" class="batch-wrap" :class="{ 'is-min': batchMin }" @click.stop>
             <!-- v10 tucked away: a small pill with the count; tap it to open the bar again -->
             <button v-if="batchMin" @click="batchMin = false" class="batch-pill" title="Show the selection bar">
@@ -4064,6 +4069,33 @@
                                         <button @click="pushAllToMal" :disabled="malSync.pending > 0" class="btn-ghost !py-2 !px-4 !text-xs mt-3"><i class="fa-solid fa-cloud-arrow-up"></i> Copy my whole list to MyAnimeList</button>
                                         <p class="text-[11px] text-mute mt-2">Only anime and manga (MyAnimeList has no games, movies or songs). Scores are rounded to whole numbers there.</p>
                                     </template>
+                                </div>
+                                <!-- v1.3 Steam: sign in through Steam, see your library on game pages, import it into Games -->
+                                <div class="set-block steam-set">
+                                    <div class="flex flex-wrap items-center gap-3">
+                                        <img v-if="PREFS.steam?.avatar" :src="PREFS.steam.avatar" class="w-9 h-9 rounded-xl object-cover" alt="">
+                                        <span v-else class="w-9 h-9 rounded-xl bg-[#1b2838] text-[#66c0f4] flex items-center justify-center"><i class="fa-brands fa-steam text-lg"></i></span>
+                                        <div class="flex-grow min-w-0">
+                                            <p class="set-title">Steam</p>
+                                            <p class="set-hint">{{ PREFS.steam ? 'Linked as ' + PREFS.steam.name + (steamAcc.lib ? ' · ' + steamCount + ' games' : '') : 'See which games you own and their hours, and bring your library into Games.' }}</p>
+                                        </div>
+                                        <button v-if="!PREFS.steam" @click="connectSteam" :disabled="steamAcc.busy" class="steam-signin" title="You sign in on Steam’s own page: anicoop never sees your password"><i class="fa-brands fa-steam"></i> Sign in through Steam</button>
+                                        <template v-else>
+                                            <button @click="loadSteamLib(true)" :disabled="steamAcc.busy" class="btn-ghost !py-2 !px-3 !text-xs" title="Read your library again"><i class="fa-solid fa-rotate" :class="{ 'fa-spin': steamAcc.busy }"></i></button>
+                                            <button @click="disconnectSteam" class="btn-ghost !py-2 !px-4 !text-xs">Disconnect</button>
+                                        </template>
+                                    </div>
+                                    <p v-if="steamAcc.error" class="text-xs text-pink mt-3">{{ steamAcc.error }}</p>
+                                    <p v-if="PREFS.steam && steamAcc.hidden" class="text-xs text-sub mt-3 leading-relaxed">Steam didn’t share your games. In Steam: <span class="text-ink">Profile → Edit Profile → Privacy Settings → Game details: Public</span>, then tap <i class="fa-solid fa-rotate"></i>.</p>
+                                    <div v-if="PREFS.steam && steamCount" class="mt-4 pt-4 border-t border-line space-y-3">
+                                        <p class="text-xs text-sub leading-relaxed">Import your library into <b class="text-ink">Games</b>. Games you played in the last 2 weeks go to <b class="text-ink">Playing</b>; hours come from Steam. Games already on your list only get their hours updated.</p>
+                                        <div class="grid sm:grid-cols-2 gap-2">
+                                            <label class="text-[11px] text-mute">Played before<div class="chip-wrap mt-1"><select v-model="steamAcc.played" class="chip w-full"><option value="PAUSED">On Hold</option><option value="WATCHING">Playing</option><option value="COMPLETED">Beaten</option><option value="SKIP">Don’t add</option></select><i class="fa-solid fa-chevron-down"></i></div></label>
+                                            <label class="text-[11px] text-mute">Never played<div class="chip-wrap mt-1"><select v-model="steamAcc.unplayed" class="chip w-full"><option value="SKIP">Don’t add</option><option value="PLANNING">Plan to Play</option></select><i class="fa-solid fa-chevron-down"></i></div></label>
+                                        </div>
+                                        <button @click="importSteam" :disabled="steamAcc.importing" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid" :class="steamAcc.importing ? 'fa-circle-notch fa-spin' : 'fa-file-import'"></i> {{ steamAcc.importing ? steamAcc.step : 'Import my Steam games' }}</button>
+                                        <p v-if="steamAcc.result" class="text-xs text-sub">✓ {{ steamAcc.result.added }} added, {{ steamAcc.result.updated }} updated<template v-if="steamAcc.result.skipped">, {{ steamAcc.result.skipped }} already there</template><template v-if="steamAcc.result.notFound"> · {{ steamAcc.result.notFound }} not found in the games database (tools, demos, soundtracks…)</template></p>
+                                    </div>
                                 </div>
 
                                 <div class="pt-4"><p class="kicker">// bring your history</p><h3 class="mt-1 font-display font-bold text-ink text-2xl">Import lists</h3><p class="set-hint">Imports go into your solo list. Titles are matched with AniList automatically.</p></div>
