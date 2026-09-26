@@ -5825,10 +5825,11 @@ createApp({
         const cleanLink = (s) => {
             s = String(s || '').trim(); if (!s) return '';
             if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
-            s = s.replace(/\{\s*(ep|episode)\s*\}/gi, EP_MARK);
+            s = s.replace(/(\{|%7B)\s*(ep|episode|e|\d{1,5})\s*(\}|%7D)/gi, EP_MARK);   // v10.6.1 {ep}, {episode} or the number itself in { }
             try { const u = new URL(s); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && s.length <= 800 ? u.href.split(EP_MARK).join('{ep}') : null; } catch { return null; }
         };
-        const fillEp = (url, n) => String(url || '').split('{ep}').join(String(n));
+        // (v10.6.1 links saved before with the number in { } — …/episode-%7B12%7D — work too)
+        const fillEp = (url, n) => String(url || '').replace(/(\{|%7B)\s*(ep|episode|e|\d{1,5})\s*(\}|%7D)/gi, String(n));
         const startWatchLink = (a) => { wlEdit.id = a.id; wlEdit.text = watchLinkOf(a.id); };
         const saveWatchLink = async (a, clear = false) => {
             if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
@@ -5870,7 +5871,7 @@ createApp({
             const raw = own || auto?.url; if (!raw) return null;
             const url = fillEp(raw, nextEpOf(a.id));
             let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
-            return { url, host, auto: !!auto, site: auto?.site || host, perEp: raw.includes('{ep}') };
+            return { url, host, auto: !!auto, site: auto?.site || host, perEp: url !== raw };
         };
         // fetch AniList's streaming links for the anime on your list that have no link yet (50 per call, low priority)
         let autoBusy = false;

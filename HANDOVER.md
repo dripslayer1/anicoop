@@ -252,6 +252,7 @@ These are cumulative; the README has one section per version.
   (`anicoop_watch_n_v1`) and is dropped if the tab is hidden and back within 60 s (`quickBack`). `sendMyLink` reuses
   the chat "episode" card. Not done (told the owner why): squad-shared links, new-episode alerts with Watch, link
   health checks, TV seasons.
+- **v10.6.1:** `cleanLink` / `fillEp` also take the number in braces (`{12}`, `{ e }`, `%7B12%7D`) as the episode slot.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
