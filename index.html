@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.1">
+    <link rel="stylesheet" href="app.css?v=10.3">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.1" defer></script>
+    <script src="app.js?v=10.3" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.3</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -570,6 +570,25 @@
                                 </div>
                                 <button @click="saveInline" :disabled="isSaving" class="btn-primary w-full"><i v-if="isSaving" class="fa-solid fa-circle-notch fa-spin"></i> Save</button>
                                 <button v-if="isOnMyList(selectedAnime.id)" @click="removeEverywhere(selectedAnime)" :disabled="isSaving" class="remove-btn"><i class="fa-solid fa-trash-can"></i> Remove from all lists</button>
+                            </div>
+
+                            <!-- v10.3 my watch link (anime + TV): open it, then say how many episodes you watched -->
+                            <div v-if="hasWatchLink(selectedAnime) && currentUser" class="panel p-5 flex flex-col gap-3 wl-box">
+                                <p class="label flex items-center gap-1.5"><i class="fa-solid fa-link text-lilac"></i>My watch link</p>
+                                <template v-if="wlEdit.id === selectedAnime.id">
+                                    <input v-model="wlEdit.text" type="url" inputmode="url" placeholder="Paste a link, e.g. crunchyroll.com/series/…" class="field !py-2.5 !text-sm" @keydown.enter.prevent="saveWatchLink(selectedAnime)">
+                                    <p class="text-[11px] text-mute leading-snug">Tip: the show's page (not one episode) keeps working as you go. Crunchyroll's opens on your next episode.</p>
+                                    <div class="flex gap-2">
+                                        <button @click="saveWatchLink(selectedAnime)" class="btn-primary flex-1 !py-2 !text-xs"><i class="fa-solid fa-check"></i> Save link</button>
+                                        <button @click="wlEdit.id = null" class="btn-ghost !py-2 !text-xs">Cancel</button>
+                                        <button v-if="watchLinkOf(selectedAnime.id)" @click="saveWatchLink(selectedAnime, true)" class="btn-ghost !py-2 !text-xs !px-3" title="Remove the link"><i class="fa-solid fa-trash-can"></i></button>
+                                    </div>
+                                </template>
+                                <template v-else-if="watchLinkOf(selectedAnime.id)">
+                                    <button @click="openMyLink(selectedAnime)" class="btn-primary w-full wl-go"><i class="fa-solid fa-play"></i> Watch {{ selectedAnime.format === 'MOVIE' || wlAtEnd(selectedAnime) ? '' : 'ep ' + nextEpOf(selectedAnime.id) }}<i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-70"></i></button>
+                                    <p class="flex items-center gap-2 text-[11px] text-mute min-w-0"><span class="truncate">{{ linkHost(watchLinkOf(selectedAnime.id)) }}</span><button @click="startWatchLink(selectedAnime)" class="ml-auto shrink-0 text-sub hover:text-ink font-semibold"><i class="fa-solid fa-pen text-[9px] mr-1"></i>Change</button></p>
+                                </template>
+                                <button v-else @click="startWatchLink(selectedAnime)" class="rewish-btn wl-add"><i class="fa-solid fa-link"></i><span>Add where you watch it</span><i class="fa-solid fa-plus ml-auto text-[10px]"></i></button>
                             </div>
 
                             <!-- more info -->
@@ -2492,6 +2511,11 @@
                                 <p class="label mb-2 px-1">Sort by</p>
                                 <div class="chip-wrap w-full"><select v-model="PREFS.listOrder" class="chip w-full"><option v-for="o in LIST_ORDERS" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
+                            <!-- v10.1 genre filter (v10.2: right under Sort by) -->
+                            <div v-if="listGenres.length" class="la-genre">
+                                <p class="label mb-2 px-1">Genre</p>
+                                <div class="chip-wrap w-full"><select v-model="listFilterGenre" :class="{ 'is-on': listFilterGenre }" class="chip w-full"><option value="">All genres</option><option v-for="x in listGenres" :key="x.g" :value="x.g">{{ x.g }} ({{ x.c }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                            </div>
                             <div class="la-status">
                                 <p class="label mb-2 px-1">Status</p>
                                 <div class="flex xl:flex-col flex-wrap gap-1 la-chips">
@@ -2500,11 +2524,6 @@
                                         <span class="font-mono text-xs text-mute">{{ statusCounts[opt] || 0 }}</span>
                                     </button>
                                 </div>
-                            </div>
-                            <!-- v10.1 genre filter -->
-                            <div v-if="listGenres.length" class="la-genre">
-                                <p class="label mb-2 px-1">Genre</p>
-                                <div class="chip-wrap w-full"><select v-model="listFilterGenre" :class="{ 'is-on': listFilterGenre }" class="chip w-full"><option value="">All genres</option><option v-for="x in listGenres" :key="x.g" :value="x.g">{{ x.g }} ({{ x.c }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
                             <!-- v9.8 Solo ⇄ Squads: one switch instead of a separate tab -->
                             <div class="la-list">
@@ -3155,6 +3174,21 @@
                 <button v-if="hs.results.length" @click="headerSearchAll" class="hs-all">See all results in Browse <i class="fa-solid fa-arrow-right text-[10px] ml-1"></i></button>
             </div>
             <p v-else class="hs-note">Searching {{ currentSection.label.toLowerCase() }} · Enter shows every result</p>
+        </div>
+        <!-- v10.3 back from your watch link: how many episodes did you watch? -->
+        <div v-if="watchAsk && currentUser" class="wask" @click.stop>
+            <img :src="watchAsk.anime.coverImage?.large" class="wask-cover" alt="">
+            <div class="min-w-0 flex-1">
+                <p class="wask-q">How many episodes did you watch?</p>
+                <p class="wask-t truncate">{{ titleOf(watchAsk.anime) }} · from ep {{ nextEpOf(watchAsk.anime.id) }}</p>
+            </div>
+            <div class="wask-step">
+                <button @click="stepAsk(-1)" :disabled="watchAsk.n <= 1" aria-label="One less"><i class="fa-solid fa-minus"></i></button>
+                <b>{{ watchAsk.n }}</b>
+                <button @click="stepAsk(1)" :disabled="askLeft !== null && watchAsk.n >= askLeft" aria-label="One more"><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <button @click="saveAsk" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid fa-check"></i> Save</button>
+            <button @click="closeAsk" class="wask-no" title="I didn't watch any">Not yet</button>
         </div>
         <div v-if="batchShown && currentAppView === 'tracker'" class="batch-wrap" :class="{ 'is-min': batchMin }" @click.stop>
             <!-- v10 tucked away: a small pill with the count; tap it to open the bar again -->

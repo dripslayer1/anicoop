@@ -201,7 +201,8 @@ const slimAnime = (a) => ({
     ...(a.type === 'GAME' ? { extId: a.extId || null, platforms: (a.platforms || []).slice(0, 8), coop: !!a.coop, kind: a.kind || null, gameStatus: a.gameStatus || null, steamId: a.steamId || null, releaseDate: a.releaseDate || null } : {}),
 });
 // what a list row saves in media_data: the title's info + your repeat counters
-const entryData = (e, anime = e.anime) => ({ ...slimAnime(anime), ...(e.repeats?.length ? { rep: e.repeats.slice(0, MAX_REPEATS) } : {}), ...(e.lilbro ? { lilbro: true } : {}), ...(e.rewish ? { rw: true } : {}), ...(e.rotation ? { rot: true } : {}) });
+// (v10.3 + your own watch link for anime / TV, media_data.wl)
+const entryData = (e, anime = e.anime) => ({ ...slimAnime(anime), ...(e.repeats?.length ? { rep: e.repeats.slice(0, MAX_REPEATS) } : {}), ...(e.lilbro ? { lilbro: true } : {}), ...(e.rewish ? { rw: true } : {}), ...(e.rotation ? { rot: true } : {}), ...(e.watchLink ? { wl: e.watchLink } : {}) });
 const typeOf = (i) => i?.anime?.type || 'ANIME';
 const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const timeAgo = (iso) => {
@@ -215,7 +216,7 @@ const timeAgo = (iso) => {
 const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0, inSolo: false, squadIds: [], originalSquadIds: [], wasSolo: false });
 // rewatch counters (media_data.rep, one number per repeat) and the hidden "lil bro" flag live inside media_data, so they need no new column
 const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
-    repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot });
+    repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '' });
 // the fields every list/browse query asks AniList for
 const MEDIA_FIELDS = 'id type isAdult episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
 const LIST_ORDERS = [
@@ -2631,9 +2632,9 @@ createApp({
         };
         // saves that don't mention the repeat counters (status buttons, batch edits…) keep the ones already saved
         const withRepeats = (e) => {
-            if (e.repeats !== undefined && e.lilbro !== undefined && e.rewish !== undefined && e.rotation !== undefined) return e;
+            if (e.repeats !== undefined && e.lilbro !== undefined && e.rewish !== undefined && e.rotation !== undefined && e.watchLink !== undefined) return e;
             const o = soloList.value.find(i => i.anime?.id === e.anime.id);
-            return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false };
+            return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '' };
         };
         const soloRow = (e) => { e = withRepeats(e); return { user_id: uid(), media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score || 0, progress: e.progress || 0, updated_at: new Date().toISOString() }; };
         const upsertSolo = async (entries) => {
@@ -5802,6 +5803,86 @@ createApp({
                 : action === 'EP'
                 ? (entry.status === 'COMPLETED' ? `Finished ${title}! Marked as Completed` : `${UNIT.ep} ${entry.progress}${anime.episodes ? '/' + anime.episodes : ''} · ${title}`)
                 : `${title} → ${statusLabelFor(anime.type, action)}`);
+            if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
+            try { await upsertSolo(entry); logActivity(entry.anime, before, entry); }
+            catch (err) {
+                showToast('Could not save: ' + (err.message || err), 'error');
+                if (before) setSoloLocal(before); else soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
+            }
+        };
+
+        // ---------- v10.3 my watch link (anime + TV) ----------
+        // Save where you watch a title (Crunchyroll, Netflix… any link). "Watch" opens it in a new tab, and when you're
+        // back a bar asks how many episodes you watched, then counts them like the +1 button does (rewatches included).
+        const WATCH_ASK_KEY = 'anicoop_watch_ask_v1';
+        const WL_TYPES = ['ANIME', 'TV'];
+        const hasWatchLink = (a) => WL_TYPES.includes(a?.type || 'ANIME');
+        const watchLinkOf = (id) => soloEntry(id)?.watchLink || '';
+        const wlEdit = reactive({ id: null, text: '' });
+        const cleanLink = (s) => {
+            s = String(s || '').trim(); if (!s) return '';
+            if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
+            try { const u = new URL(s); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && s.length <= 800 ? u.href : null; } catch { return null; }
+        };
+        const startWatchLink = (a) => { wlEdit.id = a.id; wlEdit.text = watchLinkOf(a.id); };
+        const saveWatchLink = async (a, clear = false) => {
+            if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
+            const link = clear ? '' : cleanLink(wlEdit.text);
+            if (link === null) { showToast('That doesn’t look like a web link', 'error'); return; }
+            const cur = soloEntry(a.id);
+            if (!cur && !link) { wlEdit.id = null; return; }
+            const entry = cur ? { ...cur, watchLink: link } : { anime: normMedia(a), status: 'PLANNING', score: 0, progress: 0, repeats: [], lilbro: false, rewish: false, rotation: false, watchLink: link };
+            setSoloLocal(entry); wlEdit.id = null;
+            try {
+                await upsertSolo(entry);
+                if (!cur) logActivity(entry.anime, null, entry);
+                showToast(!link ? 'Watch link removed' : cur ? 'Watch link saved' : `Watch link saved · ${titleOf(a)} → ${statusLabelFor(a.type, 'PLANNING')}`);
+            } catch (err) { if (cur) setSoloLocal(cur); else fetchSolo(); showToast('Could not save: ' + (err.message || err), 'error'); }
+        };
+        // the next episode to watch (a rewatch counts on its own counter)
+        const nextEpOf = (id) => {
+            const e = soloEntry(id); if (!e) return 1;
+            if (e.status === 'REPEATING') return (e.repeats?.[e.repeats.length - 1] || 0) + 1;
+            return (e.progress || 0) + 1;
+        };
+        // every episode is already counted (finished, not rewatching): the link just opens, nothing to ask
+        const wlAtEnd = (a) => { const e = soloEntry(a?.id), total = totalOf(e?.anime || a); return !!total && e?.status !== 'REPEATING' && nextEpOf(a.id) > total; };
+        const watchAsk = ref((() => { try { const v = JSON.parse(localStorage.getItem(WATCH_ASK_KEY) || 'null'); return v?.anime?.id ? { ...v, n: 1 } : null; } catch { return null; } })());
+        const keepAsk = () => { try { if (watchAsk.value) localStorage.setItem(WATCH_ASK_KEY, JSON.stringify({ anime: watchAsk.value.anime, from: watchAsk.value.from })); else localStorage.removeItem(WATCH_ASK_KEY); } catch {} };
+        const askLeft = computed(() => {   // episodes left to count (null = unknown)
+            const w = watchAsk.value; if (!w) return null;
+            const e = soloEntry(w.anime.id), total = totalOf(e?.anime || w.anime);
+            return total ? Math.max(0, total - nextEpOf(w.anime.id) + 1) : null;
+        });
+        const openMyLink = (a) => {
+            const link = watchLinkOf(a.id); if (!link) return;
+            window.open(link, '_blank', 'noopener');
+            if (wlAtEnd(a)) return;
+            watchAsk.value = { anime: slimAnime(a), from: nextEpOf(a.id), n: 1 }; keepAsk();
+        };
+        const stepAsk = (d) => { const w = watchAsk.value; if (!w) return; const max = askLeft.value ?? 999; w.n = clamp((Number(w.n) || 0) + d, 1, Math.max(1, max)); };
+        const closeAsk = () => { watchAsk.value = null; keepAsk(); };
+        const saveAsk = async () => {
+            const w = watchAsk.value; if (!w) return;
+            if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
+            const anime = soloEntry(w.anime.id)?.anime || normMedia(w.anime);
+            if (anime.type === 'TV') await fillTotal(anime);
+            const want = clamp(Math.round(Number(w.n) || 1), 1, 999);
+            const before = soloEntry(anime.id);
+            let entry = null, done = 0, finishedRepeat = 0;
+            for (let i = 0; i < want; i++) {   // one episode at a time: the same rules as the +1 button
+                const r = soloNext(anime, 'EP');
+                if (r.error) { if (!done) { showToast(r.error, 'error'); closeAsk(); return; } break; }
+                entry = r.entry; if (entry.finishedRepeat) finishedRepeat = entry.finishedRepeat; delete entry.finishedRepeat;
+                setSoloLocal(entry); done++;
+                if (entry.status === 'COMPLETED') break;
+            }
+            closeAsk();
+            const title = titleOf(anime), eps = totalOf(entry.anime);
+            const now = entry.status === 'REPEATING' ? repeatNow(entry) : entry.progress;
+            showToast(finishedRepeat ? `Finished rewatch #${finishedRepeat} of ${title}!`
+                : entry.status === 'COMPLETED' ? `Finished ${title}! Marked as Completed`
+                : `+${done} · ${UNIT.ep} ${now}${eps ? '/' + eps : ''} · ${title}`);
             if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
             try { await upsertSolo(entry); logActivity(entry.anime, before, entry); }
             catch (err) {
@@ -9841,7 +9922,7 @@ createApp({
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

@@ -1941,3 +1941,25 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .decor-sec.open .decor-chev { transform: rotate(180deg); color: rgb(var(--c-ink)); }
 .decor-sec.open .decor-ic { background: rgb(var(--c-lilac)); color: rgb(var(--c-onaccent)); }
 .decor-body { padding: 0 16px 16px; border-top: 1px solid rgb(var(--c-line)); padding-top: 14px; }
+
+/* ===== v10.3 my watch link + "how many episodes did you watch?" ===== */
+.wl-go { justify-content: center; gap: 8px; }
+.wl-add > i:first-child { color: rgb(var(--c-lilac)); }
+.wask { position: fixed; z-index: 74; left: 0; right: 0; bottom: 24px; margin: 0 auto; width: min(640px, calc(100vw - 16px));
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px;
+  background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+.wask-cover { width: 36px; height: 50px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.wask-q { font-size: 13px; font-weight: 700; color: rgb(var(--c-ink)); }
+.wask-t { font-size: 11px; color: rgb(var(--c-mute)); }
+.wask-step { display: flex; align-items: center; border: 1px solid rgb(var(--c-line)); border-radius: 12px; flex-shrink: 0; }
+.wask-step button { width: 34px; height: 34px; color: rgb(var(--c-sub)); font-size: 11px; }
+.wask-step button:disabled { opacity: .35; }
+.wask-step b { min-width: 26px; text-align: center; font-size: 15px; color: rgb(var(--c-ink)); font-variant-numeric: tabular-nums; }
+.wask-no { font-size: 12px; font-weight: 600; color: rgb(var(--c-mute)); padding: 6px 4px; flex-shrink: 0; }
+@media (hover: hover) { .wask-no:hover { color: rgb(var(--c-ink)); } }
+@media (max-width: 767px) {
+  .wask { bottom: 76px; flex-wrap: wrap; row-gap: 8px; }
+  .wask > .min-w-0 { flex-basis: calc(100% - 48px); }
+  .wask-step { margin-left: 48px; }
+  .wask > .btn-primary { flex: 1; justify-content: center; }
+}
