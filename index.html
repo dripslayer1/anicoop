@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6">
+    <link rel="stylesheet" href="app.css?v=1.7">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6" defer></script>
+    <script src="app.js?v=1.7" defer></script>
 </head>
 <body>
 
@@ -1318,7 +1318,12 @@
                                 </div>
                                 <div class="flex flex-wrap items-center gap-3">
                                     <div class="flex flex-wrap gap-1.5 flex-grow">
-                                        <button v-for="g in compareGroups" :key="g.id" @click="compareTab = g.id" :class="compareTab === g.id ? 'bg-ink text-inv border-ink' : 'bg-surface text-sub border-line hover:text-ink'" class="px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors">{{ g.label }} <span class="opacity-60 font-mono">{{ comparison.groups[g.id].length }}</span></button>
+                                        <button v-for="g in compareGroups" :key="g.id" @click="compareTab = g.id" :class="compareTab === g.id ? 'bg-ink text-inv border-ink' : 'bg-surface text-sub border-line hover:text-ink'" class="px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors"><i v-if="g.icon" class="fa-solid mr-1" :class="g.icon"></i>{{ g.label }} <span class="opacity-60 font-mono">{{ compareCount(g.id) }}</span></button>
+                                    </div>
+                                    <!-- v1.7 search -->
+                                    <div class="relative shrink-0 w-full sm:w-56 order-first sm:order-none">
+                                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-mute text-[11px]"></i>
+                                        <input v-model="compareQ" type="search" :placeholder="compareTab === 'series' ? 'Search series' : 'Search this group'" class="field !py-2 !pl-9 !rounded-full !text-xs">
                                     </div>
                                     <div class="seg shrink-0" title="Row size">
                                         <button @click="compareBig = false" :class="{ 'is-on': !compareBig }" class="seg-btn !px-3"><i class="fa-solid fa-list"></i></button>
@@ -1336,11 +1341,36 @@
                                         <button @click="addSelectedFromCompare" :disabled="!compareSel.size || compareAdding" class="btn-primary !py-2 !px-4 !text-xs"><i :class="compareAdding ? 'fa-circle-notch fa-spin' : 'fa-plus'" class="fa-solid"></i> Add {{ compareSel.size || '' }} to my list</button>
                                     </span>
                                 </div>
-                                <div class="panel overflow-hidden">
+                                <!-- v1.7 Series: each show's titles in order, your status next to theirs -->
+                                <div v-if="compareTab === 'series'" class="space-y-3">
+                                    <p v-if="seriesState.busy" class="series-note"><i class="fa-solid fa-circle-notch fa-spin"></i> Finding the seasons that belong together… {{ seriesState.done }} / {{ seriesState.total }} <span class="text-mute">(only the first time)</span></p>
+                                    <div v-for="g in compareSeries.slice(0, shownIn('cmpseries'))" :key="g.key" class="panel !rounded-2xl overflow-hidden">
+                                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-b border-line">
+                                            <p class="font-display font-semibold text-ink truncate flex-grow min-w-0">{{ g.name }}</p>
+                                            <span class="text-[11px] text-sub"><b class="text-ink">You</b> {{ g.meDone }}/{{ g.items.length }} {{ statusLabelFor(compareType, 'COMPLETED').toLowerCase() }}</span>
+                                            <span class="text-[11px] text-sub"><b class="text-ink">{{ viewedUser.profile.username }}</b> {{ g.themDone }}/{{ g.items.length }}</span>
+                                        </div>
+                                        <div v-for="(r, k) in g.items" :key="r.anime.id" class="series-cmp-row">
+                                            <span class="font-mono text-[10px] text-mute text-center">{{ k + 1 }}</span>
+                                            <span class="flex items-center gap-3 min-w-0">
+                                                <button @click="fetchAnimeDetails(r.anime)" class="shrink-0" :title="'Open ' + titleOf(r.anime)"><img :src="r.anime.coverImage?.large" class="w-9 h-12 rounded-md object-cover" loading="lazy" decoding="async" alt=""></button>
+                                                <span class="min-w-0"><button @click="fetchAnimeDetails(r.anime)" class="block max-w-full text-left text-sm text-ink font-semibold truncate hover:text-lilac">{{ titleOf(r.anime) }}</button><span class="block text-[11px] text-mute">{{ [(r.anime.format || '').replace('_', ' '), r.anime.seasonYear].filter(Boolean).join(' · ') }}</span></span>
+                                            </span>
+                                            <span v-for="side in ['me', 'them']" :key="side" class="flex items-center justify-center gap-1.5 text-[11px] text-sub">
+                                                <template v-if="r[side]"><span class="qa-dot" :style="{ '--dot': STATUS_COLORS[r[side].status] }"></span><span class="hidden sm:inline">{{ statusLabelFor(compareType, r[side].status) }}</span><span v-if="r[side].score" class="text-ink font-mono">· {{ formatScore(r[side].score) }}</span></template>
+                                                <span v-else class="text-mute">—</span>
+                                            </span>
+                                            <button v-if="!r.me" @click="addFromCompare([r])" :disabled="compareAdding" class="w-8 h-8 rounded-full bg-volt text-onvolt flex items-center justify-center justify-self-end" :title="'Add to my list as ' + STATUS_LABELS[compareAddStatus]"><i class="fa-solid fa-plus text-[11px]"></i></button><span v-else></span>
+                                        </div>
+                                    </div>
+                                    <div v-if="compareSeries.length > shownIn('cmpseries')" v-infinite="() => moreIn('cmpseries')" class="h-px" aria-hidden="true"></div>
+                                    <p v-if="!compareSeries.length && !seriesState.busy" class="panel p-10 text-center text-sm text-mute">{{ compareQ.trim() ? 'No series with that name.' : 'No shows with more than one season between you yet.' }}</p>
+                                </div>
+                                <div v-else class="panel overflow-hidden">
                                     <div class="grid gap-2 px-4 py-2.5 border-b border-line label" :class="compareBig ? 'grid-cols-[28px_1fr_96px_96px_40px] sm:grid-cols-[28px_1fr_150px_150px_44px]' : 'grid-cols-[28px_1fr_88px_88px_40px] sm:grid-cols-[28px_1fr_130px_130px_44px]'">
                                         <span></span><span>Title</span><span class="text-center">You</span><span class="text-center truncate">{{ viewedUser.profile.username }}</span><span></span>
                                     </div>
-                                    <div v-for="r in comparison.groups[compareTab]" :key="r.anime.id" @click="!r.me && toggleCompareSel(r.anime.id)" class="w-full grid gap-2 items-center px-4 border-b border-line last:border-0 hover:bg-raised text-left transition-colors" :style="{ cursor: r.me ? 'default' : 'pointer' }" :class="[compareBig ? 'py-3.5 grid-cols-[28px_1fr_96px_96px_40px] sm:grid-cols-[28px_1fr_150px_150px_44px]' : 'py-2.5 grid-cols-[28px_1fr_88px_88px_40px] sm:grid-cols-[28px_1fr_130px_130px_44px]', compareSel.has(r.anime.id) ? 'bg-lilac/[.07]' : '']">
+                                    <div v-for="r in compareRows.slice(0, shownIn('cmp'))" :key="r.anime.id" @click="!r.me && toggleCompareSel(r.anime.id)" class="w-full grid gap-2 items-center px-4 border-b border-line last:border-0 hover:bg-raised text-left transition-colors" :style="{ cursor: r.me ? 'default' : 'pointer' }" :class="[compareBig ? 'py-3.5 grid-cols-[28px_1fr_96px_96px_40px] sm:grid-cols-[28px_1fr_150px_150px_44px]' : 'py-2.5 grid-cols-[28px_1fr_88px_88px_40px] sm:grid-cols-[28px_1fr_130px_130px_44px]', compareSel.has(r.anime.id) ? 'bg-lilac/[.07]' : '']">
                                         <button v-if="!r.me" @click.stop="toggleCompareSel(r.anime.id)" class="cbox" :class="{ on: compareSel.has(r.anime.id) }" title="Select"><i class="fa-solid fa-check"></i></button><span v-else></span>
                                         <span class="flex items-center min-w-0" :class="compareBig ? 'gap-4' : 'gap-3'">
                                             <button @click.stop="fetchAnimeDetails(r.anime)" class="shrink-0" :title="'Open ' + titleOf(r.anime)"><img :src="r.anime.coverImage?.large" :class="compareBig ? 'w-16 h-24 sm:w-20 sm:h-[120px] rounded-xl' : 'w-9 h-12 rounded-md'" class="object-cover" loading="lazy" decoding="async" alt=""></button>
@@ -1358,7 +1388,8 @@
                                         </span>
                                         <button v-if="!r.me" @click.stop="addFromCompare([r])" :disabled="compareAdding" class="w-9 h-9 rounded-full bg-volt text-onvolt flex items-center justify-center justify-self-end active:scale-90 transition-transform" :title="'Add to my list as ' + STATUS_LABELS[compareAddStatus]"><i class="fa-solid fa-plus text-xs"></i></button><span v-else></span>
                                     </div>
-                                    <p v-if="!comparison.groups[compareTab].length" class="p-10 text-center text-sm text-mute">Nothing here.</p>
+                                    <div v-if="compareRows.length > shownIn('cmp')" v-infinite="() => moreIn('cmp')" class="h-px" aria-hidden="true"></div>
+                                    <p v-if="!compareRows.length" class="p-10 text-center text-sm text-mute">{{ compareQ.trim() ? 'No title with that name here.' : 'Nothing here.' }}</p>
                                 </div>
                             </section>
                         </template>
@@ -1393,7 +1424,7 @@
                                     </div>
                                 </div>
                                 <div class="mt-8 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8 items-start">
-                                    <aside class="lg:sticky lg:top-24 space-y-6">
+                                    <aside class="lg:sticky lg:top-24 space-y-6 their-aside">
                                         <div class="relative">
                                             <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-sub text-xs"></i>
                                             <input v-model="theirList.q" type="search" placeholder="Filter this list" class="field !rounded-full !pl-10 !py-2.5">
@@ -2592,6 +2623,8 @@
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
                             <!-- v1.6 Strictly solo: hides everything you watch with friends -->
+                            <!-- v1.7 Group seasons: the seasons (and movies) of one show sit together -->
+                            <button v-if="['ANIME', 'TV'].includes(currentSection.type)" @click="groupSeasons = !groupSeasons" class="solo-toggle" :class="{ on: groupSeasons }" role="switch" :aria-checked="groupSeasons" title="Show the seasons and movies of the same show together"><span class="st-track"><i></i></span>Group seasons</button>
                             <button v-if="partyType({ type: currentSection.type })" @click="strictSolo = !strictSolo" class="solo-toggle" :class="{ on: strictSolo }" role="switch" :aria-checked="strictSolo" title="Only what you watch alone (hides every title with friends on it)"><span class="st-track"><i></i></span>Strictly solo</button>
                             <button @click="toggleSelectMode" :class="selectMode ? 'btn-primary' : 'btn-ghost'"><i class="fa-solid fa-list-check"></i> {{ selectMode ? 'Done selecting' : 'Select' }}</button>
                             <button @click="openRandom" class="btn-primary"><i class="fa-solid fa-dice"></i> Random {{ ({ manga: 'manga', games: 'game', movies: 'movie or show' })[section] || 'anime' }}</button>
@@ -2753,6 +2786,38 @@
                                 <button v-if="listFiltersOn" @click="clearListFilters" class="btn-ghost mt-6"><i class="fa-solid fa-filter-circle-xmark"></i> Clear all filters</button>
                                 <button v-else @click="switchTab('browse')" class="btn-primary mt-6">Browse {{ currentSection.short.toLowerCase() }}</button>
                             </div>
+                            <!-- v1.7 Group seasons: shows with several titles as rows (their titles in release order), then the rest -->
+                            <template v-if="seriesOn && Object.keys(filteredGroupedList).length">
+                                <p v-if="seriesState.busy" class="series-note"><i class="fa-solid fa-circle-notch fa-spin"></i> Finding the seasons that belong together… {{ seriesState.done }} / {{ seriesState.total }} <span class="text-mute">(only the first time)</span></p>
+                                <p v-else-if="seriesState.error" class="series-note !text-pink">{{ seriesState.error }} <button @click="retrySeries" class="underline font-semibold">Try again</button></p>
+                                <section v-if="listSeries.multi.length" class="mb-12">
+                                    <h3 class="flex items-center gap-3 mb-5"><i class="fa-solid fa-layer-group text-lilac text-[13px]"></i><span class="font-display font-semibold text-ink text-lg">Series</span><span class="font-mono text-xs text-mute">{{ listSeries.multi.length }}</span></h3>
+                                    <div class="space-y-4">
+                                        <div v-for="g in listSeries.multi.slice(0, shownIn('series'))" :key="g.key" class="series-row">
+                                            <div class="series-head">
+                                                <p class="series-name">{{ g.name }}</p>
+                                                <span class="series-meta"><span>{{ g.items.length }} titles</span><span v-for="x in seriesSummary(g)" :key="x.s" class="flex items-center gap-1"><span class="qa-dot" :style="{ '--dot': STATUS_COLORS[x.s] }"></span>{{ x.n }} {{ STATUS_SHORT[x.s].toLowerCase() }}</span></span>
+                                            </div>
+                                            <div class="series-strip">
+                                                <poster-card v-for="(item, i) in g.items" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="item" :i="i % 24" :people="posterTags(item.anime.id)" :quick="true" :menu-open="quickMenuFor === item.anime.id"
+                                                    :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
+                                                    @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-if="listSeries.multi.length > shownIn('series')" v-infinite="() => moreIn('series')" class="h-px" aria-hidden="true"></div>
+                                </section>
+                                <section v-if="listSeries.single.length" class="mb-12">
+                                    <h3 class="flex items-center gap-3 mb-5"><span class="font-display font-semibold text-ink text-lg">Single titles</span><span class="font-mono text-xs text-mute">{{ listSeries.single.length }}</span></h3>
+                                    <div :class="posterGrid()">
+                                        <poster-card v-for="(item, i) in listSeries.single.slice(0, shownIn('single'))" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="item" :i="i % 24" :people="posterTags(item.anime.id)" :quick="true" :menu-open="quickMenuFor === item.anime.id"
+                                            :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
+                                            @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
+                                    </div>
+                                    <div v-if="listSeries.single.length > shownIn('single')" v-infinite="() => moreIn('single')" class="h-px" aria-hidden="true"></div>
+                                </section>
+                            </template>
+                            <template v-else>
                             <section v-for="(group, status) in filteredGroupedList" :key="status" class="mb-12">
                                 <h3 class="flex items-center gap-3 mb-5">
                                     <span v-if="status === 'REWISH' || status === 'ROTATION'" class="text-[13px]" :style="{ color: STATUS_COLORS[status] }"><i class="fa-solid" :class="ADD_ICONS[status]"></i></span>
@@ -2767,6 +2832,7 @@
                                 </div>
                                 <div v-if="group.length > shownIn(status)" v-infinite="() => moreIn(status)" class="h-px" aria-hidden="true"></div>
                             </section>
+                            </template>
                         </div>
                     </div>
                 </main>
