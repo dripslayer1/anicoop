@@ -804,3 +804,6 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
   Close it and the "how many episodes" bar lights up. Settings → Lists → **Open watch links in** switches back to a new
   tab. Phones always use a tab. (Crunchyroll, Netflix… refuse to be shown inside another site, so it can't be a
   window inside the page.)
+- **v1.2:** the pop-up always opens in the middle of your screen (a window left open from last time is closed and
+  reopened there) and first shows a short anicoop-style screen (cover, title, "Episode 5 · opening crunchyroll.com…")
+  before the site loads. The site itself and the browser's window bar can't be restyled by another website.

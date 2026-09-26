@@ -260,6 +260,9 @@ These are cumulative; the README has one section per version.
 - **v1.1:** `openWatchWindow` — `window.open(url, 'anicoop_watch', 'popup=yes,…')` centred, `win.opener = null`, polled
   every 0.7 s; when it closes, `watchClosed` pulses the question bar. `PREFS.watchOpen` popup | tab; phones (`touchUI`)
   and blocked pop-ups fall back to a tab. **Not an iframe:** streaming sites send X-Frame-Options / CSP frame-ancestors.
+- **v1.2:** the pop-up opens as `about:blank` (same origin), gets `resizeTo` / `moveTo` to the centre of `screen.avail*`,
+  shows `watchLaunchHtml` (anicoop colours from the CSS variables, cover / title / episode) for 0.9 s, then `opener = null`
+  and `location.replace(url)`. A previous pop-up is closed first (it's cross-origin by then, so it can't be moved).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

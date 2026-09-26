@@ -5912,7 +5912,8 @@ createApp({
         });
         const openMyLink = (a) => {
             const info = linkInfo(a); if (!info) return;
-            openWatchWindow(info.url);
+            const aa = soloEntry(a.id)?.anime || a;
+            openWatchWindow(info.url, { title: titleOf(aa), cover: aa.coverImage?.large || a.coverImage?.large, banner: a.bannerImage || aa.bannerImage, ep: aa.format === 'MOVIE' || wlAtEnd(a) ? null : nextEpOf(a.id), site: info.site });
             if (wlAtEnd(a)) return;
             const e = soloEntry(a.id), total = totalOf(e?.anime || a);
             const left = total ? Math.max(1, total - nextEpOf(a.id) + 1) : 999;
@@ -5922,17 +5923,44 @@ createApp({
         // own is as close as it gets). One window is reused; phones and "New tab" in Settings open a tab instead.
         let watchWin = null, watchWinT = null;
         const watchClosed = ref(false);   // the pop-up was just closed: the question bar lights up
-        const openWatchWindow = (url) => {
+        // v1.2 the pop-up sits in the middle of the screen anicoop is on (every time, a reused window too), and shows a
+        // short anicoop-style "opening…" screen before the site loads. The site itself and the browser's window bar
+        // can't be restyled by another website.
+        const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        const watchLaunchHtml = (url, m) => {
+            const css = getComputedStyle(document.documentElement), v = (k, d) => (css.getPropertyValue(k).trim() || d);
+            const base = v('--c-base', '5 5 7'), surface = v('--c-surface', '14 14 18'), ink = v('--c-ink', '245 245 247'), sub = v('--c-sub', '161 161 173'), line = v('--c-line', '35 35 44'), volt = v('--c-volt', '212 255 58'), onvolt = v('--c-onvolt', '10 10 12');
+            let host = ''; try { host = new URL(url).hostname.replace(/^www./, ''); } catch {}
+            return `<!doctype html><html><head><meta charset="utf-8"><title>anicoop · ${esc(m.title || 'Watch')}</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;700&family=Space+Mono:wght@700&family=Unbounded:wght@700&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0}html,body{height:100%}body{display:grid;place-items:center;background:rgb(${base});color:rgb(${ink});font-family:Geist,system-ui,sans-serif;overflow:hidden}
+.bg{position:fixed;inset:-40px;background:url("${esc(m.banner || m.cover || '')}") center/cover;filter:blur(38px) saturate(1.2);opacity:.28}
+.card{position:relative;display:flex;gap:22px;align-items:center;padding:22px 26px 22px 22px;border-radius:24px;background:rgb(${surface} / .82);border:1px solid rgb(${line});box-shadow:0 30px 80px rgba(0,0,0,.5);max-width:min(560px,90vw)}
+.cv{width:96px;height:136px;border-radius:14px;object-fit:cover;background:rgb(${line});flex-shrink:0}
+.k{font:700 11px "Space Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:rgb(${volt})}
+h1{font:700 22px/1.2 Unbounded,system-ui,sans-serif;margin-top:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.s{margin-top:10px;font-size:14px;color:rgb(${sub})}.s b{color:rgb(${ink})}
+.bar{margin-top:16px;height:4px;border-radius:9px;background:rgb(${line});overflow:hidden}.bar i{display:block;height:100%;width:40%;border-radius:9px;background:rgb(${volt});box-shadow:0 0 10px rgb(${volt});animation:go 1s ease-in-out infinite}
+@keyframes go{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;background:rgb(${volt});color:rgb(${onvolt});font:700 12px Geist,system-ui,sans-serif;text-decoration:none}</style></head>
+<body><div class="bg"></div><div class="card">${m.cover ? `<img class="cv" src="${esc(m.cover)}" alt="">` : ''}<div><p class="k">// anicoop · watch</p><h1>${esc(m.title || '')}</h1>
+<p class="s">${m.ep ? `Episode <b>${esc(m.ep)}</b> · ` : ''}opening <b>${esc(m.site || host)}</b>…</p><div class="bar"><i></i></div><a href="${esc(url)}" rel="noreferrer">Open now</a></div></div></body></html>`;
+        };
+        const openWatchWindow = (url, m = {}) => {
             if (PREFS.watchOpen === 'tab' || touchUI()) { window.open(url, '_blank', 'noopener'); return; }
             const aw = screen.availWidth || 1280, ah = screen.availHeight || 800;
             const w = Math.round(Math.min(1280, aw * 0.85)), h = Math.round(Math.min(820, ah * 0.85));
             const left = Math.round((screen.availLeft || 0) + (aw - w) / 2), top = Math.round((screen.availTop || 0) + (ah - h) / 2);
-            const win = window.open(url, 'anicoop_watch', `popup=yes,width=${w},height=${h},left=${left},top=${top}`);
-            if (!win) { window.open(url, '_blank', 'noopener'); return; }   // pop-ups blocked: a tab then
-            try { win.opener = null; } catch {}   // the site can't reach back into anicoop
-            try { win.focus(); } catch {}
-            watchWin = win; watchClosed.value = false;
+            // a window left open from last time can't be moved (it's on another site now): close it, open a fresh one
+            try { if (watchWin && !watchWin.closed) watchWin.close(); } catch {}
             clearInterval(watchWinT);
+            const win = window.open('', 'anicoop_watch', `popup=yes,width=${w},height=${h},left=${left},top=${top}`);
+            if (!win) { window.open(url, '_blank', 'noopener'); return; }   // pop-ups blocked: a tab then
+            try { win.resizeTo(w, h); win.moveTo(left, top); } catch {}   // some browsers ignore the numbers above
+            try { win.document.open(); win.document.write(watchLaunchHtml(url, m)); win.document.close(); } catch {}
+            try { win.focus(); } catch {}
+            setTimeout(() => { try { if (!win.closed) { win.opener = null; win.location.replace(url); } } catch { try { win.location.href = url; } catch {} } }, 900);
+            watchWin = win; watchClosed.value = false;
             watchWinT = setInterval(() => {
                 let closed = true; try { closed = !watchWin || watchWin.closed; } catch {}
                 if (!closed) return;
