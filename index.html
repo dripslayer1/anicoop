@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.1">
+    <link rel="stylesheet" href="app.css?v=10.2">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.1" defer></script>
+    <script src="app.js?v=10.2" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.2</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -2492,6 +2492,11 @@
                                 <p class="label mb-2 px-1">Sort by</p>
                                 <div class="chip-wrap w-full"><select v-model="PREFS.listOrder" class="chip w-full"><option v-for="o in LIST_ORDERS" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
+                            <!-- v10.1 genre filter (v10.2: right under Sort by) -->
+                            <div v-if="listGenres.length" class="la-genre">
+                                <p class="label mb-2 px-1">Genre</p>
+                                <div class="chip-wrap w-full"><select v-model="listFilterGenre" :class="{ 'is-on': listFilterGenre }" class="chip w-full"><option value="">All genres</option><option v-for="x in listGenres" :key="x.g" :value="x.g">{{ x.g }} ({{ x.c }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                            </div>
                             <div class="la-status">
                                 <p class="label mb-2 px-1">Status</p>
                                 <div class="flex xl:flex-col flex-wrap gap-1 la-chips">
@@ -2500,11 +2505,6 @@
                                         <span class="font-mono text-xs text-mute">{{ statusCounts[opt] || 0 }}</span>
                                     </button>
                                 </div>
-                            </div>
-                            <!-- v10.1 genre filter -->
-                            <div v-if="listGenres.length" class="la-genre">
-                                <p class="label mb-2 px-1">Genre</p>
-                                <div class="chip-wrap w-full"><select v-model="listFilterGenre" :class="{ 'is-on': listFilterGenre }" class="chip w-full"><option value="">All genres</option><option v-for="x in listGenres" :key="x.g" :value="x.g">{{ x.g }} ({{ x.c }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
                             <!-- v9.8 Solo ⇄ Squads: one switch instead of a separate tab -->
                             <div class="la-list">
