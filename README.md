@@ -958,3 +958,44 @@ Archive, YouTube episodes), switched off since v10.7 — about 430 lines less to
 - "Find readable sources" no longer re-reads its whole results table after every single site it checks.
 - Removed ~30 leftover functions nothing used any more, including one that asked the database for something on every
   title page you opened.
+
+## v1.6 — watch together with friend tags, shared playlists, chat and tour fixes
+
+**Run the database update once:** open [`supabase/v1.6.sql`](supabase/v1.6.sql), copy all of it, paste it in
+Supabase → SQL Editor → New query → **Run**. (It's also section 8h of `supabase_setup.sql`.) No Edge Function change.
+Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old squads don't show and invites don't work.
+
+**Watch together (squads are gone)**
+- Everything is on **one list**. On a title's page (the "Watching together" box), in the + menu ("Watch with
+  friends…") or with **Select → Invite friends** (many titles at once), pick friends and send.
+- Friends who say yes get the title on their list, and their **picture shows on the poster**. A **faded** picture is an
+  invite nobody answered yet; a grey one is someone who dropped it.
+- **Everyone keeps their own status.** The episode / chapter count moves together: when anyone counts one, the others
+  move along (only forward, never back). If you finished it and your friend is new to it, it counts as a **rewatch** for
+  you while it's "Watching" for them. If someone **drops** it, they stay in its history as Dropped and the rest carry on
+  (picking it up again puts them back in).
+- **Your usual groups:** the invite window shows the friends you watch with most (a trio, a pair…): one tap invites them.
+- **Lists:** "Watching with" (pick friends, see only what you watch with all of them) and a **Strictly solo** switch at
+  the top (hides everything you watch with friends). Invites waiting for you show at the top of Lists, and in the bell
+  with Join / No.
+- Your old squads moved over by themselves (the SQL): every squad title is now a shared title with the same people, and
+  it's on each person's list (games and songs too, without pictures). Nothing was deleted.
+- For anime, manga & manhwa and movies & TV (not games or songs).
+
+**Also new**
+- **Type filter** in Lists: TV, Movie, Special, OVA, ONA… (anime), TV show / Movie, Manga / Manhwa / Manhua / Light novel.
+- **Shared playlists:** open one of your playlists → **Add people**. They can add, remove and reorder songs; only you
+  change who's in it or delete it. A friend's shared playlist shows in yours with their picture (you can leave it).
+- **Group chat pictures:** tap the group's picture at the top of the chat to change it (anyone in the group can).
+- **Chats:** every friend is listed ("Friends · start a chat"), and typing part of a name finds friends and other people.
+- **Rewatch movies & TV** like anime: each rewatch has its own counter.
+- **Steam achievements** on a game's page are folded: tap the header to see the list.
+- **The song circle** (the round button when the player is hidden): throw it and it bounces around the screen.
+- **Tour:** the first page says in red that it's important to go through it once.
+
+**Fixed**
+- **"Unknown user"** in friends lists (profile and the friends icon), chats and squads: v1.5 asked the database for a
+  profile field your database doesn't have, so the whole list of names failed. (It also falls back safely now.)
+- **The tour flickering / lagging** between sections: while a step opened another page, the spotlight lost its target
+  for a moment and the card jumped to the middle and back. It now waits in place. The dark cover is also much lighter
+  for the graphics card (it was a shadow several screens big, redrawn on every frame, which flickered on some computers).

@@ -11,7 +11,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ANILIST = 'https://graphql.anilist.co';
 // v1.5 the profile columns lists of people need (friends, squads, chat, notifications): everything but banner_url,
 // which only a profile page itself shows (older banners are big pictures saved as text)
-const PROFILE_COLS = 'id, username, avatar_url, accent, bio, decor, last_seen, created_at, updated_at';
+// v1.6: no created_at: older databases don't have that column, and asking for it failed the whole request ("Unknown user")
+const PROFILE_COLS = 'id, username, avatar_url, accent, bio, decor, last_seen, updated_at';
+// people lists: the short column list, or every column if the database answers with an error
+const selectProfiles = async (build) => { const r = await build(PROFILE_COLS); return r.error ? build('*') : r; };
 const STATUS_ORDER = ['WATCHING', 'PLANNING', 'COMPLETED', 'REPEATING', 'PAUSED', 'DROPPED'];
 // an anime you finished and are watching again: each rewatch gets its own episode counter, up to 5 of them
 const MAX_REPEATS = 5;
@@ -45,8 +48,12 @@ const FLAG_OF = { REWISH: 'rewish', ROTATION: 'rotation' };   // list "statuses"
 const STATUS_LABELS = reactive({ ...LABEL_SETS.ANIME.labels });
 const STATUS_SHORT = reactive({ ...LABEL_SETS.ANIME.short });
 const UNIT = reactive({ ep: 'Episode', short: 'EP', unit: 'EPS', type: 'ANIME' });
-// statuses you can pick: songs are just In Love / Liked / Disliked, and "Repeating" is for anime only
-const statusPick = () => STATUS_ORDER.filter(s => !(UNIT.type === 'SONG' && (s === 'PAUSED' || s === 'PLANNING')) && !(s === 'REPEATING' && UNIT.type !== 'ANIME'));
+// statuses you can pick: songs are just In Love / Liked / Disliked, and "Repeating" (rewatch) is for anime and
+// (v1.6) movies & TV
+const REPEAT_TYPES = ['ANIME', 'TV'];
+// v1.6 watching together (friend tags on titles) is for anime, manga and movies & TV
+const PARTY_TYPES = ['ANIME', 'MANGA', 'TV'];
+const statusPick = () => STATUS_ORDER.filter(s => !(UNIT.type === 'SONG' && (s === 'PAUSED' || s === 'PLANNING')) && !(s === 'REPEATING' && !REPEAT_TYPES.includes(UNIT.type)));
 const applyLabels = (type) => {
     const set = LABEL_SETS[type] || LABEL_SETS.ANIME;
     Object.assign(STATUS_LABELS, set.labels); Object.assign(STATUS_SHORT, set.short);
@@ -57,7 +64,7 @@ const applyLabels = (type) => {
 // Songs from Spotify (charts from Apple Music's public "most played" list). All but AniList go through the proxy.
 const SECTIONS = {
     anime:  { id: 'anime',  label: 'Anime', short: 'Anime', type: 'ANIME', live: true, color: '#B490F5', icon: 'fa-dragon',
-              blurb: 'Seasonal hits, classics & your squad lists.' },
+              blurb: 'Seasonal hits, classics & what you watch with friends.' },
     manga:  { id: 'manga',  label: 'Manga & Manhwa', short: 'Manga', type: 'MANGA', live: true, color: '#FF4D8D', icon: 'fa-book-open',
               blurb: 'Manga, manhwa & manhua — every chapter.' },
     movies: { id: 'movies', label: 'Movies & TV Shows', short: 'Movies & TV', tiny: 'Movies', type: 'TV', live: true, color: '#3b82f6', icon: 'fa-film',
@@ -222,7 +229,7 @@ const timeAgo = (iso) => {
     const d = h / 24; if (d < 7) return Math.floor(d) + 'd';
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
-const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0, inSolo: false, squadIds: [], originalSquadIds: [], wasSolo: false });
+const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0 });
 // rewatch counters (media_data.rep, one number per repeat) and the hidden "lil bro" flag live inside media_data, so they need no new column
 const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
     repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
@@ -1870,7 +1877,7 @@ const QuickAdd = {
             if (props.canPlay) list.push({ k: 'PLAY', icon: 'fa-play', label: 'Play', play: true });
             ['WATCHING', 'COMPLETED', 'DROPPED'].forEach(st => list.push({ k: st, icon: SONG_ICONS[st], label: STATUS_LABELS[st], color: STATUS_COLORS[st], on: e?.status === st }));
             list.push({ k: 'PLAYLIST', icon: 'fa-circle-plus', label: 'Add to playlist…' });
-            list.push({ k: 'EDIT', icon: 'fa-ellipsis', label: 'Squads & more…' });
+            list.push({ k: 'EDIT', icon: 'fa-ellipsis', label: 'Edit & more…' });
             if (props.onList) list.push({ k: 'REMOVE', icon: 'fa-trash-can', label: 'Remove from all lists', danger: true });
             return list;
         });
@@ -1886,7 +1893,7 @@ const QuickAdd = {
         const labelOf = (s) => (LABEL_SETS[props.anime?.type] || LABEL_SETS.ANIME).labels[s] || s;
         const marks = computed(() => { const t = props.anime?.type || 'ANIME'; return [...(REWISH_TYPES.includes(t) ? ['REWISH'] : []), ...(ROTATION_TYPES.includes(t) ? ['ROTATION'] : [])]; });
         const MARK_ICONS = { REWISH: 'fa-rotate-right', ROTATION: 'fa-arrows-spin' };
-        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, FLAG_OF, MARK_ICONS, btn, menu, pos, enter, leave, shut, isSong, songItems, pick, labelOf, marks };
+        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, FLAG_OF, MARK_ICONS, REPEAT_TYPES, PARTY_TYPES, btn, menu, pos, enter, leave, shut, isSong, songItems, pick, labelOf, marks };
     },
     unmounted() { this.shut(); },
     template: `
@@ -1919,12 +1926,13 @@ const QuickAdd = {
                         <i class="fa-solid text-[10px] w-2.5" :class="MARK_ICONS[k]" :style="{ color: STATUS_COLORS[k] }"></i> {{ labelOf(k) }}
                         <i class="fa-solid ml-auto text-[10px]" :class="entry?.[FLAG_OF[k]] ? 'fa-check' : 'fa-plus text-mute'"></i>
                     </button>
-                    <button v-if="(anime.type || 'ANIME') === 'ANIME' && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING')" @click="pick('REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
+                    <button v-if="REPEAT_TYPES.includes(anime.type || 'ANIME') && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING')" @click="pick('REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
                         <span class="qa-dot" :style="{ '--dot': STATUS_COLORS.REPEATING }"></span> Rewatch
                         <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
                     </button>
                     <div class="h-px bg-line my-1 mx-1"></div>
-                    <button @click="pick('EDIT')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-group text-[11px] w-2.5"></i> Squads & more…</button>
+                    <button v-if="PARTY_TYPES.includes(anime.type || 'ANIME')" @click="pick('PARTY')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-plus text-[11px] w-2.5"></i> Watch with friends…</button>
+                    <button @click="pick('EDIT')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-pen text-[11px] w-2.5"></i> Edit & more…</button>
                     <button v-if="onList" @click="pick('REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
                 </div>
             </div>
@@ -1939,7 +1947,7 @@ const QuickAdd = {
 
 /* <poster-card>: one anime poster, used on Browse, lists and friend profiles */
 const PosterCard = {
-    props: { anime: Object, entry: Object, solo: Object, i: { type: Number, default: 0 }, tag: String, quick: Boolean, menuOpen: Boolean, selectable: Boolean, selected: Boolean, editable: { type: Boolean, default: true }, ownList: { type: Boolean, default: true } },
+    props: { anime: Object, entry: Object, solo: Object, i: { type: Number, default: 0 }, tag: String, people: Array, quick: Boolean, menuOpen: Boolean, selectable: Boolean, selected: Boolean, editable: { type: Boolean, default: true }, ownList: { type: Boolean, default: true } },
     emits: ['open', 'action', 'edit', 'toggle', 'trailer', 'select'],
     setup(props, { emit }) {
         const rating = computed(() => {
@@ -1968,6 +1976,10 @@ const PosterCard = {
         <div class="poster-top-l z-10 flex flex-col items-start gap-1.5">
             <span v-if="entry" class="status-pill" :title="STATUS_SHORT[entry.status]"><span class="status-dot" :style="{ '--dot': STATUS_COLORS[entry.status] }"></span><span class="st-text">{{ STATUS_SHORT[entry.status] }}</span></span>
             <span v-if="tag" class="max-w-full truncate px-2 py-1 rounded-md bg-base/80 font-mono text-[9px] font-bold tracking-widest uppercase text-ink"><i class="fa-solid fa-user-group mr-1"></i>{{ tag }}</span>
+            <span v-if="people?.length" class="party-tags" :title="people.map(p => p.user.username + (p.state === 'invited' ? ' (invited)' : p.state === 'dropped' ? ' (dropped)' : '')).join(', ')">
+                <span v-for="p in people.slice(0, 4)" :key="p.id" class="pt" :class="p.state"><user-avatar :user="p.user" :size="22"></user-avatar></span>
+                <span v-if="people.length > 4" class="pt-more">+{{ people.length - 4 }}</span>
+            </span>
             <span v-if="mStatus" class="mstat" :style="{ '--c': mStatus.color }" :title="'Publishing status: ' + mStatus.label"><i></i>{{ mStatus.label }}</span>
         </div>
         <div class="poster-top-r z-10">
@@ -2174,37 +2186,74 @@ const DockHeight = {
 };
 // v9.9 v-drag-fab: a round button you can drag anywhere on the screen (it stays where you leave it, on this device);
 // a tap still presses it. Kept as a share of the screen, so turning the phone keeps it in the same area.
+// v1.6 throw it: let go while moving and it flies on, bounces off the edges of the screen (spinning like a record) and
+// slows down until it stops; grab it again mid-flight to catch it
 const DragFab = {
     mounted(el, binding) {
         const KEY = 'anicoop_fab_' + (binding.arg || 'btn');
+        const box = () => ({ maxX: window.innerWidth - el.offsetWidth - 6, maxY: window.innerHeight - el.offsetHeight - 6 });
+        let px = 0, py = 0, spin = 0, fly = 0, trail = [];
         const put = (x, y) => {
-            x = Math.min(Math.max(6, x), window.innerWidth - el.offsetWidth - 6); y = Math.min(Math.max(6, y), window.innerHeight - el.offsetHeight - 6);
-            Object.assign(el.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+            const b = box(); px = Math.min(Math.max(6, x), b.maxX); py = Math.min(Math.max(6, y), b.maxY);
+            Object.assign(el.style, { left: px + 'px', top: py + 'px', right: 'auto', bottom: 'auto' });
         };
+        const save = () => { const r = el.getBoundingClientRect(); try { localStorage.setItem(KEY, JSON.stringify({ x: r.left / window.innerWidth, y: r.top / window.innerHeight })); } catch {} };
         const load = () => { const p = readJSON(KEY); if (p && typeof p.x === 'number') put(p.x * window.innerWidth, p.y * window.innerHeight); };
+        const stopFly = () => { if (fly) cancelAnimationFrame(fly); fly = 0; el.classList.remove('is-flying'); el.style.transform = ''; };
+        const bump = () => { el.classList.remove('is-bump'); void el.offsetWidth; el.classList.add('is-bump'); };
+        const throwIt = (vx, vy) => {   // px per ms
+            const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            if (reduce || Math.hypot(vx, vy) < 0.35) { save(); return; }
+            const MAX = 4.5, s = Math.hypot(vx, vy); if (s > MAX) { vx *= MAX / s; vy *= MAX / s; }
+            el.classList.add('is-flying');
+            let last = performance.now();
+            const step = (now) => {
+                const dt = Math.min(34, now - last); last = now;
+                const b = box();
+                let x = px + vx * dt, y = py + vy * dt;
+                if (x < 6) { x = 6; vx = Math.abs(vx) * 0.78; bump(); } else if (x > b.maxX) { x = b.maxX; vx = -Math.abs(vx) * 0.78; bump(); }
+                if (y < 6) { y = 6; vy = Math.abs(vy) * 0.78; bump(); } else if (y > b.maxY) { y = b.maxY; vy = -Math.abs(vy) * 0.78; bump(); }
+                const f = Math.pow(0.9988, dt); vx *= f; vy *= f;   // air slows it down
+                spin += vx * dt * 1.2;
+                put(x, y); el.style.transform = `rotate(${spin % 360}deg)`;
+                if (Math.hypot(vx, vy) < 0.04) { stopFly(); save(); return; }
+                fly = requestAnimationFrame(step);
+            };
+            fly = requestAnimationFrame(step);
+        };
         let start = null, moved = false, justDragged = false;
-        el.addEventListener('pointerdown', (e) => { if (e.button > 0) return; const r = el.getBoundingClientRect(); start = { x: e.clientX, y: e.clientY, l: r.left, t: r.top, id: e.pointerId }; moved = false; });
+        el.addEventListener('pointerdown', (e) => {
+            if (e.button > 0) return;
+            const caught = !!fly; stopFly();
+            const r = el.getBoundingClientRect(); start = { x: e.clientX, y: e.clientY, l: r.left, t: r.top, id: e.pointerId }; moved = caught; trail = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+            if (caught) { try { el.setPointerCapture(e.pointerId); } catch {} el.classList.add('is-dragging'); }
+        });
         el.addEventListener('pointermove', (e) => {
             if (!start || e.pointerId !== start.id) return;
             const dx = e.clientX - start.x, dy = e.clientY - start.y;
             if (!moved) { if (Math.hypot(dx, dy) < 7) return; moved = true; try { el.setPointerCapture(e.pointerId); } catch {} el.classList.add('is-dragging'); }
             e.preventDefault(); put(start.l + dx, start.t + dy);
+            const t = performance.now(); trail.push({ x: e.clientX, y: e.clientY, t }); while (trail.length > 2 && t - trail[0].t > 90) trail.shift();
         });
-        const end = () => {
+        const end = (e) => {
             if (!start) return; start = null;
             if (!moved) return;
             el.classList.remove('is-dragging');
-            const r = el.getBoundingClientRect();
-            try { localStorage.setItem(KEY, JSON.stringify({ x: r.left / window.innerWidth, y: r.top / window.innerHeight })); } catch {}
             justDragged = true; setTimeout(() => { justDragged = false; }, 60);
+            // how fast it was moving over the last ~90 ms
+            const a = trail[0], b = trail[trail.length - 1], dt = b && a ? b.t - a.t : 0;
+            const recent = b && performance.now() - b.t < 80;
+            if (e?.type === 'pointerup' && recent && dt > 8) throwIt((b.x - a.x) / dt, (b.y - a.y) / dt); else save();
         };
         el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
         el.addEventListener('click', (e) => { if (justDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);   // letting go after a drag isn't a tap
-        el._fabResize = () => load();
+        el.addEventListener('animationend', () => el.classList.remove('is-bump'));
+        el._fabResize = () => { stopFly(); load(); };
+        el._fabStop = stopFly;
         window.addEventListener('resize', el._fabResize);
         load();
     },
-    unmounted(el) { window.removeEventListener('resize', el._fabResize); },
+    unmounted(el) { el._fabStop?.(); window.removeEventListener('resize', el._fabResize); },
 };
 const InfiniteScroll = {
     mounted(el, binding) {
@@ -2273,8 +2322,8 @@ createApp({
         const filters = ref(defaultFilters());
 
         const listFilterStatus = ref('ALL');
-        const listFilterGroup = ref('ALL');       // squad id on the Squads tab
         const listSearchQuery = ref('');
+        const listFormat = ref('');               // v1.6 TV / Movie / Special / OVA … (Manga / Manhwa / Novel …)
 
         const currentYear = new Date().getFullYear();
         const availableYears = Array.from({ length: 60 }, (_, i) => currentYear + 1 - i);
@@ -2282,8 +2331,7 @@ createApp({
 
         const soloList = ref([]);                 // your list (cloud)
         const favCharacters = ref([]);            // your favourite characters (cloud)
-        const squads = ref([]);                   // [{ id, name, color, created_by, members: [profile] }]
-        const coopList = ref([]);                 // squad entries
+
         const friendsList = ref([]);
         const pendingRequests = ref([]);
         const sentRequests = ref([]);
@@ -2325,7 +2373,7 @@ createApp({
             } catch {} finally { adultAsking = false; }
         };
         const secSolo = computed(() => soloList.value.filter(i => typeOf(i) === mediaType.value && adultOkItem(i)));
-        const secCoop = computed(() => coopList.value.filter(i => typeOf(i) === mediaType.value && adultOkItem(i)));
+
 
         const editForm = ref(emptyForm());
         const inlineForm = ref(emptyForm());
@@ -2371,11 +2419,10 @@ createApp({
         };
         const uid = () => currentUser.value?.id;
 
-        // everyone we know about (me, friends, squad members) by id
+        // everyone we know about (me, friends, people we watch with) by id
         const profileById = computed(() => {
             const m = new Map();
             friendsList.value.forEach(f => m.set(f.id, f));
-            squads.value.forEach(s => s.members.forEach(p => { if (!m.has(p.id)) m.set(p.id, p); }));
             extraProfiles.value.forEach(p => { if (!m.has(p.id)) m.set(p.id, p); });
             if (currentProfile.value) m.set(currentProfile.value.id, currentProfile.value);
             return m;
@@ -2384,7 +2431,7 @@ createApp({
         const ensureProfiles = async (ids) => {
             const missing = [...new Set(ids.filter(id => id && !profileById.value.has(id)))];
             if (!missing.length) return;
-            const { data } = await sb.from('profiles').select(PROFILE_COLS).in('id', missing);
+            const { data } = await selectProfiles(c => sb.from('profiles').select(c).in('id', missing));
             if (data?.length) extraProfiles.value = [...extraProfiles.value, ...data];
         };
         const personOf = (id) => profileById.value.get(id) || { id, username: 'Someone' };
@@ -2410,8 +2457,9 @@ createApp({
             if (!uid() || loadedUserId === uid()) return;
             loadedUserId = uid();
             // v1.5 all at once (they used to wait for each other: profile, then settings, then friends, then the lists)
-            await Promise.all([fetchProfile().then(() => markActive()), fetchSettings(), fetchFriends(), fetchSolo(), fetchFavs(), fetchFavStaff(), fetchSquads()]);
-            fetchNotifications();   // after friends + squads: most of the people in it are known by then
+            await Promise.all([fetchProfile().then(() => markActive()), fetchSettings(), fetchFriends(), fetchSolo(), fetchFavs(), fetchFavStaff(), fetchParties()]);
+            pullParties(false);   // v1.6 titles your friends moved on while you were away
+            fetchNotifications();   // after friends + parties: most of the people in it are known by then
             movePicsToStorage().catch(() => {});   // v1.5
             maybeStartTour();
             finishSteamSignIn().then(() => loadSteamLib()).then(() => setTimeout(syncSteamHours, 5000));   // v1.3 · v1.5 daily hours
@@ -2435,7 +2483,7 @@ createApp({
             loadedUserId = null;
             teardownRealtime();
             currentProfile.value = null;
-            soloList.value = []; coopList.value = []; favCharacters.value = []; squads.value = [];
+            soloList.value = []; favCharacters.value = []; parties.value = []; savedState.clear(); leftNow.clear(); listWith.value = []; strictSolo.value = false; partyDraft.open = false;
             friendsList.value = []; pendingRequests.value = []; sentRequests.value = []; friendEntries.value = [];
             notifications.value = []; daysActive.value = 0; feed.value = []; favStaff.value = []; entity.value = null; chats.value = []; chatWith.value = null; chatMessages.value = []; adultAllowed.value = false; isOwner.value = false; songsCfg.ready = false; extraProfiles.value = []; settingsLoaded = false; settingsOpen.value = false;
             selectedAnime.value = null; editForm.value = emptyForm();
@@ -2531,6 +2579,7 @@ createApp({
             const { data, error } = await selectAll(() => sb.from('list_entries').select('*').eq('user_id', uid()).order('updated_at', { ascending: false }).order('media_id'));
             if (error) { console.error(error); showToast('Could not load your list: ' + error.message, 'error'); return; }
             soloList.value = (data || []).filter(r => r.media_data?.id).map(listRow);
+            savedState.clear(); soloList.value.forEach(noteSaved);   // v1.6 (watch together: what a count moved from)
         };
         const fetchFavs = async () => {
             const { data } = await sb.from('favorite_characters').select('*').eq('user_id', uid()).order('created_at');
@@ -2555,6 +2604,7 @@ createApp({
             if (error) throw error;
             // (only if no newer save of that title started meanwhile: two quick +1s must not step back to the first one)
             rows.forEach(r => { if (lastWrite.get(r.media_id) !== seq) return; ownWrites.set(r.media_id, Date.now()); const cur = soloEntry(r.media_id); setSoloLocal(listRow({ ...r, created_at: cur?.createdAt || r.updated_at })); });
+            partyAfterSave(list);   // v1.6 the friends you watch it with move along (and dropping it drops you in the party)
             list.forEach(e => alEnqueue(e.anime.id, e.status === 'NONE' ? { kind: 'delete' } : alSaveOp(e)));
             list.filter(e => e.status === 'NONE').forEach(e => malEnqueue(e.anime.id, { kind: 'delete' }));
             list.filter(e => e.status !== 'NONE').forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: { status: e.status, score: e.score, progress: e.progress, repeats: e.repeats, anime: { episodes: e.anime?.episodes || 0 } } }));
@@ -2569,6 +2619,7 @@ createApp({
             list.forEach(id => { ownWrites.set(id, Date.now()); lastWrite.set(id, ++writeSeq); });
             const { error } = await sb.from('list_entries').delete().eq('user_id', uid()).in('media_id', list);
             if (error) throw error;
+            partyAfterDelete(list);
             list.forEach(id => alEnqueue(id, { kind: 'delete' }));
             list.forEach(id => malEnqueue(id, { kind: 'delete' }));
         };
@@ -2632,6 +2683,7 @@ createApp({
                 const { data } = sb.storage.from(MEDIA_BUCKET).getPublicUrl(path);
                 const url = data.publicUrl;
                 if (target === 'edit') { if (banner) profileEdit.banner_url = url; else profileEdit.avatar_url = url; return; }
+                if (target === 'group') { await saveGroupPic(url); return; }
                 await saveProfileFields(banner ? { banner_url: url } : { avatar_url: url });
                 showToast(banner ? 'Banner updated!' : 'Profile picture updated!');
             } catch (err) {
@@ -2674,6 +2726,7 @@ createApp({
             const dataUrl = banner ? renderCrop(1200, 400) : renderCrop(320, 320);
             const target = settingsOpen.value && settingsTab.value === 'profile' ? 'edit' : cropper.target;
             closeCropper();
+            if (target === 'group') { saveGroupPic(dataUrl); return; }
             if (target === 'edit') { if (banner) profileEdit.banner_url = dataUrl; else profileEdit.avatar_url = dataUrl; return; }
             avatarUploading.value = true;
             try { await saveProfileFields(banner ? { banner_url: dataUrl } : { avatar_url: dataUrl }); showToast(banner ? 'Banner updated!' : 'Profile picture updated!'); }
@@ -2881,7 +2934,7 @@ createApp({
                 { key: 'activity_reply', label: 'When someone replies to my activity' },
                 { key: 'comment_like', label: 'When someone likes my forum comment' },
                 { key: 'friend_comment', label: 'When a friend posts in the Comments' },
-                { key: 'squad', label: 'When I’m added to a squad, or a squad list gets a new show' },
+                { key: 'squad', label: 'When a friend invites me to watch something together, joins or drops one, or adds me to a playlist' },
                 { key: 'friend_post', label: 'When a friend posts, starts a poll or asks a question' },
                 { key: 'poll_ended', label: 'When a poll I made or voted in ends (with the winner)' },
             ] },
@@ -3065,7 +3118,7 @@ createApp({
             const ids = [...new Set(rows.map(otherId))];
             let byId = {};
             if (ids.length) {
-                const { data: profiles } = await sb.from('profiles').select(PROFILE_COLS).in('id', ids);
+                const { data: profiles } = await selectProfiles(c => sb.from('profiles').select(c).in('id', ids));
                 byId = Object.fromEntries((profiles || []).map(p => [p.id, p]));
             }
             const withProfile = (f) => ({ id: otherId(f), username: 'Unknown user', ...byId[otherId(f)], friendshipId: f.id, since: f.created_at });
@@ -3139,109 +3192,279 @@ createApp({
             } catch (err) { showToast('Could not update favorites: ' + (err.message || err), 'error'); fetchFavs(); }
         };
 
-        // ---------- squads (co-op groups with any number of friends) ----------
-        const fetchSquads = async () => {
+        // ---------- v1.6 watch together: friends tagged on your titles (this replaced squads) ----------
+        // Everything is on your own list. Inviting friends to a title makes a watch party for it (party_invite); people
+        // who accept get it on their list and show as a picture on its poster (a pending invite is a faded one). Everyone
+        // keeps their own status: one can be Rewatching while another is Watching, and someone who drops it stays in its
+        // history as Dropped while the rest carry on. The count moves together: a new count you save goes to the party
+        // (party_progress), and a party that moved on moves your entry forward (never back). Anime, manga, movies & TV.
+        // The old squads were moved into parties by the v1.6 SQL (8h).
+        const partyType = (a) => PARTY_TYPES.includes(a?.type || 'ANIME');
+        const parties = ref([]);      // [{ id, media_id, media_type, anime, progress, created_by, updated_at, members: [{ user_id, state, invited_by, updated_at }] }]
+        const partyMissing = ref(false);   // the v1.6 SQL isn't in the database yet
+        const partyNeedsSql = () => showToast('Watching together needs the v1.6 database update: run the new part of supabase_setup.sql in Supabase (see README)', 'error');
+        const fetchParties = async () => {
             const me = uid(); if (!me) return;
-            const { data: mine, error } = await sb.from('squad_members').select('squad_id').eq('user_id', me);
-            if (error) { console.error(error); showToast('Could not load squads: ' + error.message, 'error'); return; }
-            const ids = (mine || []).map(r => r.squad_id);
-            if (!ids.length) { squads.value = []; coopList.value = []; return; }
-            const [{ data: sq }, { data: members }] = await Promise.all([
-                sb.from('squads').select('*').in('id', ids),
-                sb.from('squad_members').select('squad_id, user_id').in('squad_id', ids),
-            ]);
-            const memberIds = [...new Set((members || []).map(m => m.user_id))];
-            const { data: profs } = memberIds.length ? await sb.from('profiles').select(PROFILE_COLS).in('id', memberIds) : { data: [] };
-            const pById = Object.fromEntries((profs || []).map(p => [p.id, p]));
-            squads.value = (sq || []).map(s => ({
-                ...s,
-                members: (members || []).filter(m => m.squad_id === s.id).map(m => pById[m.user_id] || { id: m.user_id, username: 'Unknown' }),
-            })).sort((a, b) => a.name.localeCompare(b.name));
-            await fetchSquadEntries();
+            const { data: mine, error } = await sb.from('party_members').select('party_id').eq('user_id', me);
+            if (error) { partyMissing.value = /party_members|schema cache|does not exist/i.test(error.message || ''); parties.value = []; return; }
+            partyMissing.value = false;
+            const ids = [...new Set((mine || []).map(r => r.party_id))];
+            if (!ids.length) { parties.value = []; return; }
+            const ps = [], ms = [];
+            for (let k = 0; k < ids.length; k += 150) {
+                const part = ids.slice(k, k + 150);
+                const [{ data: p }, { data: m }] = await Promise.all([sb.from('watch_parties').select('*').in('id', part), sb.from('party_members').select('*').in('party_id', part)]);
+                ps.push(...(p || [])); ms.push(...(m || []));
+            }
+            const byParty = new Map();
+            ms.forEach(m => { if (!byParty.has(m.party_id)) byParty.set(m.party_id, []); byParty.get(m.party_id).push(m); });
+            parties.value = ps.map(p => ({ ...p, anime: normMedia({ ...(p.media_data || {}), id: p.media_id, type: p.media_data?.type || p.media_type }), members: byParty.get(p.id) || [] }));
+            ensureProfiles(ms.map(m => m.user_id));
         };
-        const squadById = computed(() => new Map(squads.value.map(s => [s.id, s])));
-        const squadLabel = (s) => s ? s.name : 'Squad';
-        const fetchSquadEntries = async () => {
-            const ids = squads.value.map(s => s.id);
-            if (!ids.length) { coopList.value = []; return; }
-            const { data, error } = await selectAll(() => sb.from('squad_entries').select('*').in('squad_id', ids).order('updated_at', { ascending: false }).order('squad_id').order('media_id'));
-            if (error) { console.error(error); return; }
-            coopList.value = (data || []).filter(r => r.media_data?.id).map(r => ({
-                ...listRow(r), squadId: r.squad_id, group: squadLabel(squadById.value.get(r.squad_id)), key: r.squad_id + ':' + r.media_id,
-            }));
-        };
-        const squadRow = (squadId, anime, fields, isNew) => ({
-            squad_id: squadId, media_id: anime.id, media_type: anime.type || 'ANIME', media_data: slimAnime(anime),
-            status: fields.status === 'REPEATING' ? 'COMPLETED' : fields.status, score: fields.score || 0, progress: fields.progress || 0,
-            updated_by: uid(), updated_at: new Date().toISOString(), ...(isNew ? { added_by: uid() } : {}),
+        const refreshPartiesSoon = debounce(async () => { await fetchParties(); pullParties(false); }, 500);
+        const memberOf = (p, id = uid()) => p?.members.find(m => m.user_id === id) || null;
+        const myState = (p) => memberOf(p)?.state || null;
+        // your parties per title: joined, or dropped (kept as history)
+        const partiesByMedia = computed(() => {
+            const map = new Map();
+            parties.value.forEach(p => { const s = myState(p); if (s === 'joined' || s === 'dropped') { if (!map.has(p.media_id)) map.set(p.media_id, []); map.get(p.media_id).push(p); } });
+            return map;
         });
-        const upsertSquadEntry = async (squadId, anime, fields) => {
-            const isNew = !coopList.value.some(i => i.squadId === squadId && i.anime.id === anime.id);
-            const { error } = isNew
-                ? await sb.from('squad_entries').insert(squadRow(squadId, anime, fields, true))
-                : await sb.from('squad_entries').update(squadRow(squadId, anime, fields, false)).eq('squad_id', squadId).eq('media_id', anime.id);
-            if (error) throw error;
-        };
-        const deleteSquadEntry = async (squadId, mediaId) => {
-            const { error } = await sb.from('squad_entries').delete().eq('squad_id', squadId).eq('media_id', mediaId);
-            if (error) throw error;
+        const partyInvites = computed(() => parties.value.filter(p => myState(p) === 'invited' && adultOk(p.anime))
+            .sort((a, b) => String(memberOf(b)?.updated_at || '').localeCompare(String(memberOf(a)?.updated_at || ''))));
+        // the friends on each of your titles, each person once: watching with you, invited (faded) or dropped (grey)
+        const TAG_RANK = { joined: 3, dropped: 2, invited: 1 };
+        const partyTags = computed(() => {
+            const out = new Map(), me = uid();
+            partiesByMedia.value.forEach((ps, id) => {
+                const seen = new Map();
+                ps.forEach(p => p.members.forEach(m => {
+                    if (m.user_id === me || !TAG_RANK[m.state]) return;
+                    const cur = seen.get(m.user_id);
+                    if (!cur || TAG_RANK[m.state] > TAG_RANK[cur.state]) seen.set(m.user_id, { id: m.user_id, state: m.state, party: p.id });
+                }));
+                if (seen.size) out.set(id, [...seen.values()].sort((a, b) => TAG_RANK[b.state] - TAG_RANK[a.state]));
+            });
+            return out;
+        });
+        const tagsOf = (id) => partyTags.value.get(id) || null;
+        const posterTags = (id) => (partyTags.value.get(id) || []).map(t => ({ ...t, user: personOf(t.id) }));
+        const partyProgressOf = (id) => { const ps = (partiesByMedia.value.get(id) || []).filter(p => myState(p) === 'joined'); return ps.length ? Math.max(...ps.map(p => p.progress || 0)) : null; };
+        const partyRespond = async (p, state, quiet = false) => {
+            const m = memberOf(p); const before = m?.state;
+            if (m) { m.state = state; m.updated_at = new Date().toISOString(); }
+            const { error } = await sb.rpc('party_respond', { pid: p.id, p_state: state });
+            if (error) { if (m) m.state = before; if (!quiet) showToast('Could not save: ' + error.message, 'error'); return false; }
+            return true;
         };
 
-        // squad create / manage
-        const squadDraft = reactive({ open: false, name: '', members: [], busy: false, forForm: null });
-        const openSquadDraft = (forForm = null) => Object.assign(squadDraft, { open: true, name: '', members: [], busy: false, forForm });
-        const toggleDraftMember = (id) => { const i = squadDraft.members.indexOf(id); if (i === -1) squadDraft.members.push(id); else squadDraft.members.splice(i, 1); };
-        const draftAutoName = computed(() => {
-            const names = squadDraft.members.map(id => personOf(id).username);
-            if (!names.length) return '';
-            return [currentProfile.value?.username || 'Me', ...names].slice(0, 4).join(', ').replace(/, ([^,]*)$/, ' & $1');
+        // the count you're at on a title: a rewatch has its own counter
+        const effProgress = (e) => e ? (e.status === 'REPEATING' ? (repeatNow(e) || 0) : (e.progress || 0)) : 0;
+        // status + count of each title as last loaded / saved, so a save can tell a real count change from a rewrite
+        const savedState = new Map();
+        const noteSaved = (e) => { if (e?.anime?.id) savedState.set(e.anime.id, { status: e.status, eff: effProgress(e) }); };
+        const leftNow = new Map();   // media id → parties you left by taking the title off your list (Undo puts you back)
+        const PARTY_ACTIVE = ['WATCHING', 'REPEATING'];
+        // after every save of your list: dropping it = dropped in the party, picking it up again = back in, and a count
+        // that really moved (while watching, or finishing it) moves the party
+        const partyAfterSave = (list) => {
+            list.forEach(e => {
+                const id = e.anime?.id, prev = savedState.get(id), eff = effProgress(e);
+                noteSaved(e);
+                if (!partyType(e.anime)) return;
+                const back = leftNow.get(id);
+                if (back) { leftNow.delete(id); back.forEach(p => partyRespond(p, e.status === 'DROPPED' ? 'dropped' : 'joined', true)); }
+                (partiesByMedia.value.get(id) || []).forEach(p => {
+                    const st = myState(p);
+                    if (e.status === 'DROPPED' && st === 'joined') { partyRespond(p, 'dropped', true); return; }
+                    if (st === 'dropped' && [...PARTY_ACTIVE, 'PLANNING', 'COMPLETED'].includes(e.status)) partyRespond(p, 'joined', true);
+                    const moved = prev && eff !== prev.eff && [...PARTY_ACTIVE, 'PLANNING'].includes(prev.status) && [...PARTY_ACTIVE, 'COMPLETED'].includes(e.status);
+                    if (moved && eff !== p.progress) { p.progress = eff; sb.rpc('party_progress', { pid: p.id, n: eff }).then(() => {}, () => {}); }
+                });
+            });
+        };
+        // taking a title off your list = leaving its parties
+        const partyAfterDelete = (ids) => ids.forEach(id => {
+            savedState.delete(id);
+            const ps = (partiesByMedia.value.get(id) || []).filter(p => ['joined', 'dropped'].includes(myState(p)));
+            if (!ps.length) return;
+            leftNow.set(id, ps);
+            ps.forEach(p => partyRespond(p, 'left', true));
         });
-        const createSquad = async () => {
-            if (!squadDraft.members.length) { showToast('Pick at least one friend', 'error'); return; }
-            const name = (squadDraft.name.trim() || draftAutoName.value).slice(0, 40);
-            squadDraft.busy = true;
+        // your entry at a party's count (a rewatch moves its own counter; the last one finishes it)
+        const movedTo = (e, n) => {
+            const eps = totalOf(e.anime), x = { ...e, repeats: [...(e.repeats || [])] };
+            const to = eps ? Math.min(n, eps) : n;
+            if (x.status === 'REPEATING') {
+                if (!x.repeats.length) x.repeats.push(0);
+                x.repeats[x.repeats.length - 1] = to;
+                if (eps && to >= eps) x.status = 'COMPLETED';
+            } else { x.progress = to; x.status = eps && to >= eps ? 'COMPLETED' : to > 0 ? 'WATCHING' : x.status; }
+            return x;
+        };
+        // a party that moved on moves your entry forward (only while you're watching / planning it; never back). Only moves
+        // made after you joined count, so the squads moved over by the v1.6 SQL don't jump anyone's own count.
+        const pullTarget = (id) => {
+            const ps = (partiesByMedia.value.get(id) || []).filter(p => myState(p) === 'joined' && (Date.parse(p.updated_at) || 0) > (Date.parse(memberOf(p)?.updated_at) || 0));
+            return ps.length ? Math.max(...ps.map(p => p.progress || 0)) : null;
+        };
+        let pulling = false;
+        const pullParties = async (loud = false) => {
+            if (pulling || !parties.value.length) return;
+            pulling = true;
             try {
-                const { data: sid, error } = await sb.rpc('create_squad', { p_name: name, p_members: squadDraft.members, p_color: ACCENTS[Math.floor(Math.random() * ACCENTS.length)] });
+                const moved = [];
+                partiesByMedia.value.forEach((ps, id) => {
+                    const e = soloEntry(id), n = pullTarget(id);
+                    if (!e || n == null || !['WATCHING', 'REPEATING', 'PLANNING'].includes(e.status) || n <= effProgress(e)) return;
+                    moved.push(movedTo(e, n));
+                });
+                if (!moved.length) return;
+                moved.forEach(setSoloLocal);
+                if (selectedAnime.value && moved.some(e => e.anime.id === selectedAnime.value.id)) inlineForm.value = buildForm(selectedAnime.value);
+                await upsertSolo(moved);
+                if (loud && moved.length === 1) { const e = moved[0], who = (tagsOf(e.anime.id) || []).filter(t => t.state === 'joined').map(t => personOf(t.id).username); showToast(`${titleOf(e.anime)} moved to ${UNIT.short} ${effProgress(e)}${who.length ? ' with ' + joinNames(who) : ''}`); }
+            } catch (err) { console.warn('party sync', err.message || err); }
+            finally { pulling = false; }
+        };
+        const onPartyRealtime = (pl) => {
+            const row = pl.new, p = row?.id && parties.value.find(x => x.id === row.id);
+            if (pl.eventType === 'UPDATE' && p) { p.progress = row.progress; p.updated_at = row.updated_at; pullParties(true); return; }
+            refreshPartiesSoon();
+        };
+        const joinNames = (names) => names.length <= 1 ? (names[0] || '') : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+
+        // the invite window: one or more titles, pick friends (or a group you often watch with), send
+        const partyDraft = reactive({ open: false, items: [], picked: [], q: '', busy: false, rewatch: true });
+        const openPartyDraft = (animes) => {
+            if (!currentUser.value) { showToast('Sign in first', 'error'); return; }
+            if (partyMissing.value) { partyNeedsSql(); return; }
+            const items = (Array.isArray(animes) ? animes : [animes]).filter(a => a?.id && partyType(a));
+            if (!items.length) { showToast('Watching together is for anime, manga and movies & TV', 'error'); return; }
+            quickMenuFor.value = null; sheetAnime.value = null;
+            Object.assign(partyDraft, { open: true, items: items.map(normMedia), picked: [], q: '', busy: false, rewatch: true });
+        };
+        const partyFriends = computed(() => {
+            const q = partyDraft.q.trim().toLowerCase();
+            return friendsList.value.filter(f => !q || (f.username || '').toLowerCase().includes(q));
+        });
+        const togglePartyPick = (id) => { const i = partyDraft.picked.indexOf(id); if (i === -1) partyDraft.picked.push(id); else partyDraft.picked.splice(i, 1); };
+        // already in it (joined / invited) for the one title in the window
+        const partyHas = (id) => partyDraft.items.length === 1 && (tagsOf(partyDraft.items[0].id) || []).some(t => t.id === id && t.state !== 'dropped');
+        const partyDraftCompleted = computed(() => partyDraft.items.some(a => soloEntry(a.id)?.status === 'COMPLETED'));
+        // "recent squads": the friend groups you watch with most (then most lately), one tap invites all of them
+        const recentSquads = computed(() => {
+            const friends = new Set(friendsList.value.map(f => f.id)), combos = new Map(), me = uid();
+            parties.value.forEach(p => {
+                if (!['joined', 'dropped'].includes(myState(p))) return;
+                const ids = p.members.filter(m => m.user_id !== me && ['joined', 'invited', 'dropped'].includes(m.state) && friends.has(m.user_id)).map(m => m.user_id).sort();
+                if (!ids.length) return;
+                const k = ids.join(','), c = combos.get(k) || { ids, n: 0, at: '' };
+                c.n++; if (String(p.updated_at) > c.at) c.at = String(p.updated_at);
+                combos.set(k, c);
+            });
+            return [...combos.values()].sort((a, b) => b.n - a.n || b.at.localeCompare(a.at)).slice(0, 5);
+        });
+        const sendPartyInvites = async (members = partyDraft.picked) => {
+            members = [...new Set(members)].filter(Boolean);
+            if (!members.length) { showToast('Pick at least one friend', 'error'); return; }
+            if (partyDraft.busy) return;
+            partyDraft.busy = true;
+            try {
+                // on your list first; a title you finished becomes a rewatch (unless you switched that off)
+                const put = [];
+                for (const a of partyDraft.items) {
+                    const cur = soloEntry(a.id);
+                    if (!cur) put.push({ anime: normMedia(a), status: 'PLANNING', score: 0, progress: 0 });
+                    else if (cur.status === 'COMPLETED' && partyDraft.rewatch) {
+                        await fillTotal(cur.anime);
+                        const r = startRepeat(cur.repeats, totalOf(cur.anime));
+                        if (r) { r[r.length - 1] = 0; put.push({ ...cur, status: 'REPEATING', repeats: r, rewish: false }); }
+                    } else if (cur.status === 'NONE' || cur.status === 'DROPPED') put.push({ ...cur, status: 'PLANNING' });
+                }
+                if (put.length) { put.forEach(setSoloLocal); await upsertSolo(put); }
+                const items = partyDraft.items.map(a => { const e = soloEntry(a.id); return { media_id: a.id, media_type: a.type || 'ANIME', media_data: slimAnime(e?.anime || a), progress: e && PARTY_ACTIVE.includes(e.status) ? effProgress(e) : 0 }; });
+                const { error } = await sb.rpc('party_invite', { p_items: items, p_members: members });
                 if (error) throw error;
-                await fetchSquads();
-                if (squadDraft.forForm && sid && !squadDraft.forForm.squadIds.includes(sid)) squadDraft.forForm.squadIds.push(sid);
-                squadDraft.open = false;
-                showToast(`Squad "${name}" created!`);
-            } catch (err) { showToast('Could not create squad: ' + (err.message || err), 'error'); }
-            finally { squadDraft.busy = false; }
+                await fetchParties();
+                const names = joinNames(members.map(id => personOf(id).username));
+                showToast(partyDraft.items.length === 1 ? `Invited ${names} to ${titleOf(partyDraft.items[0])}` : `Invited ${names} to ${partyDraft.items.length} titles`);
+                partyDraft.open = false;
+                if (selectMode.value && partyDraft.items.length > 1) clearSelected();
+                if (selectedAnime.value) inlineForm.value = buildForm(selectedAnime.value);
+            } catch (err) {
+                if (/party_invite|schema cache|does not exist/i.test(err.message || '')) { partyMissing.value = true; partyNeedsSql(); }
+                else showToast('Could not send the invites: ' + (err.message || err), 'error');
+            } finally { partyDraft.busy = false; }
         };
-        const squadAddMember = async (squad, friendId) => {
-            const { error } = await sb.from('squad_members').insert({ squad_id: squad.id, user_id: friendId, added_by: uid() });
-            if (error) { showToast('Could not add: ' + error.message, 'error'); return; }
-            showToast(`${personOf(friendId).username} joined ${squad.name}`);
-            await fetchSquads();
+        // answering an invite: yes = the title on your list at the party's count (a title you finished becomes a rewatch,
+        // so you can rewatch it while they watch it for the first time); no = it goes away
+        const answerInvite = async (p, yes) => {
+            if (!p) return;
+            if (!yes) { if (await partyRespond(p, 'declined')) showToast(`Said no to ${titleOf(p.anime)}`); return; }
+            if (!(await partyRespond(p, 'joined'))) return;
+            const n = p.progress || 0, cur = soloEntry(p.media_id);
+            let e;
+            if (!cur) e = { anime: p.anime, status: n > 0 ? 'WATCHING' : 'PLANNING', score: 0, progress: n, repeats: [] };
+            else if (cur.status === 'COMPLETED') {
+                await fillTotal(cur.anime);
+                const r = startRepeat(cur.repeats, totalOf(cur.anime));
+                e = r ? movedTo({ ...cur, status: 'REPEATING', repeats: r, rewish: false }, n) : null;
+            } else if (cur.status === 'REPEATING') e = n > effProgress(cur) ? movedTo(cur, n) : null;
+            else e = { ...cur, status: n > 0 || cur.status === 'WATCHING' ? 'WATCHING' : 'PLANNING', progress: Math.max(cur.progress || 0, n) };
+            try {
+                if (e) { setSoloLocal(e); await upsertSolo(e); if (!cur) logActivity(e.anime, null, e); }
+                const mine = soloEntry(p.media_id);
+                if (mine && PARTY_ACTIVE.includes(mine.status) && effProgress(mine) > n) { p.progress = effProgress(mine); sb.rpc('party_progress', { pid: p.id, n: p.progress }).then(() => {}, () => {}); }
+                if (selectedAnime.value?.id === p.media_id) inlineForm.value = buildForm(selectedAnime.value);
+                const who = p.members.filter(m => m.user_id !== uid() && m.state === 'joined').map(m => personOf(m.user_id).username);
+                showToast(`You're watching ${titleOf(p.anime)}${who.length ? ' with ' + joinNames(who) : ''}${e?.status === 'REPEATING' ? ' (a rewatch for you)' : ''}`);
+            } catch (err) { showToast('Could not add it to your list: ' + (err.message || err), 'error'); }
         };
-        const renameSquad = async (squad) => {
-            const name = await askText({ title: 'Rename squad', body: 'Everyone in the squad sees the new name.', value: squad.name, ok: 'Rename', max: 40, placeholder: 'Squad name' });
-            if (!name || name === squad.name) return;
-            const { error } = await sb.from('squads').update({ name }).eq('id', squad.id);
-            if (error) { showToast(error.message, 'error'); return; }
-            await fetchSquads();
-            showToast(`Squad renamed to ${name}`);
+        const inviteFor = (mediaId) => partyInvites.value.find(p => p.media_id === mediaId) || null;
+        const inviteFrom = (p) => personOf(memberOf(p)?.invited_by || p?.created_by);
+        const invitePeople = (p) => (p?.members || []).filter(m => m.user_id !== uid() && m.state === 'joined').map(m => personOf(m.user_id));
+        // (the Lists page: invites for the section you're in)
+        const sectionInvites = computed(() => partyInvites.value.filter(p => (p.anime?.type || 'ANIME') === mediaType.value));
+        // your usual groups on your profile: tap one to see what you watch with them
+        const openGroupList = (ids) => { listWith.value = [...ids]; strictSolo.value = false; listFilterStatus.value = 'ALL'; openTracker('solo'); };
+        watch(activeTab, (t) => { if (t === 'coop') activeTab.value = 'solo'; });   // (an old history entry from the squads page)
+        const cancelInvite = async (partyId, userId) => {
+            const p = parties.value.find(x => x.id === partyId); if (!p) return;
+            const { error } = await sb.rpc('party_cancel', { pid: p.id, member: userId });
+            if (error) { showToast('Could not take it back: ' + error.message, 'error'); return; }
+            p.members = p.members.filter(m => !(m.user_id === userId && m.state === 'invited'));
+            showToast(`Took back the invite for ${personOf(userId).username}`);
         };
-        // Leave = only you go (the squad + its list stay for the others). Delete = creator removes it for everyone.
-        const leaveSquad = async (squad, mode = 'leave') => {
-            if (!squad) return;
-            const del = mode === 'delete';
-            if (del && squad.created_by !== uid()) { showToast('Only the person who made the squad can delete it', 'error'); return; }
-            const others = squad.members.filter(m => m.id !== uid()).length;
-            if (!(await askConfirm(del ? { title: `Delete the squad “${squad.name}”?`, body: 'Its list is deleted for everyone in it.', ok: 'Delete squad' }
-                : { title: `Leave “${squad.name}”?`, body: others ? `The other ${others} member${others === 1 ? '' : 's'} keep the squad and its list.` : 'You are the last member, so the squad will be empty.', ok: 'Leave squad' }))) return;
-            const { error } = del
-                ? await sb.from('squads').delete().eq('id', squad.id)
-                : await sb.from('squad_members').delete().eq('squad_id', squad.id).eq('user_id', uid());
-            if (error) { showToast(error.message, 'error'); return; }
-            showToast(del ? 'Squad deleted' : `You left ${squad.name}`);
-            if (listFilterGroup.value === squad.id) listFilterGroup.value = 'ALL';
-            await fetchSquads();
+        // leave = you're off the title's tags (it stays on your list)
+        const leaveParty = async (a) => {
+            const ps = (partiesByMedia.value.get(a.id) || []);
+            if (!ps.length) return;
+            if (!(await askConfirm({ title: `Stop watching ${titleOf(a)} together?`, body: 'It stays on your list; your friends’ pictures come off it and they carry on without you.', ok: 'Stop watching together', danger: false }))) return;
+            for (const p of ps) await partyRespond(p, 'left');
+            showToast(`${titleOf(a)} is just yours now`);
         };
-        const friendsNotIn = (squad) => friendsList.value.filter(f => !squad.members.some(m => m.id === f.id));
-        const squadAddOpen = ref(null);
+        // the people box on a title's page (everyone who was ever in it: dropped and left too)
+        const PARTY_STATE_LABEL = { joined: 'Watching with you', invited: 'Invited', dropped: 'Dropped', left: 'Left' };
+        const detailParty = computed(() => {
+            const a = selectedAnime.value; if (!a || !partyType(a)) return null;
+            const ps = parties.value.filter(p => p.media_id === a.id && ['joined', 'dropped'].includes(myState(p)));
+            if (!ps.length) return null;
+            const seen = new Map(), me = uid(), R = { ...TAG_RANK, left: 0 };
+            ps.forEach(p => p.members.forEach(m => {
+                if (m.user_id === me || !(m.state in R)) return;
+                const cur = seen.get(m.user_id);
+                if (!cur || R[m.state] > R[cur.state]) seen.set(m.user_id, { id: m.user_id, state: m.state, party: p.id, user: personOf(m.user_id), st: m.state === 'joined' || m.state === 'dropped' ? friendStatusOf(m.user_id, a.id) : null });
+            }));
+            return { people: [...seen.values()].sort((x, y) => R[y.state] - R[x.state]), progress: partyProgressOf(a.id), me: ps.some(p => myState(p) === 'joined') ? 'joined' : 'dropped' };
+        });
+        // a friend's own status on a title (from their list, if you can see it)
+        const friendStatusOf = (userId, mediaId) => { const r = friendEntries.value.find(x => x.user_id === userId && x.media_id === mediaId); return r ? r.status : null; };
+        // Lists: "watching with" (only titles with all the friends you pick), "strictly solo" (hides every tagged title)
+        const listWith = ref([]);
+        const strictSolo = ref(false);
+        const toggleListWith = (id) => { const i = listWith.value.indexOf(id); if (i === -1) listWith.value = [...listWith.value, id]; else listWith.value = listWith.value.filter(x => x !== id); if (listWith.value.length) strictSolo.value = false; };
+        watch(strictSolo, (on) => { if (on) listWith.value = []; });
 
         // ---------- realtime ----------
         let realtimeChannel = null;
@@ -3255,14 +3478,13 @@ createApp({
             if ((row || p.old)?.user_id && (row || p.old).user_id !== uid()) return;
             if (Date.now() - (ownWrites.get(id) || 0) < 6000) return;
             if (p.eventType === 'DELETE') { soloList.value = soloList.value.filter(i => i.anime.id !== id); return; }
-            if (row?.media_data?.id) setSoloLocal(listRow(row)); else refreshSoloSoon();
+            if (row?.media_data?.id) { const e = listRow(row); setSoloLocal(e); noteSaved(e); } else refreshSoloSoon();
         };
         const setupRealtimeSync = () => {
             teardownRealtime();
             const me = uid();
             const refreshFriends = debounce(async () => { await fetchFriends(); fetchFriendEntries(); }, 300);
-            const refreshSquads = debounce(fetchSquads, 300);
-            const refreshEntries = debounce(fetchSquadEntries, 300);
+
             realtimeChannel = sb.channel(`user-${me}`)
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friendships', filter: `receiver_id=eq.${me}` }, (p) => {
                     refreshFriends();
@@ -3273,9 +3495,9 @@ createApp({
                     if (p.new?.status === 'accepted') showToast('Your friend request was accepted!');
                 })
                 .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'friendships' }, refreshFriends)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'squad_members' }, refreshSquads)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'squads' }, refreshSquads)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'squad_entries' }, refreshEntries)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'watch_parties' }, onPartyRealtime)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'party_members' }, refreshPartiesSoon)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'playlists' }, refreshPlaylistsSoon)
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${me}` }, (p) => onNewNotification(p.new))
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, (p) => { if (selectedAnime.value?.id === p.new?.media_id) fetchComments(); })
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, onActivityRealtime)
@@ -3315,6 +3537,10 @@ createApp({
                 case 'friend_accept': return `${who} accepted your friend request`;
                 case 'squad_added': return `${who} added you to the squad “${n.text}”`;
                 case 'squad_entry': return `${who} added ${title} to “${n.text}”`;
+                case 'party_invite': return `${who} wants to watch ${title} with you`;
+                case 'party_joined': return `${who} is watching ${title} with you now`;
+                case 'party_dropped': return `${who} dropped ${title} (you can carry on)`;
+                case 'playlist_added': return `${who} added you to the playlist “${n.text}”: you can add songs too`;
                 case 'media_related': return `${title} has a new related entry`;
                 case 'media_changed': return `${title} was updated on AniList`;
                 case 'media_removed': return `${title} was merged or removed on AniList`;
@@ -3354,7 +3580,8 @@ createApp({
             if (chatting) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); return; }
             showToast(text);
             if (n.kind.startsWith('comment') && selectedAnime.value?.id === n.media_id) fetchComments();
-            if (n.kind.startsWith('squad')) fetchSquads();
+            if (n.kind.startsWith('party_')) refreshPartiesSoon();
+            if (n.kind === 'playlist_added') fetchPlaylists();
             if (n.kind === 'follow' || n.kind === 'friend_accept') { await fetchFriends(); fetchFriendEntries(); }
             if (n.kind?.startsWith('buddy_')) { fetchBuddies(); if (n.kind === 'buddy_accept') fetchSolo(); }
             if (systemNotifOn.value && document.hidden) {
@@ -3374,6 +3601,8 @@ createApp({
             if (n.kind === 'group_message') { openGroup(n.group_id); return; }
             if (n.kind === 'buddy_request' || n.kind === 'buddy_accept') { fetchBuddies(); openUser(n.actor_id); return; }
             if (n.kind === 'follow' || n.kind === 'friend_accept') { openTracker('profile'); setTimeout(() => document.getElementById('friends')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); return; }
+            if (n.kind === 'playlist_added') { fetchPlaylists(); navigate(() => { section.value = 'songs'; currentAppView.value = 'tracker'; activeTab.value = 'solo'; selectedAnime.value = null; viewUserId.value = null; entity.value = null; }); return; }
+            if (n.kind?.startsWith('party_') && !parties.value.some(p => p.id === n.party_id)) await fetchParties();
             if (n.activity_id) {
                 // go to the feed of the post's own section (a manga poll lives in the Manga feed), with the whole feed
                 // loaded around it, then scroll to it once it's really on screen
@@ -3399,10 +3628,7 @@ createApp({
             if (n.media_id) {
                 pendingCommentFocus = n.kind.startsWith('comment') ? (n.episode ?? 'GEN') : null;
                 await fetchAnimeDetails(n.media_id);
-            } else if (n.squad_id) {
-                navigate(() => { currentAppView.value = 'tracker'; activeTab.value = 'coop'; selectedAnime.value = null; viewUserId.value = null; entity.value = null; });
-                listFilterStatus.value = 'ALL'; listSearchQuery.value = ''; listFilterGroup.value = n.squad_id;
-            }
+            } else if (n.squad_id) openTracker('solo');   // (old squad alerts: squads became friend tags on your list)
         };
 
         // ---------- likes (activities, activity replies, comments) ----------
@@ -4158,21 +4384,17 @@ createApp({
 
         // ---------- editing entries ----------
         const buildForm = (anime) => {
-            const solo = soloList.value.find(i => i.anime?.id === anime.id);
-            const squadIds = coopList.value.filter(i => i.anime?.id === anime.id).map(i => i.squadId);
-            const existing = solo || coopList.value.find(i => i.anime?.id === anime.id);
-            const repeats = [...(solo?.repeats || [])];
+            const existing = soloList.value.find(i => i.anime?.id === anime.id);
+            const repeats = [...(existing?.repeats || [])];
             return {
                 anime, status: existing?.status || (anime.type === 'SONG' ? 'COMPLETED' : 'PLANNING'),   // songs start as Liked
                 // (v10.1: these two were stuck inside the comment above, so a title's page showed "–" instead of your score / progress)
                 score: existing?.score || 0, progress: existing?.progress || 0,
-                inSolo: !!solo || !squadIds.length, wasSolo: !!solo, squadIds: [...squadIds], originalSquadIds: [...squadIds],
                 savedRepeats: [...repeats], repeats, repProgress: existing?.status === 'REPEATING' ? (repeats[repeats.length - 1] || 0) : 0,
             };
         };
         // a title's page opened before your list finished loading (e.g. after a refresh) fills in once the entry arrives
-        watch(() => { const id = selectedAnime.value?.id; return id ? (soloList.value.find(i => i.anime?.id === id) || coopList.value.find(i => i.anime?.id === id) || null) : null; }, (e, old) => { if (e && !old && selectedAnime.value) inlineForm.value = buildForm(selectedAnime.value); });
-        const toggleFormSquad = (form, sid) => { const i = form.squadIds.indexOf(sid); if (i === -1) form.squadIds.push(sid); else form.squadIds.splice(i, 1); };
+        watch(() => { const id = selectedAnime.value?.id; return id ? (soloList.value.find(i => i.anime?.id === id) || null) : null; }, (e, old) => { if (e && !old && selectedAnime.value) inlineForm.value = buildForm(selectedAnime.value); });
         const stepProgress = (form, delta) => {
             const max = form.anime?.episodes || 99999;
             if (form.status === 'REPEATING') { form.repProgress = clamp((Number(form.repProgress) || 0) + delta, 0, max); return; }   // the rewatch's own counter
@@ -4235,14 +4457,8 @@ createApp({
             if (finishedRepeat) setTimeout(() => showToast(`Finished rewatch #${finishedRepeat} of ${titleOf(anime)}!`), 900);
             isSaving.value = true;
             try {
-                if (form.inSolo) { await upsertSolo({ anime, ...fields }); }
-                else if (soloList.value.some(i => i.anime.id === anime.id)) { await deleteSolo(anime.id); }
-                for (const sid of form.squadIds) await upsertSquadEntry(sid, anime, fields);
-                for (const sid of form.originalSquadIds.filter(s => !form.squadIds.includes(s))) await deleteSquadEntry(sid, anime.id);
-                // v1.5 the solo entry is already up to date on screen (see upsertSolo); only squad lists are read again
-                if (!form.inSolo) soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
-                if (form.squadIds.length || form.originalSquadIds.length) await fetchSquadEntries();
-                logActivity(anime, before, fields, form.inSolo ? null : (form.squadIds[0] || null));
+                await upsertSolo({ anime, ...fields });   // (v1.5 the entry on screen is updated from what was saved)
+                logActivity(anime, before, fields);
                 return true;
             } catch (err) {
                 console.error(err);
@@ -4252,46 +4468,40 @@ createApp({
                 isSaving.value = false;
             }
         };
-        const openEditor = (anime) => { if (anime) { quickMenuFor.value = null; squadDraft.open = false; editForm.value = buildForm(anime); } };
-        const closeEditor = () => { editForm.value = emptyForm(); squadDraft.open = false; };
+        const openEditor = (anime) => { if (anime) { quickMenuFor.value = null; editForm.value = buildForm(anime); } };
+        const closeEditor = () => { editForm.value = emptyForm(); };
         const saveEditor = async () => { if (await saveEntry(editForm.value)) { showToast('Saved!'); closeEditor(); } };
         const saveInline = async () => { if (await saveEntry(inlineForm.value)) { showToast('Saved!'); inlineForm.value = buildForm(selectedAnime.value); } };
 
-        // Removes titles from your solo list AND every squad list they're on — in a few bulk requests
-        // (one delete per 200 titles, one per squad) instead of one request per title.
+        // Removes titles from your list in a few bulk requests (one delete per 200 titles) instead of one per title.
+        // (v1.6 you also leave the titles' watch parties; Undo puts you back in them)
         const removeMany = async (animes) => {
             const ids = [...new Set(animes.map(a => a?.id).filter(Boolean))];
             if (!ids.length) return 0;
             const idSet = new Set(ids);
             const soloIds = soloList.value.filter(i => idSet.has(i.anime.id)).map(i => i.anime.id);
-            const bySquad = new Map();
-            coopList.value.forEach(i => { if (idSet.has(i.anime.id)) { if (!bySquad.has(i.squadId)) bySquad.set(i.squadId, []); bySquad.get(i.squadId).push(i.anime.id); } });
             const jobs = [];
             for (let k = 0; k < soloIds.length; k += 200) jobs.push(deleteSolo(soloIds.slice(k, k + 200)));
-            bySquad.forEach((mids, sq) => { for (let k = 0; k < mids.length; k += 200) jobs.push(sb.from('squad_entries').delete().eq('squad_id', sq).in('media_id', mids.slice(k, k + 200)).then(({ error }) => { if (error) throw error; })); });
             // update the screen right away; put things back if the server says no
-            const prevSolo = soloList.value, prevCoop = coopList.value;
+            const prevSolo = soloList.value;
             soloList.value = prevSolo.filter(i => !idSet.has(i.anime.id));
-            coopList.value = prevCoop.filter(i => !idSet.has(i.anime.id));
             if (editForm.value.anime && idSet.has(editForm.value.anime.id)) closeEditor();
             if (selectedAnime.value && idSet.has(selectedAnime.value.id)) inlineForm.value = buildForm(selectedAnime.value);
             try { await Promise.all(jobs); return ids.length; }
-            catch (err) { soloList.value = prevSolo; coopList.value = prevCoop; throw err; }
+            catch (err) { soloList.value = prevSolo; throw err; }
         };
         // v1.5 Undo on the message after removing titles or unchecking a status: what was there comes back as it was
-        // (status, score, progress, rewatches, marks, watch link, reading spot), squad entries too
+        // (status, score, progress, rewatches, marks, watch link, reading spot)
         const snapshotOf = (ids) => {
             const set = new Set(ids);
-            return { solo: soloList.value.filter(i => set.has(i.anime.id)).map(i => ({ ...i })), coop: coopList.value.filter(i => set.has(i.anime.id)).map(i => ({ ...i })) };
+            return { solo: soloList.value.filter(i => set.has(i.anime.id)).map(i => ({ ...i })) };
         };
         const restoreEntries = async (snap, msg) => {
             try {
                 if (snap.solo.length) { snap.solo.forEach(setSoloLocal); await upsertSolo(snap.solo); }
-                for (const r of snap.coop) await upsertSquadEntry(r.squadId, r.anime, { status: r.status, progress: r.progress, score: r.score });
-                if (snap.coop.length) await fetchSquadEntries();
-                if (selectedAnime.value && [...snap.solo, ...snap.coop].some(i => i.anime.id === selectedAnime.value.id)) inlineForm.value = buildForm(selectedAnime.value);
+                if (selectedAnime.value && snap.solo.some(i => i.anime.id === selectedAnime.value.id)) inlineForm.value = buildForm(selectedAnime.value);
                 showToast(msg);
-            } catch (err) { showToast('Could not undo: ' + (err.message || err), 'error'); fetchSolo(); fetchSquadEntries(); }
+            } catch (err) { showToast('Could not undo: ' + (err.message || err), 'error'); fetchSolo(); }
         };
         const undoOf = (snap, msg) => ({ label: 'Undo', run: () => restoreEntries(snap, msg) });
         // One title → removed instantly, no pop-up
@@ -4384,10 +4594,39 @@ createApp({
         const plMissing = ref(false);       // the table isn't in the database yet (the SQL update wasn't run)
         const fetchPlaylists = async () => {
             if (!uid()) return;
-            const { data, error } = await sb.from('playlists').select('*').eq('user_id', uid()).order('created_at');
+            // v1.6 yours + the ones friends shared with you (before the v1.6 SQL there's no members column: just yours)
+            let { data, error } = await sb.from('playlists').select('*').or(`user_id.eq.${uid()},members.cs.{${uid()}}`).order('created_at');
+            if (error && /members/i.test(error.message || '')) ({ data, error } = await sb.from('playlists').select('*').eq('user_id', uid()).order('created_at'));
             if (error) { plMissing.value = /playlists|schema cache|does not exist/i.test(error.message || ''); return; }
             plMissing.value = false; playlists.value = data || [];
+            ensureProfiles(playlists.value.flatMap(p => [p.user_id, ...(p.members || [])]));
         };
+        // v1.6 shared playlists: whose it is, who's in it, and changes that start from the songs saved right now (someone
+        // else may have added one a moment ago)
+        const plMine = (p) => !!p && p.user_id === uid();
+        const plPeople = (p) => [p.user_id, ...(p.members || [])].filter((id, k, a) => id && a.indexOf(id) === k).map(personOf);
+        const plShared = (p) => !!p && ((p.members || []).length > 0 || p.user_id !== uid());
+        const editSongs = async (p, change) => {
+            if (plShared(p)) { const { data } = await sb.from('playlists').select('songs').eq('id', p.id).maybeSingle(); if (Array.isArray(data?.songs)) p.songs = data.songs; }
+            return savePlaylist(p, { songs: change([...(p.songs || [])]) });
+        };
+        const plInvite = reactive({ open: false, id: null, q: '' });
+        const plInviteList = computed(() => playlists.value.find(p => p.id === plInvite.id) || null);
+        const plInviteFriends = computed(() => { const q = plInvite.q.trim().toLowerCase(); return friendsList.value.filter(f => !q || (f.username || '').toLowerCase().includes(q)); });
+        const openPlInvite = (p) => Object.assign(plInvite, { open: true, id: p.id, q: '' });
+        const togglePlMember = async (p, id) => {
+            if (!plMine(p)) return;
+            const has = (p.members || []).includes(id);
+            const members = has ? p.members.filter(x => x !== id) : [...(p.members || []), id];
+            if (await savePlaylist(p, { members })) showToast(has ? `${personOf(id).username} is out of “${p.name}”` : `${personOf(id).username} can add songs to “${p.name}” now`);
+        };
+        const leavePlaylist = async (p) => {
+            if (!(await askConfirm({ title: `Leave “${p.name}”?`, body: `It goes off your playlists; ${personOf(p.user_id).username} and the others keep it.`, ok: 'Leave' }))) return;
+            const { error } = await sb.from('playlists').update({ members: (p.members || []).filter(x => x !== uid()) }).eq('id', p.id);
+            if (error) { showToast('Could not leave it: ' + error.message, 'error'); return; }
+            playlists.value = playlists.value.filter(x => x.id !== p.id); if (plOpen.value === p.id) plOpen.value = null;
+        };
+        const refreshPlaylistsSoon = debounce(() => fetchPlaylists(), 600);
         const plNeedsSql = () => showToast('Playlists need the latest database update: run the whole supabase_setup.sql in Supabase again', 'error');
         const createPlaylist = async (withSong = null) => {
             if (plMissing.value) { plNeedsSql(); return null; }
@@ -4411,8 +4650,7 @@ createApp({
         const togglePlaylistSong = async (p, song) => {
             if (!p || !song) return;
             const has = inPlaylist(p, song);
-            const songs = has ? p.songs.filter(s => s.id !== song.id) : [...(p.songs || []), slimAnime(song)];
-            if (await savePlaylist(p, { songs })) showToast(has ? `Removed from “${p.name}”` : `Added to “${p.name}”`);
+            if (await editSongs(p, s => has ? s.filter(x => x.id !== song.id) : s.some(x => x.id === song.id) ? s : [...s, slimAnime(song)])) showToast(has ? `Removed from “${p.name}”` : `Added to “${p.name}”`);
         };
         // ---------- the music panel: songs from anywhere (reading, watching, any page) without leaving it ----------
         // Search (Apple + Spotify), your playlists, your liked songs and what you played lately. It opens on top of
@@ -4476,7 +4714,7 @@ createApp({
             if (!plPicker.list) return togglePlaylistSong(p, plPicker.song);
             const missing = plPicker.list.filter(x => !inPlaylist(p, x));
             if (!missing.length) { showToast(`All of them are already in “${p.name}”`); return; }
-            if (await savePlaylist(p, { songs: [...(p.songs || []), ...missing.map(slimAnime)] })) showToast(`Added ${missing.length} song${missing.length === 1 ? '' : 's'} to “${p.name}”`);
+            if (await editSongs(p, s => [...s, ...missing.filter(x => !s.some(y => y.id === x.id)).map(slimAnime)])) showToast(`Added ${missing.length} song${missing.length === 1 ? '' : 's'} to “${p.name}”`);
         };
         const plPickerNew = async () => {
             const list = plPicker.list, s = plPicker.song; closePlPicker();
@@ -4512,7 +4750,10 @@ createApp({
             if (error) { showToast('Could not delete it: ' + error.message, 'error'); return; }
             playlists.value = playlists.value.filter(x => x.id !== p.id); if (plOpen.value === p.id) plOpen.value = null;
         };
-        const movePlaylistSong = (p, i, d) => { const s = [...p.songs]; const j = i + d; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; savePlaylist(p, { songs: s }); };
+        const movePlaylistSong = (p, i, d) => {
+            const id = p.songs?.[i]?.id; if (id == null) return;
+            editSongs(p, s => { const k = s.findIndex(x => x.id === id), j = k + d; if (k < 0 || j < 0 || j >= s.length) return s; [s[k], s[j]] = [s[j], s[k]]; return s; });
+        };
         const openPlaylist = (p) => { plOpen.value = plOpen.value === p.id ? null : p.id; nextTick(() => document.getElementById('pl-open')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })); };
         const plOpenList = computed(() => playlists.value.find(p => p.id === plOpen.value) || null);
         const plCovers = (p) => [...new Set((p.songs || []).map(s => s.coverImage?.large).filter(Boolean))].slice(0, 4);
@@ -4913,13 +5154,35 @@ createApp({
         const listFilterGenre = ref('');
         const listGenres = computed(() => {
             const n = new Map();
-            ((activeTab.value === 'coop' ? secCoop.value : secSolo.value) || []).forEach(i => (i.anime?.genres || []).forEach(g => n.set(g, (n.get(g) || 0) + 1)));
+            (secSolo.value || []).forEach(i => (i.anime?.genres || []).forEach(g => n.set(g, (n.get(g) || 0) + 1)));
             return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([g, c]) => ({ g, c }));
         });
         watch(listGenres, (l) => { if (listFilterGenre.value && !l.some(x => x.g === listFilterGenre.value)) listFilterGenre.value = ''; });
+        // v1.6 format filter: TV / Movie / Special / OVA … for anime, TV show / Movie for movies & TV, Manga / Manhwa /
+        // Manhua / Light novel / One shot for manga (only the ones on this list show up)
+        const FORMAT_LABELS = { TV: 'TV', TV_SHORT: 'TV short', MOVIE: 'Movie', SPECIAL: 'Special', OVA: 'OVA', ONA: 'ONA', MUSIC: 'Music video', MANGA: 'Manga', MANHWA: 'Manhwa', MANHUA: 'Manhua', NOVEL: 'Light novel', ONE_SHOT: 'One shot', SHOW: 'TV show' };
+        const formatKey = (a) => {
+            if (!a) return '';
+            if (a.type === 'TV') return a.format === 'MOVIE' ? 'MOVIE' : 'SHOW';
+            if (a.type === 'MANGA') return a.format === 'NOVEL' || a.format === 'ONE_SHOT' ? a.format : a.countryOfOrigin === 'KR' ? 'MANHWA' : ['CN', 'TW'].includes(a.countryOfOrigin) ? 'MANHUA' : 'MANGA';
+            return (a.type || 'ANIME') === 'ANIME' ? (a.format || '') : '';
+        };
+        const listFormats = computed(() => {
+            const n = new Map();
+            (secSolo.value || []).forEach(i => { const k = formatKey(i.anime); if (k) n.set(k, (n.get(k) || 0) + 1); });
+            return n.size < 2 && !listFormat.value ? [] : [...n.entries()].sort((a, b) => b[1] - a[1]).map(([k, c]) => ({ k, l: FORMAT_LABELS[k] || k, c }));
+        });
+        // v1.6 friends you watch things with in this section, most shared titles first (the "Watching with" filter)
+        const listWithFriends = computed(() => {
+            const n = new Map();
+            (secSolo.value || []).forEach(i => (tagsOf(i.anime.id) || []).forEach(t => n.set(t.id, (n.get(t.id) || 0) + 1)));
+            return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([id, c]) => ({ id, c, user: personOf(id) }));
+        });
         const baseListItems = computed(() => {
-            let items = (activeTab.value === 'coop' ? secCoop.value : secSolo.value) || [];
-            if (activeTab.value === 'coop' && listFilterGroup.value !== 'ALL') items = items.filter(i => i.squadId === listFilterGroup.value);
+            let items = secSolo.value || [];
+            if (strictSolo.value) items = items.filter(i => !tagsOf(i.anime.id));
+            else if (listWith.value.length) items = items.filter(i => { const ids = new Set((tagsOf(i.anime.id) || []).map(t => t.id)); return listWith.value.every(id => ids.has(id)); });
+            if (listFormat.value) items = items.filter(i => formatKey(i.anime) === listFormat.value);
             if (listFilterGenre.value) items = items.filter(i => (i.anime?.genres || []).includes(listFilterGenre.value));
             if (listSearchQuery.value) {
                 const q = listSearchQuery.value.toLowerCase();
@@ -4946,11 +5209,11 @@ createApp({
             const keys = listFilterStatus.value === 'ALL' ? [...STATUS_ORDER, ...extra] : [listFilterStatus.value];
             return Object.fromEntries(keys.filter(k => groups[k]?.length).map(k => [k, sortEntries(groups[k], PREFS.listOrder)]));
         });
-        const squadCount = (sid) => secCoop.value.filter(i => i.squadId === sid).length;
-        const listFiltersOn = computed(() => listFilterStatus.value !== 'ALL' || listFilterGroup.value !== 'ALL' || !!listSearchQuery.value.trim() || !!listFilterGenre.value);
-        const clearListFilters = () => { listFilterStatus.value = 'ALL'; listFilterGroup.value = 'ALL'; listSearchQuery.value = ''; listFilterGenre.value = ''; };
+        const listFiltersOn = computed(() => listFilterStatus.value !== 'ALL' || !!listSearchQuery.value.trim() || !!listFilterGenre.value || !!listFormat.value || !!listWith.value.length || strictSolo.value);
+        const clearListFilters = () => { listFilterStatus.value = 'ALL'; listSearchQuery.value = ''; listFilterGenre.value = ''; listFormat.value = ''; listWith.value = []; strictSolo.value = false; };
+        watch(section, () => { listFormat.value = ''; listWith.value = []; });
 
-        const myAnimeIds = computed(() => new Set([...soloList.value, ...coopList.value].map(i => i.anime?.id)));
+        const myAnimeIds = computed(() => new Set(soloList.value.map(i => i.anime?.id)));
         const isOnMyList = (id) => myAnimeIds.value.has(id);
         const visibleResults = computed(() => results.value.filter(a => notHidden(a) && (!filters.value.hideMyAnime || !isOnMyList(a.id))));
         // Songs load 100 at a time behind a button: show only full rows until the next 100 arrive (the rest waits for them)
@@ -4969,13 +5232,9 @@ createApp({
             return n ? list.slice(0, n) : list;
         });
 
-        const uniqueItems = computed(() => {
-            const map = new Map();
-            [...coopList.value, ...soloList.value].forEach(i => { if (i?.anime?.id && adultOkItem(i)) map.set(i.anime.id, i); });  // solo wins
-            return [...map.values()];
-        });
+        const uniqueItems = computed(() => soloList.value.filter(i => i?.anime?.id && adultOkItem(i)));
         // old saves have no 18+ mark: ask AniList once about the anime / manga on the lists this person can see
-        watch(() => adultAllowed.value ? 0 : soloList.value.length + coopList.value.length, (n) => { if (n) setTimeout(() => checkAdultIds([...soloList.value, ...coopList.value].map(i => i.anime?.id)), 600); });
+        watch(() => adultAllowed.value ? 0 : soloList.value.length, (n) => { if (n) setTimeout(() => checkAdultIds(soloList.value.map(i => i.anime?.id)), 600); });
         const statsFor = (items) => {
             let epsWatched = 0, chaptersRead = 0, hoursPlayed = 0, tvEps = 0, plays = 0, scored = 0, scoreSum = 0, repeatEps = 0;
             items.forEach(i => {
@@ -5134,7 +5393,7 @@ createApp({
         const sectionCounts = computed(() => {
             const c = {}; uniqueItems.value.forEach(i => { const k = SECTION_OF_TYPE[typeOf(i)] || 'anime'; c[k] = (c[k] || 0) + 1; }); return c;
         });
-        const sectionProgress = computed(() => [...secSolo.value, ...secCoop.value].reduce((n, i) => n + (i.status === 'COMPLETED' && typeOf(i) !== 'GAME' ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0)), 0));
+        const sectionProgress = computed(() => secSolo.value.reduce((n, i) => n + (i.status === 'COMPLETED' && typeOf(i) !== 'GAME' ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0)), 0));
 
         // Top 5 among friends: shows the most friends are into right now (current section)
         const friendsTrending = computed(() => {
@@ -5152,14 +5411,15 @@ createApp({
                 .map(x => ({ ...x, people: x.people.map(personOf) }));
         });
 
-        // Continue watching (solo + squad entries you're currently watching)
+        // Continue watching: what you're watching / rewatching (v1.6 with the friends you watch it with)
+        const togetherCount = computed(() => secSolo.value.filter(i => tagsOf(i.anime.id)).length);   // (Browse → Quick stats)
+        const withNames = (id) => joinNames((tagsOf(id) || []).filter(t => t.state === 'joined').map(t => personOf(t.id).username));
         const continueWatching = computed(() => {
             const out = [];
             secSolo.value.forEach(i => {
-                if (i.status === 'WATCHING') out.push({ ...i, key: 's-' + i.anime.id, squadName: null, source: 'solo' });
-                else if (i.status === 'REPEATING') out.push({ ...i, key: 's-' + i.anime.id, squadName: null, source: 'solo', progress: repeatNow(i), repeatNo: (i.repeats || []).length || 1 });   // rewatches show their own counter
+                if (i.status === 'WATCHING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo' });
+                else if (i.status === 'REPEATING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo', progress: repeatNow(i), repeatNo: (i.repeats || []).length || 1 });   // rewatches show their own counter
             });
-            secCoop.value.forEach(i => { if (i.status === 'WATCHING') out.push({ ...i, key: 'c-' + i.key, squadName: i.group, source: 'squad' }); });
             return out.slice(0, 16);
         });
         const progressPct = (item) => item.anime?.episodes ? Math.min(100, (item.progress || 0) / item.anime.episodes * 100) : 0;
@@ -5170,18 +5430,7 @@ createApp({
             const aired = n.airingAt && n.airingAt * 1000 < Date.now() ? n.episode : n.episode - 1;
             return Math.max(0, aired - (item.progress || 0));
         };
-        const bumpEpisode = async (item) => {
-            if (item.source === 'solo') { quickSolo(item.anime, 'EP'); return; }
-            const eps = item.anime.episodes || null;
-            if (eps && item.progress >= eps) { showToast(`Already at the last ${UNIT.ep.toLowerCase()}`, 'error'); return; }
-            const progress = (item.progress || 0) + 1;
-            const status = eps && progress >= eps ? 'COMPLETED' : 'WATCHING';
-            const row = coopList.value.find(i => i.key === item.key.replace(/^c-/, ''));
-            if (row) { row.progress = progress; row.status = status; }
-            try { await upsertSquadEntry(item.squadId, item.anime, { status, progress, score: item.score }); logActivity(item.anime, { status: item.status, progress: item.progress }, { status, progress }, item.squadId); }
-            catch (err) { showToast('Could not update: ' + (err.message || err), 'error'); fetchSquadEntries(); return; }
-            showToast(status === 'COMPLETED' ? `Finished ${titleOf(item.anime)} with ${item.squadName}!` : `${UNIT.ep} ${progress}${eps ? '/' + eps : ''} · ${titleOf(item.anime)}`);
-        };
+        const bumpEpisode = (item) => quickSolo(item.anime, 'EP');
 
         // Home poster stack: one trending pick from each of Anime, Movies & TV, Games and Manga, different every visit.
         // The pools are cached, so the posters are chosen before the intro plays and never swap mid-animation.
@@ -5329,7 +5578,7 @@ createApp({
         const listShown = reactive({});
         const shownIn = (k) => listShown[k] || LIST_STEP;
         const moreIn = (k) => { listShown[k] = shownIn(k) + LIST_STEP; recheckInfinite(); };
-        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFilterGroup.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q].join('|'), () => { for (const k in listShown) delete listShown[k]; });
+        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFormat.value, listWith.value.join(','), strictSolo.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q].join('|'), () => { for (const k in listShown) delete listShown[k]; });
         // stat cards on a friend's profile: list-type cards open their list, the rest keep the breakdown pop-up
         const openFriendLists = async (id) => { friendsOpen.value = false; if (id !== viewUserId.value) { openUser(id); await nextTick(); } openTheirList('ANIME'); };
         const openFriendsManage = () => { friendsOpen.value = false; openTracker('profile'); setTimeout(() => document.getElementById('friends')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); };
@@ -5351,7 +5600,9 @@ createApp({
         const friendsQuery = ref('');
         const friendsFiltered = computed(() => { const q = friendsQuery.value.trim().toLowerCase(); return q ? friendsList.value.filter(f => (f.username || '').toLowerCase().includes(q)) : friendsList.value; });
         const friendCounts = computed(() => { const c = {}; friendEntries.value.forEach(r => { c[r.user_id] = (c[r.user_id] || 0) + 1; }); return c; });
-        const sharedSquads = computed(() => squads.value.filter(s => s.members.some(m => m.id === viewUserId.value)));
+        // v1.6 on a friend's profile: how many titles you two watch together (tap → your list with only those)
+        const sharedWith = computed(() => { const id = viewUserId.value; if (!id) return 0; let n = 0; partyTags.value.forEach(tags => { if (tags.some(t => t.id === id && t.state !== 'invited')) n++; }); return n; });
+        const openSharedWith = (id) => { listWith.value = [id]; strictSolo.value = false; listFilterStatus.value = 'ALL'; openTracker('solo'); };
 
         // ---------- stat breakdowns (click a stat card) ----------
         const drill = reactive({ open: false, key: '', who: 'me', status: 'ALL', days: [], loadingDays: false });
@@ -5673,9 +5924,8 @@ createApp({
         // ---------- quick actions (solo list) ----------
         const quickMenuFor = ref(null);
         const soloById = computed(() => new Map(soloList.value.map(i => [i.anime?.id, i])));
-        const coopById = computed(() => new Map(coopList.value.map(i => [i.anime?.id, i])));
         const soloEntry = (id) => soloById.value.get(id) || null;
-        const myEntry = (id) => soloById.value.get(id) || coopById.value.get(id) || null;
+        const myEntry = soloEntry;
         const sheetAnime = ref(null);
         const onPlusClick = (anime) => {
             if (window.matchMedia('(hover: hover)').matches) { quickMenuFor.value = null; openEditor(anime); }
@@ -5685,6 +5935,7 @@ createApp({
         const sheetAction = (action) => {
             const a = sheetAnime.value; if (!a) return;
             if (action === 'EDIT') { closeSheet(); openEditor(a); return; }
+            if (action === 'PARTY') { closeSheet(); openPartyDraft(a); return; }
             if (action === 'REMOVE') { closeSheet(); removeEverywhere(a); return; }
             quickSolo(a, action);
             if (action !== 'EP') closeSheet();
@@ -5785,6 +6036,7 @@ createApp({
         };
         const quickSolo = async (anime, action) => {
             if (action === 'REMOVE') { removeEverywhere(anime); return; }
+            if (action === 'PARTY') { openPartyDraft(anime); return; }   // v1.6 the + menu's "Watch with friends…"
             if (STATUS_ORDER.includes(action) && action !== 'REPEATING' && soloEntry(anime.id)?.status === action) { uncheckStatus(anime); return; }
             if (FLAG_OF[action]) { toggleFlag(anime, action); return; }   // v10.1 the + menu's "Wanna …" / "In rotation"
             if (action === 'COMPLETED' || action === 'REPEATING') await fillTotal(anime);
@@ -6078,7 +6330,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // you were in comes back at the end.
         const TOUR_KEY = 'anicoop_tour_done_v1';
         const MANGA_REPO = 'https://github.com/keiyoushi/extensions';
-        const tour = reactive({ on: false, i: 0, rect: null, card: {}, dir: 1, busy: false, from: 'anime', copied: false });
+        const tour = reactive({ on: false, i: 0, rect: null, card: {}, dir: 1, busy: false, from: 'anime', copied: false, vw: 0, vh: 0 });
         const tourPick = () => (continueWatching.value || [])[0]?.anime || (visibleResults.value || []).find(a => a?.id && (a.type || 'ANIME') === 'ANIME') || null;
         const tourManga = async () => {
             await waitFor(['main .poster'], 4000);
@@ -6093,10 +6345,10 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             { icon: 'fa-circle-play', title: 'Pick up where you left off', body: 'Everything you’re watching. Tap a card to open your watch link on the next episode; “+1 EP” counts one without leaving.', go: () => openTracker('browse'), sel: ['[title="Continue watching"]'], skipIfMissing: true },
             { icon: 'fa-plus', title: 'Add in one tap', body: 'Use the + on a poster to put it on a list: Planning, Watching, Completed and more. Tap the poster itself to open its page.', go: () => openTracker('browse'), sel: ['main .poster'] },
             { icon: 'fa-dice', title: 'Can’t decide? Random pick', body: 'Random pick chooses from your Plan to watch list (1 to 4 at a time). Don’t like it? Roll again. Like it? Add it as Watching in one tap.', go: () => openTracker('browse'), sel: ['button[title="Random pick"]'] },
-            { icon: 'fa-list-check', title: 'Your list, on every title', body: 'On a title’s page: set the status, episodes and your score, then Save. Add it to a squad to share it with friends.', go: async () => { const a = tourPick(); if (a) await fetchAnimeDetails(a); }, sel: ['.det-left > .panel'], skipIfMissing: true },
+            { icon: 'fa-list-check', title: 'Your list, on every title', body: 'On a title’s page: set the status, episodes and your score, then Save. “Invite friends” watches it together: their pictures show on the poster and your episode counts move together.', go: async () => { const a = tourPick(); if (a) await fetchAnimeDetails(a); }, sel: ['.det-left > .panel'], skipIfMissing: true },
             { icon: 'fa-link', title: 'Save where you watch it', body: 'Tap “Add where you watch it”, paste the show’s page (Crunchyroll, Netflix, any site) and Save. It stays on your account, on every device. Many anime fill this in by themselves (they show AUTO). If you paste an episode’s link that ends in its number (like …/episode-7), Watch always opens your next episode.', sel: ['.wl-box'], skipIfMissing: true },
             { icon: 'fa-circle-play', title: 'Watch, then count', body: 'Watch opens your next episode in a pop-up window. When you’re back, anicoop asks how many episodes you watched: pick the number and Save. Your list, AniList and MyAnimeList all update.', sel: ['.wl-go', '.banner-play-inline', '.play-cta'], skipIfMissing: true, demo: 'ask' },
-            { icon: 'fa-list-ul', title: 'All your lists', body: 'Filter by status or genre, change the order, and switch between Solo and Squads. “Select” edits many titles at once.', go: () => openTracker('solo'), sel: ['.list-aside'] },
+            { icon: 'fa-list-ul', title: 'All your lists', body: 'Filter by status, genre or type (TV, movie, special…), change the order, pick friends to see what you watch with them, or turn on Strictly solo. “Select” edits many titles at once.', go: () => openTracker('solo'), sel: ['.list-aside'] },
             { icon: 'fa-bolt', title: 'The Feed', body: 'What your friends watch and rate. Post your own thoughts, polls and tier lists; the filters on top pick the section.', go: () => openTracker('feed'), sel: ['.feed-types'] },
             { icon: 'fa-user-group', title: 'Friends, chat & alerts', body: 'Add friends and answer requests, chat with them, and the bell tells you about new episodes and what happens with your posts.', go: () => openTracker('browse'), sel: ['button[title="Friends"]', '.mnav'] },
             { icon: 'fa-circle-user', title: 'Your profile', body: 'Your stats, favourites and rankings (tap a score to change it). Dress it up in Settings → Profile: frames, themes, effects and name styles.', go: () => openTracker('profile'), sel: [] },
@@ -6121,16 +6373,27 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         const waitFor = (sels, ms = 2500) => new Promise(ok => { const t0 = Date.now(); const tick = () => { const el = visibleEl(sels); if (el || Date.now() - t0 > ms) ok(el); else setTimeout(tick, 100); }; tick(); });
         let tourEl = null;
-        const same = (a, b) => a && b && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(k => typeof a[k] === 'number' ? Math.abs(a[k] - b[k]) < 1 : a[k] === b[k]);
-        // spotlight + card placement (card below the spot, else above, else beside; phones: docked, the spot trimmed)
+        const same = (a, b) => a && b && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(k => typeof a[k] === 'number' ? Math.abs(a[k] - b[k]) < 1.5 : a[k] === b[k]);
+        // v1.6 while a step is opening its page nothing moves (the old spot used to lose its target for a moment, so the
+        // card jumped to the middle and back: the flicker between sections)
+        let tourFrozen = false;
+        // spotlight + card placement (card below the spot, else above, else beside; phones: docked, the spot trimmed).
+        // (v1.6 the card is always placed by numbers, the middle too, so it glides instead of jumping)
         const placeTour = () => {
-            if (!tour.on) return;
+            if (!tour.on || tourFrozen) return;
             const vw = window.innerWidth, vh = window.innerHeight, phone = vw < 640;
-            if (!tourEl || !tourEl.isConnected) { if (tour.rect) tour.rect = null; if (!tour.card.center) tour.card = { center: true }; return; }
-            const r = tourEl.getBoundingClientRect(), pad = 8;
-            const top = Math.max(6, r.top - pad), left = Math.max(6, r.left - pad);
-            const rect = { top, left, width: Math.max(20, Math.min(vw - 6, r.right + pad) - left), height: Math.max(20, Math.min(vh - 6, r.bottom + pad) - top) };
+            if (tour.vw !== vw || tour.vh !== vh) { tour.vw = vw; tour.vh = vh; }
             const cardEl = document.querySelector('.tour-card');
+            if (!tourEl || !tourEl.isConnected) {
+                const cw = cardEl?.offsetWidth || Math.min(440, vw - 24), ch = cardEl?.offsetHeight || 320;
+                const card = { x: Math.round((vw - cw) / 2), y: Math.round(Math.max(12, (vh - ch) / 2)) };
+                if (tour.rect) tour.rect = null;
+                if (!same(tour.card, card)) tour.card = card;
+                return;
+            }
+            const r = tourEl.getBoundingClientRect(), pad = 8;
+            const top = Math.round(Math.max(6, r.top - pad)), left = Math.round(Math.max(6, r.left - pad));
+            const rect = { top, left, width: Math.round(Math.max(20, Math.min(vw - 6, r.right + pad) - left)), height: Math.round(Math.max(20, Math.min(vh - 6, r.bottom + pad) - top)) };
             let card;
             if (phone) {   // the card docks at the bottom (or the top for things low on the screen); the spot stops before it
                 const up = rect.top + rect.height / 2 > vh * 0.55, ch = cardEl?.offsetHeight || 280;
@@ -6148,6 +6411,26 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (!same(tour.rect, rect)) tour.rect = rect;   // only when it really moved: no needless redraws
             if (!same(tour.card, card)) tour.card = card;
         };
+        // v1.6 the dark cover is four plain panels (and four round corners) that only slide, so the graphics card never
+        // redraws anything while the spot moves. The old one was a box with a shadow several screens big that had to be
+        // redrawn on every frame: slow, and it flickered on some computers.
+        const tourDim = computed(() => {
+            const W = tour.vw || window.innerWidth, H = tour.vh || window.innerHeight;
+            const r = tour.rect || { top: H / 2, left: W / 2, width: 0, height: 0 };
+            const t = (x, y) => `translate3d(${x}px,${y}px,0)`, size = { width: W + 'px', height: H + 'px' };
+            const R = 14, k = Math.max(0, Math.min(1, r.width / (2 * R), r.height / (2 * R))), c = R * k;
+            return {
+                top: { ...size, transform: t(0, r.top - H) },
+                bottom: { ...size, transform: t(0, r.top + r.height) },
+                left: { ...size, transform: `${t(r.left - W, r.top - 1)} scaleY(${(r.height + 2) / H})` },
+                right: { ...size, transform: `${t(r.left + r.width, r.top - 1)} scaleY(${(r.height + 2) / H})` },
+                tl: { transform: `${t(r.left, r.top)} scale(${k})` },
+                tr: { transform: `${t(r.left + r.width - c, r.top)} scale(${k})` },
+                bl: { transform: `${t(r.left, r.top + r.height - c)} scale(${k})` },
+                br: { transform: `${t(r.left + r.width - c, r.top + r.height - c)} scale(${k})` },
+                ring: { transform: t(r.left, r.top), width: r.width + 'px', height: r.height + 'px' },
+            };
+        });
         let tourT = 0, tourQueued = false;
         const tourSoon = () => { if (tourQueued || !tour.on) return; tourQueued = true; requestAnimationFrame(() => { tourQueued = false; placeTour(); }); };
         const tourLoop = () => { if (!tour.on) return; placeTour(); tourT = setTimeout(tourLoop, 600); };   // late layout changes (images loading…)
@@ -6163,7 +6446,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         const showTourStep = async (i, dir = 1) => {
             if (tour.busy) return;
-            tour.busy = true; tour.copied = false;
+            tour.busy = true; tour.copied = false; tourFrozen = true;
             try {
                 let n = i;
                 while (n >= 0 && n < TOUR_STEPS.length) {
@@ -6185,15 +6468,16 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     else { const r = tourEl.getBoundingClientRect(); if (r.top < 70 || r.bottom > window.innerHeight - 20) tourEl.scrollIntoView({ block: 'center' }); }
                 }
                 tour.i = n; tour.dir = dir;
+                tourFrozen = false;
                 await nextTick();
                 placeTour(); await nextTick(); placeTour();   // again once the new card has its real size
-            } finally { tour.busy = false; }
+            } finally { tour.busy = false; tourFrozen = false; }
         };
         const startTour = async () => {
             settingsOpen.value = false;
             if (!currentUser.value) return;
             tour.from = section.value;
-            tour.on = true; tour.i = 0; tour.rect = null; tour.card = { center: true };
+            tour.on = true; tour.i = 0; tour.rect = null; tour.card = {}; tour.vw = window.innerWidth; tour.vh = window.innerHeight;
             clearTimeout(tourT); tourLoop();
             await showTourStep(0);
         };
@@ -6216,8 +6500,17 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.5';
+        const APP_VERSION = '1.6';
         const WHATS_NEW = {
+            '1.6': [
+                { icon: 'fa-user-group', t: 'Watch together, on one list', d: 'Squads are gone: invite friends to any anime, manga or movie & TV title (or many at once). When they join, their picture shows on the poster, and a faded one means they haven’t answered yet.' },
+                { icon: 'fa-rotate-right', t: 'Everyone keeps their own status', d: 'The episode count moves together, but you can be Rewatching while a friend watches it for the first time, and if someone drops it the rest carry on.' },
+                { icon: 'fa-filter', t: 'New list filters', d: 'Pick friends to see only what you watch with them, turn on “Strictly solo” to hide everything shared, and filter by type: TV, movie, special, OVA, manhwa…' },
+                { icon: 'fa-music', t: 'Shared playlists', d: 'Add friends to a playlist and they can add, remove and reorder songs too.' },
+                { icon: 'fa-comments', t: 'Chats', d: 'All your friends are listed in Chats, typing part of a name finds people, and groups can have a picture (tap it to change).' },
+                { icon: 'fa-film', t: 'Rewatch movies & TV', d: 'Movies and shows can be rewatched like anime, each rewatch with its own counter.' },
+                { icon: 'fa-compact-disc', t: 'Throw the song circle', d: 'Fling the little song button and it bounces around the screen.' },
+            ],
             '1.5': [
                 { icon: 'fa-bell', t: 'New episodes at a glance', d: 'Continue watching cards show “2 new” when an airing anime has episodes out that you haven’t counted yet.' },
                 { icon: 'fa-circle-play', t: 'Watch from your alerts', d: 'New-episode alerts in the bell have a Watch button that opens your saved link on your next episode.' },
@@ -6252,7 +6545,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             setTimeout(() => URL.revokeObjectURL(url), 5000);
         };
         const exportLists = (kind = 'json') => {
-            if (!soloList.value.length && !coopList.value.length) { showToast('Your lists are empty', 'error'); return; }
+            if (!soloList.value.length) { showToast('Your lists are empty', 'error'); return; }
             const who = String(currentProfile.value?.username || 'me').replace(/[^\w.-]+/g, '_'), day = localDay();
             const sec = (t) => SECTIONS[SECTION_OF_TYPE[t]]?.short || t;
             const marks = (e) => [e.rewish ? statusLabelFor(typeOf(e), 'REWISH') : '', e.rotation ? statusLabelFor(typeOf(e), 'ROTATION') : ''].filter(Boolean).join(', ');
@@ -6266,7 +6559,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 const data = {
                     app: 'anicoop', version: APP_VERSION, exported: new Date().toISOString(), user: currentProfile.value?.username || null,
                     lists: soloList.value.map(e => ({ status: e.status, score: e.score || 0, progress: e.progress || 0, repeats: e.repeats || [], rewish: !!e.rewish, rotation: !!e.rotation, watchLink: e.watchLink || '', readPos: e.readPos || null, added: e.createdAt || null, updated: e.updatedAt || null, media: slimAnime(e.anime) })),
-                    squads: squads.value.map(s => ({ name: s.name, members: s.members.map(m => m.username), entries: coopList.value.filter(i => i.squadId === s.id).map(i => ({ status: i.status, score: i.score || 0, progress: i.progress || 0, media: slimAnime(i.anime) })) })),
+                    watchingTogether: [...partyTags.value.entries()].map(([id, tags]) => ({ title: titleOf(soloEntry(id)?.anime || { id }), with: tags.map(t => ({ name: personOf(t.id).username, state: t.state })) })),
                     favorites: { characters: favCharacters.value, people: favStaff.value },
                     playlists: playlists.value.map(p => ({ name: p.name, songs: p.songs || [] })),
                 };
@@ -6299,13 +6592,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const selectMode = ref(false);
         const selected = ref(new Map());          // anime id → anime
         const batchBusy = ref(false);
-        const batchSquadMenu = ref(false);
         const selectedCount = computed(() => selected.value.size);
         const toggleSelectMode = () => { selectMode.value = !selectMode.value; if (!selectMode.value) selected.value = new Map(); quickMenuFor.value = null; batchMin.value = false; };
         // v10 the bar can be tucked into a small pill (phones have little room), and it only shows on the pages you
         // select on: never on top of a title's page, a profile, Settings or any other window
         const batchMin = ref(false);
-        const batchShown = computed(() => selectMode.value && ['browse', 'solo', 'coop', 'top'].includes(activeTab.value) && !selectedAnime.value && !entity.value && !viewUserId.value && !settingsOpen.value);
+        const batchShown = computed(() => selectMode.value && ['browse', 'solo', 'top'].includes(activeTab.value) && !selectedAnime.value && !entity.value && !viewUserId.value && !settingsOpen.value);
         const isSelected = (id) => selected.value.has(id);
         const toggleSelect = (anime) => { const m = new Map(selected.value); if (m.has(anime.id)) m.delete(anime.id); else m.set(anime.id, anime); selected.value = m; };
         const visibleAnime = computed(() => {
@@ -6321,16 +6613,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const list = [...selected.value.values()]; if (!list.length || batchBusy.value) return;
             batchBusy.value = true;
             try {
-                if (activeTab.value === 'coop' && !selectedAnime.value) {
-                    const rows = coopList.value.filter(i => selected.value.has(i.anime.id) && (listFilterGroup.value === 'ALL' || i.squadId === listFilterGroup.value));
-                    for (const r of rows) {
-                        const progress = status === 'COMPLETED' && totalOf(r.anime) ? totalOf(r.anime) : r.progress;
-                        await upsertSquadEntry(r.squadId, r.anime, { status, progress, score: r.score });
-                        logActivity(r.anime, { status: r.status, progress: r.progress }, { status, progress }, r.squadId);
-                    }
-                    await fetchSquadEntries();
-                    showToast(`${rows.length} squad entr${rows.length === 1 ? 'y' : 'ies'} → ${STATUS_LABELS[status]}`);
-                } else {
+                {
                     const entries = list.map(a => {
                         if (status === 'REPEATING') return soloNext(a, 'REPEATING').entry || null;   // titles with 5 rewatches already are skipped
                         const cur = soloEntry(a.id);
@@ -6345,29 +6628,16 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     showToast(`${entries.length} added/updated → ${STATUS_LABELS[status]}`);
                 }
                 selected.value = new Map();   // v10 done with those: unselected (they stay where they are), ready for the next ones
-            } catch (err) { showToast('Batch update failed: ' + (err.message || err), 'error'); fetchSolo(); fetchSquadEntries(); }
+            } catch (err) { showToast('Batch update failed: ' + (err.message || err), 'error'); fetchSolo(); }
             finally { batchBusy.value = false; }
         };
-        const batchAddToSquad = async (squad) => {
-            batchSquadMenu.value = false;
-            const list = [...selected.value.values()]; if (!list.length || batchBusy.value) return;
-            batchBusy.value = true;
-            try {
-                for (const a of list) {
-                    const cur = coopList.value.find(i => i.squadId === squad.id && i.anime.id === a.id) || myEntry(a.id);
-                    await upsertSquadEntry(squad.id, normMedia(cur?.anime || a), { status: cur?.status || 'PLANNING', progress: cur?.progress || 0, score: cur?.score || 0 });
-                }
-                await fetchSquadEntries();
-                showToast(`${list.length} added to ${squad.name}`);
-                selected.value = new Map();
-            } catch (err) { showToast('Could not add: ' + (err.message || err), 'error'); }
-            finally { batchBusy.value = false; }
-        };
+        // v1.6 invite friends to every selected title at once
+        const batchInvite = () => openPartyDraft([...selected.value.values()]);
         const batchRemove = async () => {
             const list = [...selected.value.values()].filter(a => isOnMyList(a.id)); if (!list.length || batchBusy.value) { showToast('None of the selected are on your lists', 'error'); return; }
             if (list.length > 1) {
-                const inSquads = coopList.value.some(i => list.some(a => a.id === i.anime.id));
-                if (!(await askConfirm({ title: `Remove ${list.length} titles from all your lists?`, body: inSquads ? 'Some of them are on squad lists too — they’re removed there for everyone.' : '', ok: `Remove ${list.length}` }))) return;
+                const shared = list.some(a => tagsOf(a.id));
+                if (!(await askConfirm({ title: `Remove ${list.length} titles from your list?`, body: shared ? 'You also stop watching the shared ones with your friends (they carry on).' : '', ok: `Remove ${list.length}` }))) return;
             }
             batchBusy.value = true;
             const snap = snapshotOf(list.map(a => a.id));
@@ -6391,17 +6661,17 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const randomPicks = computed(() => randomPick.value ? [randomPick.value, ...randomMore.value] : []);
         const randomRolling = ref(false);
         const randomSpinKey = ref(0);
-        const randomScope = computed(() => (selectedAnime.value || viewUserId.value || currentAppView.value !== 'tracker') ? 'all' : (activeTab.value === 'coop' ? 'coop' : activeTab.value === 'solo' ? 'solo' : 'all'));
-        const randomSourceLabel = computed(() => ({ coop: 'squad lists', solo: 'solo list', all: 'all your lists' })[randomScope.value]);
+        const randomScope = computed(() => (selectedAnime.value || viewUserId.value || currentAppView.value !== 'tracker') ? 'all' : (activeTab.value === 'solo' ? 'solo' : 'all'));
+        const randomSourceLabel = computed(() => ({ solo: 'your list', all: 'all your lists' })[randomScope.value]);
         // only this section's titles (on Browse it used to mix every section, so songs got anime and game genres)
-        const randomSource = computed(() => (randomScope.value === 'coop' ? secCoop.value : randomScope.value === 'solo' ? secSolo.value : uniqueItems.value).filter(i => i.anime?.id && typeOf(i) === (mediaType.value || 'ANIME')));
+        // (v1.6 from Lists: what the list shows right now, so "Watching with" and "Strictly solo" count too)
+        const randomSource = computed(() => (randomScope.value === 'solo' ? baseListItems.value : uniqueItems.value).filter(i => i.anime?.id && typeOf(i) === (mediaType.value || 'ANIME')));
         const randomGenres = computed(() => [...new Set(randomSource.value.flatMap(i => i.anime.genres || []))].sort());
         const randomPool = computed(() => {
             const f = randomFilter.value;
             return randomSource.value.filter(i =>
                 (!f.status || i.status === f.status) &&
-                (!f.genre || (i.anime.genres || []).includes(f.genre)) &&
-                (randomScope.value !== 'coop' || !f.squad || i.squadId === f.squad));
+                (!f.genre || (i.anime.genres || []).includes(f.genre)));
         });
         // No filters set → don't limit the roll to what's on your lists; pull from all of AniList instead.
         const randomWide = computed(() => randomFilter.value.from === 'all');
@@ -6439,7 +6709,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         watch(randomFilter, () => { randomPick.value = null; randomMore.value = []; }, { deep: true });
         const openRandom = () => {
             const inList = randomScope.value !== 'all';
-            randomFilter.value = { from: inList ? 'lists' : 'all', status: inList && listFilterStatus.value !== 'ALL' ? listFilterStatus.value : '', genre: '', squad: randomScope.value === 'coop' && listFilterGroup.value !== 'ALL' ? listFilterGroup.value : '', wgenre: '', wstatus: '', wformat: '', wcountry: '' };
+            randomFilter.value = { from: inList ? 'lists' : 'all', status: inList && listFilterStatus.value !== 'ALL' ? listFilterStatus.value : '', genre: '', squad: '', wgenre: '', wstatus: '', wformat: '', wcountry: '' };
             randomPick.value = null; randomMore.value = [];
             randomOpen.value = true;
         };
@@ -8733,6 +9003,29 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 showToast('Could not create group: ' + (err.message || err) + (/create_group|group/i.test(err.message || '') ? ' — run the v7 SQL in Supabase' : ''), 'error');
             } finally { groupDraft.busy = false; }
         };
+        // v1.6 a picture for the group (anyone in it can change it): uploaded to your folder, then set on the group
+        const groupPicBusy = ref(false);
+        const changeGroupPic = () => { if (groupWith.value) { cropper.group = groupWith.value; pickImage('group', 'avatar'); } };
+        const saveGroupPic = async (pic) => {
+            const gid = cropper.group || groupWith.value; if (!gid) return;
+            groupPicBusy.value = true;
+            try {
+                let url = pic;
+                if (pic.startsWith('data:image/')) {
+                    const blob = await (await fetch(pic)).blob();
+                    const path = `${uid()}/group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`;
+                    const { error } = await sb.storage.from(MEDIA_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+                    if (error) throw error;
+                    url = sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+                }
+                const { error } = await sb.rpc('set_group_avatar', { gid, url });
+                if (error) throw error;
+                const g = groups.value.find(x => x.id === gid); if (g) g.avatar_url = url;
+                showToast('Group picture updated!');
+            } catch (err) {
+                showToast('Could not change the picture: ' + (err.message || err) + (/set_group_avatar|function/i.test(err.message || '') ? ' — run the v1.6 SQL in Supabase' : ''), 'error');
+            } finally { groupPicBusy.value = false; cropper.group = null; }
+        };
         const openAddMember = () => { Object.assign(addMemberDraft, { open: true, q: '', busy: false }); };
         const addableFriends = computed(() => {
             const have = new Set(groupMembersOf[groupWith.value] || []);
@@ -8759,8 +9052,29 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (groupWith.value === gid) navigate(() => { groupWith.value = null; });
             showToast('Left the group');
         };
+        // v1.6 the chat list shows every friend, and the box finds people by part of their name as you type
+        const chatQ = computed(() => chatSearch.value.trim().replace(/^@/, '').toLowerCase());
+        const chatFriendHits = computed(() => friendsList.value.filter(f => (f.username || '').toLowerCase().includes(chatQ.value)));
+        // friends you haven't chatted with yet (under the chats, so all of them are one tap away)
+        const chatNewFriends = computed(() => { const have = new Set(chats.value.map(c => c.other)); return friendsList.value.filter(f => !have.has(f.id)); });
+        const chatOthers = ref([]);
+        let chatPeopleTok = 0;
+        const searchChatPeople = debounce(async () => {
+            const q = chatQ.value, tok = ++chatPeopleTok;
+            if (q.length < 2) { chatOthers.value = []; return; }
+            const { data } = await selectProfiles(c => sb.from('profiles').select(c).ilike('username', '%' + escapeLike(q) + '%').order('username').limit(8));
+            if (tok !== chatPeopleTok) return;
+            const friends = new Set(friendsList.value.map(f => f.id));
+            chatOthers.value = (data || []).filter(p => p.id !== uid() && !friends.has(p.id));
+            const known = new Set(profileById.value.keys()), add = chatOthers.value.filter(p => !known.has(p.id));
+            if (add.length) extraProfiles.value = [...extraProfiles.value, ...add];
+        }, 300);
+        watch(chatQ, searchChatPeople);
+        const openChatHit = (id) => { chatSearch.value = ''; openChat(id); };
         const startChatByName = async () => {
             const name = chatSearch.value.trim().replace(/^@/, ''); if (!name) return;
+            const hits = [...chatFriendHits.value, ...chatOthers.value];
+            if (hits.length === 1 || hits.some(h => (h.username || '').toLowerCase() === name.toLowerCase())) { openChatHit((hits.find(h => (h.username || '').toLowerCase() === name.toLowerCase()) || hits[0]).id); return; }
             chatSearchBusy.value = true;
             const { data } = await sb.from('profiles').select('id, username, avatar_url, accent, bio').ilike('username', escapeLike(name)).maybeSingle();
             chatSearchBusy.value = false;
@@ -9005,7 +9319,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const peopleLoading = ref(false);
         const fetchPeople = async () => {
             peopleLoading.value = true;
-            const { data } = await sb.from('profiles').select(PROFILE_COLS).order('last_seen', { ascending: false, nullsFirst: false }).limit(300);
+            const { data } = await selectProfiles(c => sb.from('profiles').select(c).order('last_seen', { ascending: false, nullsFirst: false }).limit(300));
             peopleLoading.value = false;
             people.value = (data || []).filter(p => p.id !== uid());
             const known = new Set(profileById.value.keys());
@@ -9472,7 +9786,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const KEY = `anicoop_gamecheck:${me}`;
             try { if (!force && localStorage.getItem(KEY) === localDay()) return; } catch { return; }
             const all = new Map();
-            [...soloList.value, ...coopList.value].forEach(i => { if (i.anime?.type === 'GAME') all.set(i.anime.id, i.anime); });
+            soloList.value.forEach(i => { if (i.anime?.type === 'GAME') all.set(i.anime.id, i.anime); });
             if (!all.size) return;
             let fresh;
             try { fresh = await gameApi.refresh([...all.keys()]); } catch (err) { console.warn('game check skipped:', err.message || err); return; }
@@ -9828,7 +10142,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             finally { steamAcc.importing = false; steamAcc.step = ''; }
         };
         // ---- v1.4 Steam achievements: on a game's page (like Steam's own list) and the total on your profile ----
-        const ach = reactive({ app: null, items: [], loading: false, error: '', private: false, filter: 'all', sort: 'steam', shown: 24, reveal: {} });
+        const ach = reactive({ app: null, items: [], loading: false, error: '', private: false, filter: 'all', sort: 'steam', shown: 24, reveal: {}, open: false });   // (v1.6 open: the list shows after a tap)
         const loadAch = async (appid, force = false) => {
             const id = PREFS.steam?.id; if (!id || !appid) return;
             if (!force && ach.app === appid && ach.items.length) return;
@@ -10037,7 +10351,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const DAY_KEY = `anicoop_mediacheck:${me}`, SNAP_KEY = `anicoop_mediasnap:${me}`;
             try { if (!force && localStorage.getItem(DAY_KEY) === localDay()) return; } catch { return; }
             const all = new Map();
-            [...soloList.value, ...coopList.value].forEach(i => { if (i.anime?.id && isAniListType(i.anime.type)) all.set(i.anime.id, i.anime); });
+            soloList.value.forEach(i => { if (i.anime?.id && isAniListType(i.anime.type)) all.set(i.anime.id, i.anime); });
             if (!all.size) return;
             const snap = readJSON(SNAP_KEY) || {};
             const next = {}; const notes = []; const fresh = new Map();
@@ -10081,9 +10395,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const soloRows = soloList.value.filter(e => fresh.has(e.anime.id) && JSON.stringify(slimAnime(fresh.get(e.anime.id))) !== JSON.stringify(slimAnime(e.anime)))
                 .map(e => ({ user_id: me, media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e, fresh.get(e.anime.id)), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt }));
             if (soloRows.length) { const { error } = await sb.from('list_entries').upsert(soloRows, { onConflict: 'user_id,media_id' }); if (!error) fetchSolo(); }
-            const squadRows = coopList.value.filter(e => fresh.has(e.anime.id) && JSON.stringify(slimAnime(fresh.get(e.anime.id))) !== JSON.stringify(slimAnime(e.anime)));
-            for (const e of squadRows) await sb.from('squad_entries').update({ media_data: slimAnime(fresh.get(e.anime.id)) }).eq('squad_id', e.squadId).eq('media_id', e.anime.id);
-            if (squadRows.length) fetchSquadEntries();
         };
 
         // ---------- install as app (PWA) ----------
@@ -10136,7 +10447,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
             if (!bootNav) try { history.replaceState(navState(), ''); } catch {}
             window.addEventListener('popstate', onPopState);
-            document.addEventListener('click', () => { hs.open = false; quickMenuFor.value = null; sectionMenu.value = false; adminMenu.value = false; notifOpen.value = false; friendsOpen.value = false; batchSquadMenu.value = false; });
+            document.addEventListener('click', () => { hs.open = false; quickMenuFor.value = null; sectionMenu.value = false; adminMenu.value = false; notifOpen.value = false; friendsOpen.value = false; });
             document.addEventListener('keydown', (e) => {
                 if (introMode.value !== 'done') { skipIntro(); return; }
                 if (e.key !== 'Escape') return;
@@ -10180,12 +10491,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             authReady, currentUser, currentProfile, isSignUp, authLoading, authForm, handleAuth, signOut,
             introMode, skipIntro, warmSection, ROLE_PERMS, ROLE_ICONS, AWARD_ICONS, ROLE_COLORS, roles, roleLinks, rolesReady, rolesOf, can, anyPower, canTouchRole, isOwnerId, roleDraft, editRole, toggleRolePerm, saveRole, deleteRole, moveRole, hasRole, toggleUserRole, adminLookup, adminFind, awardsOf, awardBox, openAwardBox, giveAward, removeAward, moderateProfile, adminMenu, heroPosters, heroPath, HERO_POINTS, heroSave, statusLabelFor, showToTop, scrollToTop,
             currentAppView, activeTab, openTracker, switchTab, canGoBack, goBack, goHome,
-            section, sectionMenu, sectionList, currentSection, openSection, sectionCounts, sectionProgress, secSolo, secCoop,
+            section, sectionMenu, sectionList, currentSection, openSection, sectionCounts, sectionProgress, secSolo,
             filters, availableYears, availableGenres, results, visibleResults, trendingTop, isLoading, isLoadingMore, browseError, hasNextPage,
             resetFilters, anyFilter, activeFilterCount, listTitle, formatOptions, countryOptions, friendsTrending,
-            soloList, coopList, toast, selectedAnime, detailLoading, detailCharacters, detailRelations,
-            editForm, inlineForm, isSaving, stepProgress, toggleFormSquad,
-            listFilterStatus, listFilterGroup, listSearchQuery, filteredGroupedList, statusCounts, squadCount, listFiltersOn, clearListFilters,
+            soloList, toast, selectedAnime, detailLoading, detailCharacters, detailRelations,
+            editForm, inlineForm, isSaving, stepProgress,
+            listFilterStatus, listSearchQuery, filteredGroupedList, statusCounts, listFiltersOn, clearListFilters,
+            togetherCount, plMine, plPeople, plShared, plInvite, plInviteList, plInviteFriends, openPlInvite, togglePlMember, leavePlaylist, groupPicBusy, changeGroupPic, chatQ, chatFriendHits, chatNewFriends, chatOthers, openChatHit, REPEAT_TYPES,
+            listFormat, listFormats, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
             debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails,             profileStats, profileStatCards, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
@@ -10196,11 +10509,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             profileEdit, saveProfileEdit,
             installPrompt, installApp, dismissInstall,
             trailerOf, trailerUrl, trailerExternal, playTrailer, closeTrailer,
-            squads, squadDraft, openSquadDraft, toggleDraftMember, draftAutoName, createSquad, squadAddMember, renameSquad, leaveSquad, friendsNotIn, squadAddOpen, squadById,
+
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
-            viewUserId, viewedUser, viewedStats, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

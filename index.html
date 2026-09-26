@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.5">
+    <link rel="stylesheet" href="app.css?v=1.6">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.5" defer></script>
+    <script src="app.js?v=1.6" defer></script>
 </head>
 <body>
 
@@ -63,7 +63,7 @@
                 <span class="font-display font-brand font-black text-ink text-[88px] xl:text-[104px] leading-[.9] tracking-[-0.04em]">anicoop</span>
                 <span class="font-pixel font-semibold text-volt text-5xl xl:text-6xl">.studio</span>
             </h1>
-            <p class="mt-6 text-lg text-sub max-w-md a-rise" style="--d:2">Track anime & manga with your friends. Build squads, share lists, talk about every episode and never argue about what to watch again.</p>
+            <p class="mt-6 text-lg text-sub max-w-md a-rise" style="--d:2">Track anime & manga with your friends. Tag who you watch with, share lists, talk about every episode and never argue about what to watch again.</p>
         </div>
 
         <div class="relative flex items-center justify-center px-4 py-12">
@@ -254,7 +254,7 @@
                         </div>
                     </div>
                     <nav class="seg hidden md:flex">
-                        <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="{ 'is-on': (activeTab === t.id || (t.id === 'solo' && activeTab === 'coop')) && !selectedAnime && !viewUserId && !entity }" class="seg-btn">
+                        <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="{ 'is-on': activeTab === t.id && !selectedAnime && !viewUserId && !entity }" class="seg-btn">
                             {{ t.label }}
                             <span v-if="t.id === 'profile' && pendingRequests.length" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-pink text-white text-[10px] font-bold flex items-center justify-center">{{ pendingRequests.length }}</span>
                         </button>
@@ -281,7 +281,7 @@
 
             <!-- mobile bottom tab bar -->
             <nav class="mnav md:hidden fixed bottom-0 inset-x-0 z-50 glass border-t border-line grid pb-[env(safe-area-inset-bottom)]" :style="{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }">
-                <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="(activeTab === t.id || (t.id === 'solo' && activeTab === 'coop')) && !selectedAnime && !viewUserId && !entity ? 'text-volt' : 'text-mute'" class="relative flex flex-col items-center gap-1 py-2.5 transition-colors">
+                <button v-for="t in tabs" :key="t.id" @click="switchTab(t.id)" :class="activeTab === t.id && !selectedAnime && !viewUserId && !entity ? 'text-volt' : 'text-mute'" class="relative flex flex-col items-center gap-1 py-2.5 transition-colors">
                     <i :class="t.icon" class="fa-solid text-[16px]"></i>
                     <span class="font-mono text-[9px] font-bold tracking-wider uppercase whitespace-nowrap">{{ t.label }}</span>
                     <span v-if="t.id === 'profile' && pendingRequests.length" class="absolute top-1.5 right-[30%] w-2.5 h-2.5 rounded-full bg-pink"></span>
@@ -550,7 +550,7 @@
                                         <score-input v-model="inlineForm.score"></score-input>
                                     </div>
                                 </div>
-                                <div v-if="selectedAnime.type === 'ANIME' && inlineForm.repeats.length" class="rep-strip">
+                                <div v-if="REPEAT_TYPES.includes(selectedAnime.type) && inlineForm.repeats.length" class="rep-strip">
                                     <p class="label mb-2 flex items-center gap-1.5"><i class="fa-solid fa-rotate-right text-[#14b8a6]"></i>Rewatches <span class="normal-case tracking-normal text-mute">{{ inlineForm.repeats.length }}/{{ MAX_REPEATS }}</span></p>
                                     <div class="rep-slots">
                                         <span v-for="n in MAX_REPEATS" :key="n" class="rep-slot" :class="{ used: n <= inlineForm.repeats.length, done: selectedAnime.episodes && (inlineForm.status === 'REPEATING' && n === inlineForm.repeats.length ? inlineForm.repProgress : inlineForm.repeats[n - 1]) >= selectedAnime.episodes, now: inlineForm.status === 'REPEATING' && n === inlineForm.repeats.length }" :title="n <= inlineForm.repeats.length ? 'Rewatch #' + n : 'Not used yet'">
@@ -558,18 +558,39 @@
                                         </span>
                                     </div>
                                 </div>
-                                <div>
-                                    <p class="label mb-2.5">Save to</p>
-                                    <button @click="inlineForm.inSolo = !inlineForm.inSolo" :class="inlineForm.inSolo ? 'bg-ink text-inv border-ink' : 'text-sub border-line hover:border-line2'" class="w-full py-2.5 rounded-xl border text-xs font-bold transition-colors"><i class="fa-solid fa-user mr-1.5"></i>My solo list</button>
-                                    <div class="flex flex-wrap gap-1.5 mt-2">
-                                        <button v-for="s in squads" :key="s.id" @click="toggleFormSquad(inlineForm, s.id)" :class="inlineForm.squadIds.includes(s.id) ? 'squad-chip on' : 'squad-chip'" :style="{ '--c': s.color || '#B490F5' }">
-                                            <i class="fa-solid" :class="inlineForm.squadIds.includes(s.id) ? 'fa-check' : 'fa-user-group'"></i>{{ s.name }}<span class="opacity-60">· {{ s.members.length }}</span>
-                                        </button>
-                                        <button @click="openSquadDraft(inlineForm)" class="squad-chip !border-dashed"><i class="fa-solid fa-plus"></i>New squad</button>
+                                <button @click="saveInline" :disabled="isSaving" class="btn-primary w-full"><i v-if="isSaving" class="fa-solid fa-circle-notch fa-spin"></i> Save</button>
+                                <button v-if="isOnMyList(selectedAnime.id)" @click="removeEverywhere(selectedAnime)" :disabled="isSaving" class="remove-btn"><i class="fa-solid fa-trash-can"></i> Remove from my list</button>
+                            </div>
+
+                            <!-- v1.6 watching together: who you watch it with (their own status each), invites, the shared count -->
+                            <div v-if="currentUser && partyType(selectedAnime)" class="panel p-5 flex flex-col gap-3 party-box">
+                                <p class="label flex items-center gap-1.5"><i class="fa-solid fa-user-group text-lilac"></i>Watching together<span v-if="detailParty && detailParty.progress != null" class="ml-auto normal-case tracking-normal font-mono text-[11px] text-sub" title="The count you share">together · {{ UNIT.short }} {{ detailParty.progress }}</span></p>
+                                <div v-if="inviteFor(selectedAnime.id)" class="party-invite">
+                                    <div class="flex items-center gap-2.5">
+                                        <user-avatar :user="inviteFrom(inviteFor(selectedAnime.id))" :size="32"></user-avatar>
+                                        <p class="text-[13px] text-ink leading-snug min-w-0"><b>{{ inviteFrom(inviteFor(selectedAnime.id)).username }}</b> wants to watch this with you<span v-if="invitePeople(inviteFor(selectedAnime.id)).length > 1" class="text-sub"> ({{ invitePeople(inviteFor(selectedAnime.id)).length }} people are in)</span>.</p>
+                                    </div>
+                                    <p v-if="myEntry(selectedAnime.id)?.status === 'COMPLETED'" class="text-[11px] text-sub mt-2"><i class="fa-solid fa-rotate-right text-[#14b8a6] mr-1"></i>You finished it, so it counts as a rewatch for you.</p>
+                                    <div class="flex gap-2 mt-3">
+                                        <button @click="answerInvite(inviteFor(selectedAnime.id), true)" class="btn-primary flex-1 !py-2 !text-xs"><i class="fa-solid fa-check"></i> Join</button>
+                                        <button @click="answerInvite(inviteFor(selectedAnime.id), false)" class="btn-ghost !py-2 !text-xs">No thanks</button>
                                     </div>
                                 </div>
-                                <button @click="saveInline" :disabled="isSaving" class="btn-primary w-full"><i v-if="isSaving" class="fa-solid fa-circle-notch fa-spin"></i> Save</button>
-                                <button v-if="isOnMyList(selectedAnime.id)" @click="removeEverywhere(selectedAnime)" :disabled="isSaving" class="remove-btn"><i class="fa-solid fa-trash-can"></i> Remove from all lists</button>
+                                <div v-if="detailParty" class="party-people">
+                                    <div v-for="p in detailParty.people" :key="p.id" class="party-person" :class="p.state">
+                                        <button @click="openUser(p.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left">
+                                            <user-avatar :user="p.user" :size="30"></user-avatar>
+                                            <span class="min-w-0"><span class="block text-sm font-semibold text-ink truncate">{{ p.user.username }}</span><span class="block text-[11px] text-mute truncate">{{ PARTY_STATE_LABEL[p.state] }}<template v-if="p.st && p.state === 'joined'"> · {{ p.st === 'REPEATING' ? 'rewatching' : statusLabelFor(selectedAnime.type, p.st).toLowerCase() }}</template></span></span>
+                                        </button>
+                                        <button v-if="p.state === 'invited'" @click="cancelInvite(p.party, p.id)" class="role-act" title="Take back the invite"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                    <p v-if="detailParty.me === 'dropped'" class="text-[11px] text-mute">You dropped it: pick it up again (Watching) to carry on with them.</p>
+                                </div>
+                                <p v-else-if="!inviteFor(selectedAnime.id)" class="text-xs text-sub leading-relaxed">Invite friends to watch it with you. Their pictures show on the poster, everyone keeps their own status, and when anyone counts an episode, everyone moves along.</p>
+                                <div class="flex gap-2">
+                                    <button @click="openPartyDraft(selectedAnime)" :disabled="!friendsList.length" class="btn-ghost flex-1 !py-2 !text-xs" :title="friendsList.length ? '' : 'Add friends first (Profile → Friends)'"><i class="fa-solid fa-user-plus"></i> Invite friends</button>
+                                    <button v-if="detailParty" @click="leaveParty(selectedAnime)" class="btn-ghost !py-2 !text-xs !px-3" title="Stop watching together (it stays on your list)"><i class="fa-solid fa-right-from-bracket"></i></button>
+                                </div>
                             </div>
 
                             <!-- v10.3 my watch link (anime + TV): open it, then say how many episodes you watched -->
@@ -739,12 +760,18 @@
 
                                 <!-- v1.4 Steam achievements (your Steam account linked in Settings → Import & sync) -->
                                 <section v-if="PREFS.steam && selectedAnime.steamId && (ach.loading || ach.items.length || ach.private || ach.error)" class="mt-8 max-w-3xl ach-sec">
-                                    <div class="flex flex-wrap items-end justify-between gap-3">
-                                        <div>
-                                            <p class="kicker">// steam</p>
-                                            <h3 class="mt-1 font-display font-semibold text-ink text-xl">Achievements <span v-if="achStats.total" class="font-mono text-sm text-sub">{{ achStats.done }} / {{ achStats.total }}</span></h3>
-                                        </div>
-                                        <div v-if="ach.items.length" class="flex items-center gap-2">
+                                    <!-- v1.6 folded: tap the header to see the list -->
+                                    <button @click="ach.open = !ach.open" class="ach-head" :aria-expanded="ach.open">
+                                        <span class="min-w-0">
+                                            <span class="kicker block">// steam</span>
+                                            <span class="mt-1 block font-display font-semibold text-ink text-xl">Achievements <span v-if="achStats.total" class="font-mono text-sm text-sub">{{ achStats.done }} / {{ achStats.total }}</span><span v-else-if="ach.loading" class="font-mono text-sm text-mute"> · loading…</span></span>
+                                        </span>
+                                        <span v-if="achStats.total" class="ach-mini" :title="achStats.pct + '% unlocked'"><i :style="{ transform: 'scaleX(' + achStats.pct / 100 + ')' }"></i></span>
+                                        <span class="ach-open-l">{{ ach.open ? 'Hide' : 'Show' }} <i class="fa-solid fa-chevron-down" :class="{ 'rotate-180': ach.open }"></i></span>
+                                    </button>
+                                    <div v-if="ach.open">
+                                    <div v-if="ach.items.length" class="flex flex-wrap items-center justify-end gap-2 mt-3">
+                                        <div class="flex items-center gap-2">
                                             <div class="seg !h-9"><button v-for="f in [{ v: 'all', l: 'All' }, { v: 'done', l: 'Unlocked' }, { v: 'locked', l: 'Locked' }]" :key="f.v" @click="ach.filter = f.v; ach.shown = 24" :class="{ 'is-on': ach.filter === f.v }" class="seg-btn !px-2.5 !text-[11px]">{{ f.l }}</button></div>
                                             <div class="chip-wrap"><select v-model="ach.sort" class="chip !h-9 !text-xs"><option value="steam">Unlocked first</option><option value="recent">Recently unlocked</option><option value="rare">Rarest first</option></select><i class="fa-solid fa-chevron-down"></i></div>
                                             <button @click="loadAch(selectedAnime.steamId, true)" :disabled="ach.loading" class="icon-btn !w-9 !h-9" title="Check Steam again"><i class="fa-solid fa-rotate text-xs" :class="{ 'fa-spin': ach.loading }"></i></button>
@@ -766,6 +793,7 @@
                                         </div>
                                     </div>
                                     <button v-if="achView.length > ach.shown" @click="ach.shown += 48" class="btn-ghost mt-3 !py-2 !text-xs">Show {{ Math.min(48, achView.length - ach.shown) }} more</button>
+                                    </div>
                                 </section>
                             </template>
 
@@ -1161,7 +1189,7 @@
                         <div class="relative px-5 md:px-8 -mt-12 flex flex-wrap items-end gap-5">
                             <span class="rounded-full ring-4 ring-surface"><user-avatar :user="viewedUser?.profile" :size="96"></user-avatar></span>
                             <div class="min-w-0 flex-grow pb-1">
-                                <p class="kicker" :style="{ color: viewedUser?.profile?.accent }">// {{ viewedIsFriend ? 'friend' : 'squad mate' }}</p>
+                                <p class="kicker" :style="{ color: viewedUser?.profile?.accent }">// {{ viewedIsFriend ? 'friend' : 'on anicoop' }}</p>
                                 <h1 class="mt-1 font-display font-bold text-ink text-3xl truncate" :class="'nm-' + (decorOf(viewedUser?.profile).name || 'none')" :data-text="viewedUser?.profile?.username">{{ viewedUser?.profile?.username }}</h1>
                                 <p v-if="decorOf(viewedUser?.profile).tagline" class="text-sm text-sub mt-0.5 italic truncate">“{{ decorOf(viewedUser?.profile).tagline }}”</p>
                                 <div v-if="isOwnerId(viewUserId) || rolesOf(viewUserId).length" class="flex flex-wrap gap-1.5 mt-2">
@@ -1225,8 +1253,8 @@
                                 </template>
                                 <span v-else class="flex items-center gap-2 text-xs"><span class="px-2.5 py-1 rounded-full bg-lilac/15 text-lilac font-bold"><i class="fa-solid fa-link mr-1"></i>Watch buddies</span><span class="text-mute">Plan to watch is synced</span><button @click="endBuddy(viewUserId)" class="text-sub underline hover:text-ink">stop</button></span>
                             </div>
-                            <div v-if="sharedSquads.length" class="flex flex-wrap gap-1.5 mt-3">
-                                <span v-for="s in sharedSquads" :key="s.id" class="squad-chip on !cursor-default" :style="{ '--c': s.color || '#B490F5' }"><i class="fa-solid fa-user-group"></i>{{ s.name }}</span>
+                            <div v-if="sharedWith" class="flex flex-wrap gap-1.5 mt-3">
+                                <button @click="openSharedWith(viewUserId)" class="squad-chip on" style="--c:#B490F5" title="Your list, only what you watch with them"><i class="fa-solid fa-user-group"></i>{{ sharedWith }} {{ sharedWith === 1 ? 'title' : 'titles' }} together</button>
                             </div>
                         </div>
                         <div v-if="viewedSection !== 'list'" class="px-5 md:px-8 pb-6 md:pb-8 mt-6">
@@ -1749,7 +1777,7 @@
                                 <img :src="item.anime.bannerImage || item.anime.coverImage?.large" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-expo group-hover:scale-105" loading="lazy" decoding="async" alt="">
                                 <div class="absolute inset-0 bg-gradient-to-r from-base via-base/85 to-base/30"></div>
                                 <div class="relative h-full p-4 flex flex-col">
-                                    <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="linkInfo(item.anime)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkInfo(item.anime).site }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
+                                    <p class="label !text-sub truncate pr-24">{{ item.withNames ? 'with ' + item.withNames + (item.repeatNo ? ' · rewatch #' + item.repeatNo : '') : item.repeatNo ? 'solo · rewatch #' + item.repeatNo : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="linkInfo(item.anime)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkInfo(item.anime).site }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
                                     <p class="mt-1 truncate pr-24"><!-- v1.1 the name opens the title's page (the card itself opens your watch link) --><button @click.stop="fetchAnimeDetails(item.anime)" class="cw-name" title="Open its page">{{ titleOf(item.anime) }}</button></p>
                                     <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}<span v-if="newEps(item)" class="cw-new" :title="newEps(item) + ' episode' + (newEps(item) === 1 ? '' : 's') + ' out that you haven’t counted yet'">{{ newEps(item) }} new</span></template></p>
                                     <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
@@ -1806,7 +1834,7 @@
                                 <span class="tile-icon relative !w-16 !h-16 !rounded-2xl !text-2xl mx-auto"><i :class="currentSection.icon" class="fa-solid"></i></span>
                                 <p class="kicker relative mt-6">// database not connected yet</p>
                                 <h2 class="relative mt-2 font-display font-bold text-ink text-2xl md:text-3xl">Movies &amp; TV is almost here</h2>
-                                <p class="relative mt-3 max-w-md mx-auto text-sub">Browsing, search and title pages switch on as soon as the movie &amp; TV API is added. Your lists, squads, rankings and stats for this section are already set up.</p>
+                                <p class="relative mt-3 max-w-md mx-auto text-sub">Browsing, search and title pages switch on as soon as the movie &amp; TV API is added. Your lists, rankings and stats for this section are already set up.</p>
                                 <div class="relative mt-7 flex flex-wrap justify-center gap-3">
                                     <button @click="openSection('games')" class="btn-primary"><i class="fa-solid fa-gamepad"></i> Browse games</button>
                                     <button @click="openSection('anime')" class="btn-ghost"><i class="fa-solid fa-dragon text-lilac"></i> Anime</button>
@@ -1865,8 +1893,8 @@
                             <div class="panel p-5 w-[270px] shrink-0 xl:w-auto hidden xl:block">
                                 <p class="label mb-4"><i class="fa-solid fa-bolt text-volt mr-1.5"></i>Quick stats</p>
                                 <div class="space-y-3 text-sm">
-                                    <div class="flex justify-between"><span class="text-sub">Solo</span><span class="text-ink font-mono font-bold">{{ secSolo.length }}</span></div>
-                                    <div class="flex justify-between"><span class="text-sub">Squads</span><span class="text-ink font-mono font-bold">{{ secCoop.length }}</span></div>
+                                    <div class="flex justify-between"><span class="text-sub">On your list</span><span class="text-ink font-mono font-bold">{{ secSolo.length }}</span></div>
+                                    <div v-if="partyType({ type: currentSection.type })" class="flex justify-between"><span class="text-sub">With friends</span><span class="text-ink font-mono font-bold">{{ togetherCount }}</span></div>
                                     <div class="flex justify-between"><span class="text-sub">{{ section === 'manga' ? 'Read' : section === 'games' ? 'Played' : section === 'songs' ? 'Plays' : 'Watched' }}</span><span class="text-ink font-mono font-bold">{{ sectionProgress }} {{ UNIT.unit.toLowerCase() }}</span></div>
                                 </div>
                             </div>
@@ -2085,7 +2113,7 @@
                                     <p class="mt-1.5 text-[15px] leading-snug text-sub">
                                         <span class="qa-dot inline-block mr-1.5 align-middle" :style="{ '--dot': STATUS_COLORS[a.status] }"></span>{{ activityVerb(a) }}
                                         <button @click="fetchAnimeDetails(a.media_id)" class="text-ink font-semibold hover:text-lilac text-left">{{ a.media_title }}</button>
-                                        <span v-if="a.squad_id && squadById.get(a.squad_id)" class="text-mute text-xs"> · with {{ squadById.get(a.squad_id).name }}</span>
+
                                     </p>
                                 </div>
                             </div>
@@ -2230,14 +2258,21 @@
                                     <button @click="openGroupDraft" class="icon-btn !w-9 !h-9 !rounded-xl" title="New group"><i class="fa-solid fa-user-group text-xs"></i></button>
                                 </div>
                                 <form class="flex gap-2 mt-3" @submit.prevent="startChatByName">
-                                    <input v-model="chatSearch" placeholder="Message anyone by username" class="field !py-2 !rounded-xl !text-xs">
+                                    <div class="relative flex-grow"><i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-mute text-[11px]"></i><input v-model="chatSearch" type="search" placeholder="Find a friend or anyone by name" class="field !py-2 !pl-8 !rounded-xl !text-xs"></div>
                                     <button type="submit" :disabled="!chatSearch.trim() || chatSearchBusy" class="icon-btn !w-9 !h-9 !rounded-xl" title="Start chat"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
                                 </form>
-                                <div v-if="friendsList.length" class="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
-                                    <button v-for="f in friendsList" :key="f.id" @click="openChat(f.id)" class="flex flex-col items-center gap-1 w-12 shrink-0" :title="f.username"><user-avatar :user="f" :size="36"></user-avatar><span class="text-[10px] text-sub truncate w-full text-center">{{ f.username }}</span></button>
-                                </div>
                             </div>
-                            <div class="flex-grow overflow-y-auto p-2">
+                            <!-- v1.6 typing finds friends (and anyone else) by part of their name -->
+                            <div v-if="chatQ" class="flex-grow overflow-y-auto p-2">
+                                <p class="label px-2 pt-2 pb-1.5">Friends</p>
+                                <button v-for="f in chatFriendHits" :key="f.id" @click="openChatHit(f.id)" class="chat-row"><user-avatar :user="f" :size="40"></user-avatar><span class="min-w-0 flex-grow text-left text-sm font-semibold text-ink truncate">{{ f.username }}</span><i class="fa-solid fa-comment text-mute text-xs"></i></button>
+                                <p v-if="!chatFriendHits.length" class="text-xs text-mute px-2 pb-2">No friend with that name.</p>
+                                <template v-if="chatOthers.length">
+                                    <p class="label px-2 pt-3 pb-1.5">Everyone else</p>
+                                    <button v-for="p in chatOthers" :key="p.id" @click="openChatHit(p.id)" class="chat-row"><user-avatar :user="p" :size="40"></user-avatar><span class="min-w-0 flex-grow text-left"><span class="block text-sm font-semibold text-ink truncate">{{ p.username }}</span><span class="block text-[11px] text-mute">Not a friend: goes to their message requests</span></span></button>
+                                </template>
+                            </div>
+                            <div v-else class="flex-grow overflow-y-auto p-2">
                                 <template v-if="incomingRequests.length">
                                     <p class="label px-2 pt-2 pb-1.5">Requests · {{ incomingRequests.length }}</p>
                                     <button v-for="c in incomingRequests" :key="c.other" @click="openChat(c.other)" class="chat-row" :class="{ on: chatWith === c.other }">
@@ -2249,7 +2284,8 @@
                                 <template v-if="groups.length">
                                     <p class="label px-2 pt-3 pb-1.5">Groups</p>
                                     <button v-for="g in groups" :key="g.id" @click="openGroup(g.id)" class="chat-row" :class="{ on: groupWith === g.id }">
-                                        <span class="w-10 h-10 rounded-full bg-overlay flex items-center justify-center shrink-0 text-sub"><i class="fa-solid fa-user-group text-sm"></i></span>
+                                        <img v-if="g.avatar_url" :src="g.avatar_url" class="w-10 h-10 rounded-full object-cover shrink-0" alt="">
+                                        <span v-else class="w-10 h-10 rounded-full bg-overlay flex items-center justify-center shrink-0 text-sub"><i class="fa-solid fa-user-group text-sm"></i></span>
                                         <span class="min-w-0 flex-grow text-left">
                                             <span class="flex items-center gap-2"><span class="text-sm font-semibold text-ink truncate">{{ g.name }}</span><span class="ml-auto text-[10px] text-mute shrink-0">{{ timeAgo(g.last_message_at) }}</span></span>
                                             <span class="block text-xs truncate" :class="Number(g.unread) ? 'text-ink font-semibold' : 'text-sub'">{{ g.last_body || g.last_kind ? (g.last_sender === currentUser?.id ? 'You: ' : '') + chatPreview(g) : g.member_count + ' members' }}</span>
@@ -2266,7 +2302,12 @@
                                     </span>
                                     <span v-if="Number(c.unread)" class="min-w-[20px] h-5 px-1.5 rounded-full bg-pink text-white text-[10px] font-bold flex items-center justify-center shrink-0">{{ c.unread }}</span>
                                 </button>
-                                <p v-if="!chatList.length && !incomingRequests.length && !groups.length" class="text-sm text-mute text-center px-6 py-10">No chats yet. Tap a friend above or type any username to start one.</p>
+                                <!-- v1.6 every friend you haven't chatted with yet, one tap away -->
+                                <template v-if="chatNewFriends.length">
+                                    <p class="label px-2 pt-3 pb-1.5">Friends · start a chat</p>
+                                    <button v-for="f in chatNewFriends" :key="'f' + f.id" @click="openChat(f.id)" class="chat-row"><user-avatar :user="f" :size="40"></user-avatar><span class="min-w-0 flex-grow text-left text-sm font-semibold text-ink truncate">{{ f.username }}</span><i class="fa-solid fa-comment text-mute text-xs"></i></button>
+                                </template>
+                                <p v-if="!chatList.length && !incomingRequests.length && !groups.length && !chatNewFriends.length" class="text-sm text-mute text-center px-6 py-10">No chats yet. Type anyone’s name above to start one.</p>
                             </div>
                         </aside>
 
@@ -2410,7 +2451,12 @@
                             <template v-else-if="groupWith">
                                 <div class="flex items-center gap-3 px-4 py-3 border-b border-line shrink-0">
                                     <button @click="goBack" class="icon-btn !w-9 !h-9 md:hidden"><i class="fa-solid fa-arrow-left text-sm"></i></button>
-                                    <span class="w-[38px] h-[38px] rounded-full bg-overlay flex items-center justify-center shrink-0 text-sub"><i class="fa-solid fa-user-group text-sm"></i></span>
+                                    <!-- v1.6 the group's picture: tap it to change it (anyone in the group can) -->
+                                    <button @click="changeGroupPic" :disabled="groupPicBusy" class="group-pic" title="Change the group’s picture">
+                                        <img v-if="groupInfo?.avatar_url" :src="groupInfo.avatar_url" alt="">
+                                        <i v-else class="fa-solid fa-user-group text-sm"></i>
+                                        <span class="group-pic-edit"><i class="fa-solid" :class="groupPicBusy ? 'fa-circle-notch fa-spin' : 'fa-camera'"></i></span>
+                                    </button>
                                     <span class="min-w-0 text-left flex-grow"><span class="block font-semibold text-ink truncate">{{ groupInfo?.name }}</span><span class="block text-[11px] text-mute">{{ groupInfo?.member_count || groupMemberProfiles.length }} members</span></span>
                                     <button @click="openAddMember" class="icon-btn !w-9 !h-9" title="Add a friend"><i class="fa-solid fa-user-plus text-xs"></i></button>
                                     <button @click="leaveGroupChat(groupWith)" class="icon-btn !w-9 !h-9" title="Leave group"><i class="fa-solid fa-right-from-bracket text-xs"></i></button>
@@ -2538,14 +2584,15 @@
                 </main>
 
                 <!-- ===== SOLO & SQUAD LISTS ===== -->
-                <main v-else-if="activeTab === 'coop' || activeTab === 'solo'" :key="activeTab + '-' + section" class="w-full px-4 md:px-8 xl:px-16 pt-8 md:pt-12 pb-28 md:pb-20">
+                <main v-else-if="activeTab === 'solo'" :key="activeTab + '-' + section" class="w-full px-4 md:px-8 xl:px-16 pt-8 md:pt-12 pb-28 md:pb-20">
                     <div class="flex flex-wrap items-end justify-between gap-4">
                         <div>
-                            <p class="kicker">// {{ currentSection.short.toLowerCase() }} · {{ activeTab === 'coop' ? 'shared with your squads' : 'just you' }}</p>
-                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ activeTab === 'coop' ? 'Squad lists' : 'Solo list' }}</h1>
+                            <p class="kicker">// {{ currentSection.short.toLowerCase() }} · {{ strictSolo ? 'just you' : listWith.length ? 'with ' + joinNames(listWith.map(id => personOf(id).username)) : 'everything you track' }}</p>
+                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Your list</h1>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <button v-if="activeTab === 'coop'" @click="openSquadDraft()" class="btn-ghost"><i class="fa-solid fa-user-plus text-lilac"></i> New squad</button>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- v1.6 Strictly solo: hides everything you watch with friends -->
+                            <button v-if="partyType({ type: currentSection.type })" @click="strictSolo = !strictSolo" class="solo-toggle" :class="{ on: strictSolo }" role="switch" :aria-checked="strictSolo" title="Only what you watch alone (hides every title with friends on it)"><span class="st-track"><i></i></span>Strictly solo</button>
                             <button @click="toggleSelectMode" :class="selectMode ? 'btn-primary' : 'btn-ghost'"><i class="fa-solid fa-list-check"></i> {{ selectMode ? 'Done selecting' : 'Select' }}</button>
                             <button @click="openRandom" class="btn-primary"><i class="fa-solid fa-dice"></i> Random {{ ({ manga: 'manga', games: 'game', movies: 'movie or show' })[section] || 'anime' }}</button>
                         </div>
@@ -2562,6 +2609,11 @@
                                 <p class="label mb-2 px-1">Sort by</p>
                                 <div class="chip-wrap w-full"><select v-model="PREFS.listOrder" class="chip w-full"><option v-for="o in LIST_ORDERS" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
+                            <!-- v1.6 type: TV / Movie / Special / OVA … -->
+                            <div v-if="listFormats.length" class="la-format">
+                                <p class="label mb-2 px-1">Type</p>
+                                <div class="chip-wrap w-full"><select v-model="listFormat" :class="{ 'is-on': listFormat }" class="chip w-full"><option value="">All types</option><option v-for="x in listFormats" :key="x.k" :value="x.k">{{ x.l }} ({{ x.c }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                            </div>
                             <!-- v10.1 genre filter (v10.2: right under Sort by) -->
                             <div v-if="listGenres.length" class="la-genre">
                                 <p class="label mb-2 px-1">Genre</p>
@@ -2576,39 +2628,14 @@
                                     </button>
                                 </div>
                             </div>
-                            <!-- v9.8 Solo ⇄ Squads: one switch instead of a separate tab -->
-                            <div class="la-list">
-                                <p class="label mb-2 px-1">List</p>
-                                <div class="list-switch">
-                                    <button @click="activeTab !== 'solo' && switchTab('solo')" :class="{ on: activeTab === 'solo' }"><i class="fa-solid fa-user"></i>Solo <span>{{ secSolo.length }}</span></button>
-                                    <button @click="activeTab !== 'coop' && switchTab('coop')" :class="{ on: activeTab === 'coop' }"><i class="fa-solid fa-user-group"></i>Squads <span>{{ secCoop.length }}</span></button>
-                                </div>
-                            </div>
-                            <div v-if="activeTab === 'coop'">
-                                <p class="label mb-2 px-1">Squads</p>
-                                <div class="flex xl:flex-col flex-wrap gap-1">
-                                    <button @click="listFilterGroup = 'ALL'" :class="listFilterGroup === 'ALL' ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-colors">All squads</button>
-                                    <div v-for="s in squads" :key="s.id" class="group/sq relative flex items-center">
-                                        <button @click="listFilterGroup = s.id" :class="listFilterGroup === s.id ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex-grow flex items-center gap-2.5 text-left px-3 py-2.5 pr-9 rounded-xl text-sm font-medium transition-colors min-w-0">
-                                            <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: s.color || '#B490F5' }"></span>
-                                            <span class="truncate">{{ s.name }}</span>
-                                            <span class="ml-auto font-mono text-xs text-mute">{{ squadCount(s.id) }}</span>
-                                        </button>
-                                        <button @click="leaveSquad(s)" class="absolute right-1.5 w-7 h-7 rounded-lg flex items-center justify-center text-mute hover:text-rose-400 hover:bg-rose-500/10 [@media(hover:hover)]:opacity-0 group-hover/sq:opacity-100 transition-opacity" :title="'Leave ' + s.name"><i class="fa-solid fa-right-from-bracket text-[11px]"></i></button>
-                                    </div>
-                                    <p v-if="!squads.length" class="text-xs text-mute px-3">No squads yet — make one with any of your friends.</p>
-                                </div>
-                                <div v-if="listFilterGroup !== 'ALL' && squadById.get(listFilterGroup)" class="mt-4 panel !rounded-2xl p-3">
-                                    <p class="label mb-2">Members</p>
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <button v-for="m in squadById.get(listFilterGroup).members" :key="m.id" @click="openUser(m.id)" class="flex items-center gap-1.5 pr-2 rounded-full bg-raised text-xs text-ink hover:bg-overlay">
-                                            <user-avatar :user="m" :size="22"></user-avatar>{{ m.id === currentUser?.id ? 'You' : m.username }}
-                                        </button>
-                                    </div>
-                                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-line">
-                                        <button @click="leaveSquad(squadById.get(listFilterGroup))" class="squad-leave"><i class="fa-solid fa-right-from-bracket"></i> Leave squad</button>
-                                        <button v-if="squadById.get(listFilterGroup).created_by === currentUser?.id" @click="leaveSquad(squadById.get(listFilterGroup), 'delete')" class="squad-leave"><i class="fa-solid fa-trash-can"></i> Delete</button>
-                                    </div>
+                            <!-- v1.6 watching with: pick friends, see only what you watch with all of them -->
+                            <div v-if="listWithFriends.length && !strictSolo" class="la-with">
+                                <p class="label mb-2 px-1">Watching with</p>
+                                <div class="flex xl:flex-col flex-wrap gap-1 la-chips">
+                                    <button v-for="f in listWithFriends" :key="f.id" @click="toggleListWith(f.id)" :class="listWith.includes(f.id) ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors">
+                                        <span class="flex items-center gap-2.5 min-w-0"><user-avatar :user="f.user" :size="22"></user-avatar><span class="truncate">{{ f.user.username }}</span></span>
+                                        <span class="flex items-center gap-2 shrink-0"><i v-if="listWith.includes(f.id)" class="fa-solid fa-check text-[10px] text-volt"></i><span class="font-mono text-xs text-mute">{{ f.c }}</span></span>
+                                    </button>
                                 </div>
                             </div>
                         </aside>
@@ -2629,7 +2656,10 @@
                                             <span class="disc-card-ico"><i class="fa-solid" :class="plOpen === p.id ? 'fa-chevron-up' : 'fa-list'"></i></span>
                                         </span>
                                         <span class="block mt-2.5 text-sm font-semibold text-ink truncate text-left">{{ p.name }}</span>
-                                        <span class="block text-xs text-sub text-left">{{ (p.songs || []).length }} {{ (p.songs || []).length === 1 ? 'song' : 'songs' }}</span>
+                                        <span class="flex items-center gap-1.5 text-xs text-sub text-left">
+                                            <span v-if="plShared(p)" class="flex -space-x-1.5" :title="'Shared with ' + plPeople(p).map(x => x.username).join(', ')"><user-avatar v-for="u in plPeople(p).slice(0, 3)" :key="u.id" :user="u" :size="16"></user-avatar></span>
+                                            {{ (p.songs || []).length }} {{ (p.songs || []).length === 1 ? 'song' : 'songs' }}
+                                        </span>
                                     </button>
                                 </div>
                                 <p v-else-if="!plMissing" class="text-sm text-mute">No playlists yet. Make one, then add songs from here or from any song's edit window.</p>
@@ -2642,12 +2672,16 @@
                                                 <span v-else class="pl-empty"><i class="fa-solid fa-music"></i></span>
                                             </span>
                                             <div class="min-w-0 flex-grow">
-                                                <p class="label">Playlist · {{ (plOpenList.songs || []).length }} songs<template v-if="(plOpenList.songs || []).length"> · {{ plLength(plOpenList) }}</template></p>
+                                                <p class="label">{{ plShared(plOpenList) ? 'Shared playlist' : 'Playlist' }} · {{ (plOpenList.songs || []).length }} songs<template v-if="(plOpenList.songs || []).length"> · {{ plLength(plOpenList) }}</template></p>
                                                 <h4 class="disc-title">{{ plOpenList.name }}</h4>
                                                 <div class="mt-2 flex flex-wrap items-center gap-2">
                                                     <button v-if="(plOpenList.songs || []).length" @click="playPreview(plOpenList.songs[0], plOpenList.songs)" class="sp-play !w-9 !h-9 !text-xs" title="Play"><i class="fa-solid fa-play"></i></button>
                                                     <button @click="renamePlaylist(plOpenList)" class="role-act" title="Rename"><i class="fa-solid fa-pen"></i></button>
-                                                    <button @click="deletePlaylist(plOpenList)" class="role-act danger" title="Delete playlist"><i class="fa-solid fa-trash-can"></i></button>
+                                                    <!-- v1.6 people who can add songs -->
+                                                    <span v-if="plShared(plOpenList)" class="flex -space-x-1.5 ml-1" :title="plPeople(plOpenList).map(x => x.username).join(', ')"><user-avatar v-for="u in plPeople(plOpenList).slice(0, 5)" :key="u.id" :user="u" :size="24"></user-avatar></span>
+                                                    <button v-if="plMine(plOpenList)" @click="openPlInvite(plOpenList)" class="role-act !w-auto !px-2.5 gap-1.5" title="Friends who can add songs"><i class="fa-solid fa-user-plus"></i><span class="text-[11px] font-semibold">{{ plShared(plOpenList) ? 'People' : 'Add people' }}</span></button>
+                                                    <button v-if="plMine(plOpenList)" @click="deletePlaylist(plOpenList)" class="role-act danger" title="Delete playlist"><i class="fa-solid fa-trash-can"></i></button>
+                                                    <button v-else @click="leavePlaylist(plOpenList)" class="role-act danger" :title="'Leave (it’s ' + personOf(plOpenList.user_id).username + '’s)'"><i class="fa-solid fa-right-from-bracket"></i></button>
                                                 </div>
                                             </div>
                                             <button @click="plOpen = null" class="icon-btn !w-9 !h-9 shrink-0" title="Close"><i class="fa-solid fa-xmark text-sm"></i></button>
@@ -2695,12 +2729,28 @@
                                     </div>
                                 </transition>
                             </section>
+                            <!-- v1.6 invites waiting for your answer (this section) -->
+                            <section v-if="sectionInvites.length" class="mb-10">
+                                <h3 class="flex items-center gap-3 mb-4"><i class="fa-solid fa-envelope-open-text text-lilac text-[13px]"></i><span class="font-display font-semibold text-ink text-lg">Invites</span><span class="font-mono text-xs text-mute">{{ sectionInvites.length }}</span></h3>
+                                <div class="party-inv-grid">
+                                    <div v-for="p in sectionInvites" :key="p.id" class="party-inv">
+                                        <button @click="fetchAnimeDetails(p.anime)" class="party-inv-art"><img v-if="p.anime.coverImage?.large" :src="p.anime.coverImage.large" loading="lazy" alt=""></button>
+                                        <div class="min-w-0 flex-grow flex flex-col">
+                                            <button @click="fetchAnimeDetails(p.anime)" class="text-sm font-semibold text-ink text-left line-clamp-2 hover:text-lilac">{{ titleOf(p.anime) }}</button>
+                                            <p class="text-[11px] text-sub mt-1 flex items-center gap-1.5"><user-avatar :user="inviteFrom(p)" :size="16"></user-avatar><span class="truncate">from {{ inviteFrom(p).username }}<template v-if="invitePeople(p).length > 1"> · {{ invitePeople(p).length }} in</template></span></p>
+                                            <div class="flex gap-1.5 mt-auto pt-2">
+                                                <button @click="answerInvite(p, true)" class="btn-primary !py-1.5 !px-3 !text-[11px]"><i class="fa-solid fa-check"></i> Join</button>
+                                                <button @click="answerInvite(p, false)" class="btn-ghost !py-1.5 !px-3 !text-[11px]">No</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
                             <div v-if="!Object.keys(filteredGroupedList).length" class="panel py-24 text-center">
                                 <i class="fa-solid fa-ghost text-4xl text-mute"></i>
                                 <p class="mt-5 font-display text-ink text-lg">Nothing here yet</p>
-                                <p class="mt-1 text-sub text-sm">{{ listFiltersOn ? 'No matches for these filters.' : (activeTab === 'coop' && !squads.length ? 'Create a squad, then add shows to it from Browse.' : 'Add some from Browse with the + button.') }}</p>
+                                <p class="mt-1 text-sub text-sm">{{ strictSolo ? 'Everything here is something you watch with friends.' : listWith.length ? 'Nothing you watch with all of them yet.' : listFiltersOn ? 'No matches for these filters.' : 'Add some from Browse with the + button.' }}</p>
                                 <button v-if="listFiltersOn" @click="clearListFilters" class="btn-ghost mt-6"><i class="fa-solid fa-filter-circle-xmark"></i> Clear all filters</button>
-                                <button v-else-if="activeTab === 'coop' && !squads.length" @click="openSquadDraft()" class="btn-primary mt-6"><i class="fa-solid fa-user-plus"></i> Create a squad</button>
                                 <button v-else @click="switchTab('browse')" class="btn-primary mt-6">Browse {{ currentSection.short.toLowerCase() }}</button>
                             </div>
                             <section v-for="(group, status) in filteredGroupedList" :key="status" class="mb-12">
@@ -2711,9 +2761,9 @@
                                     <span class="font-mono text-xs text-mute">{{ group.length }}</span>
                                 </h3>
                                 <div :class="posterGrid()">
-                                    <poster-card v-for="(item, i) in group.slice(0, shownIn(status))" :key="activeTab === 'coop' ? item.key : item.anime.id" :anime="item.anime" :entry="item" :solo="activeTab === 'solo' ? item : null" :i="i % 24" :tag="activeTab === 'coop' && listFilterGroup === 'ALL' ? item.group : ''" :quick="activeTab === 'solo'" :menu-open="quickMenuFor === item.anime.id"
+                                    <poster-card v-for="(item, i) in group.slice(0, shownIn(status))" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="item" :i="i % 24" :people="posterTags(item.anime.id)" :quick="true" :menu-open="quickMenuFor === item.anime.id"
                                         :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
-                                        @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="activeTab === 'solo' ? onPlusClick(item.anime) : openEditor(item.anime)"></poster-card>
+                                        @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
                                 </div>
                                 <div v-if="group.length > shownIn(status)" v-infinite="() => moreIn(status)" class="h-px" aria-hidden="true"></div>
                             </section>
@@ -2921,42 +2971,18 @@
                         </div>
                     </section>
 
-                    <section>
+                    <!-- v1.6 squads became friend tags on titles: here are the friends you watch with most -->
+                    <section v-if="recentSquads.length">
                         <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
-                            <h2 class="font-display font-semibold text-ink text-2xl">Squads</h2>
-                            <button @click="openSquadDraft()" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-user-plus text-lilac"></i> New squad</button>
+                            <h2 class="font-display font-semibold text-ink text-2xl">Watching together</h2>
                         </div>
                         <div class="grid sm:grid-cols-2 gap-3">
-                            <div v-for="s in squads" :key="s.id" class="panel !rounded-2xl p-4" :style="{ '--c': s.color || '#B490F5' }">
-                                <div class="flex items-center gap-3">
-                                    <span class="w-10 h-10 rounded-xl flex items-center justify-center text-onaccent shrink-0" :style="{ background: s.color || '#B490F5' }"><i class="fa-solid fa-user-group text-sm"></i></span>
-                                    <div class="min-w-0 flex-grow">
-                                        <p class="text-ink font-semibold truncate">{{ s.name }}</p>
-                                        <p class="text-xs text-mute">{{ s.members.length }} members · {{ coopList.filter(i => i.squadId === s.id).length }} on list</p>
-                                    </div>
-                                    <button @click="renameSquad(s)" class="text-mute hover:text-ink text-xs px-1.5" title="Rename"><i class="fa-solid fa-pen"></i></button>
-                                </div>
-                                <div class="flex flex-wrap items-center gap-1.5 mt-3">
-                                    <button v-for="m in s.members" :key="m.id" @click="openUser(m.id)" class="flex items-center gap-1.5 pr-2 rounded-full bg-raised text-xs text-ink hover:bg-overlay">
-                                        <user-avatar :user="m" :size="22"></user-avatar>{{ m.id === currentUser?.id ? 'You' : m.username }}
-                                    </button>
-                                    <div class="relative" @click.stop>
-                                        <button v-if="friendsNotIn(s).length" @click="squadAddOpen = squadAddOpen === s.id ? null : s.id" class="h-[22px] px-2 rounded-full border border-dashed border-line2 text-[11px] text-sub hover:text-ink"><i class="fa-solid fa-plus mr-1"></i>Add</button>
-                                        <transition name="pop">
-                                            <div v-if="squadAddOpen === s.id" class="qa-menu !w-52 !origin-top-left absolute left-0 top-7 z-30">
-                                                <button v-for="f in friendsNotIn(s)" :key="f.id" @click="squadAddOpen = null; squadAddMember(s, f.id)" class="qa-row"><user-avatar :user="f" :size="22"></user-avatar>{{ f.username }}</button>
-                                            </div>
-                                        </transition>
-                                    </div>
-                                </div>
-                                <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-line">
-                                    <button @click="listFilterGroup = s.id; openTracker('coop')" class="squad-leave !text-sub"><i class="fa-solid fa-list"></i> Open list</button>
-                                    <button @click="leaveSquad(s)" class="squad-leave"><i class="fa-solid fa-right-from-bracket"></i> Leave squad</button>
-                                    <button v-if="s.created_by === currentUser?.id" @click="leaveSquad(s, 'delete')" class="squad-leave"><i class="fa-solid fa-trash-can"></i> Delete</button>
-                                </div>
-                            </div>
+                            <button v-for="g in recentSquads" :key="g.ids.join()" @click="openGroupList(g.ids)" class="panel !rounded-2xl p-4 flex items-center gap-3 text-left hover:border-line2 transition-colors">
+                                <span class="flex -space-x-2 shrink-0"><user-avatar v-for="id in g.ids.slice(0, 4)" :key="id" :user="personOf(id)" :size="32"></user-avatar></span>
+                                <span class="min-w-0 flex-grow"><span class="block text-ink font-semibold truncate">{{ joinNames(g.ids.map(id => personOf(id).username)) }}</span><span class="block text-xs text-mute">{{ g.n }} {{ g.n === 1 ? 'title' : 'titles' }} together</span></span>
+                                <i class="fa-solid fa-chevron-right text-mute text-xs"></i>
+                            </button>
                         </div>
-                        <p v-if="!squads.length" class="text-mute text-sm">A squad is a group of friends with its own shared list — make one for movie night, your anime club, anything.</p>
                     </section>
 
 
@@ -3205,11 +3231,15 @@
                         <span v-if="notifQuote(n)" class="block text-xs text-sub mt-0.5 line-clamp-2">{{ notifQuote(n) }}</span>
                         <span class="block text-[11px] text-mute mt-1">{{ timeAgo(n.created_at) }}</span>
                         <button v-if="alertWatch(n)" @click.stop="watchFromAlert(n)" class="notif-watch" :title="'Open your link on ' + alertWatch(n).site"><i class="fa-solid fa-play"></i> Watch<span class="opacity-70"> · {{ alertWatch(n).site }}</span></button>
+                        <span v-if="n.kind === 'party_invite' && inviteFor(n.media_id)" class="flex gap-1.5 mt-1.5">
+                            <button @click.stop="answerInvite(inviteFor(n.media_id), true); n.read = true" class="notif-watch"><i class="fa-solid fa-check"></i> Join</button>
+                            <button @click.stop="answerInvite(inviteFor(n.media_id), false); n.read = true" class="notif-watch !text-sub">No</button>
+                        </span>
                     </span>
                     <img v-if="n.media_cover" :src="n.media_cover" class="w-8 h-11 rounded-md object-cover shrink-0" alt="">
                     <span v-if="!n.read" class="w-2 h-2 rounded-full bg-pink shrink-0 mt-1.5"></span>
                 </div>
-                <p v-if="!notifications.length" class="text-center text-sm text-mute py-10">Nothing yet — when friends comment or add you to squads, it shows up here.</p>
+                <p v-if="!notifications.length" class="text-center text-sm text-mute py-10">Nothing yet — when friends comment or invite you to watch something together, it shows up here.</p>
             </div>
         </div>
     </transition>
@@ -3244,16 +3274,23 @@
              (v1.0.1 both move with transforms only, so it stays smooth) -->
         <transition name="tour-fade">
             <div v-if="tour.on && tourStep" class="tour" :class="{ interactive: tourStep.interactive }" @click.stop>
-                <div class="tour-spot" :class="{ gone: !tour.rect }" :style="tour.rect ? { transform: 'translate3d(' + tour.rect.left + 'px,' + tour.rect.top + 'px,0)', width: tour.rect.width + 'px', height: tour.rect.height + 'px' } : {}"><i></i></div>
+                <!-- v1.6 the dark cover: panels + round corners that only slide (see tourDim) -->
+                <div class="tour-dim" aria-hidden="true">
+                    <i :style="tourDim.top"></i><i :style="tourDim.bottom"></i><i :style="tourDim.left"></i><i :style="tourDim.right"></i>
+                    <i class="c tl" :style="tourDim.tl"></i><i class="c tr" :style="tourDim.tr"></i><i class="c bl" :style="tourDim.bl"></i><i class="c br" :style="tourDim.br"></i>
+                </div>
+                <div class="tour-ring" :class="{ gone: !tour.rect }" :style="tourDim.ring" aria-hidden="true"><i></i></div>
                 <div v-if="tourStep.last" class="tour-confetti" aria-hidden="true"><i v-for="n in 36" :key="n" :style="{ '--x': ((n * 37) % 100) + '%', '--d': ((n * 53) % 90) / 100 + 's', '--h': (n * 47) % 360 }"></i></div>
-                <div class="tour-pos" :class="{ center: !tour.rect, dock: tour.rect && tour.card.dock, up: tour.card.up, hero: tourStep.hero }"
-                    :style="tour.rect && tour.card.x != null ? { transform: 'translate3d(' + tour.card.x + 'px,' + tour.card.y + 'px,0)' } : {}">
+                <div class="tour-pos" :class="{ unplaced: tour.card.x == null && !tour.card.dock, dock: tour.rect && tour.card.dock, up: tour.card.up, hero: tourStep.hero }"
+                    :style="tour.card.x != null && !tour.card.dock ? { transform: 'translate3d(' + tour.card.x + 'px,' + tour.card.y + 'px,0)' } : {}">
                     <div :key="tour.i" class="tour-card" :class="{ hero: tourStep.hero, back: tour.dir < 0 }" role="dialog" aria-live="polite">
                         <div v-if="tourStep.hero" class="tour-logo"><span>A</span><i></i><i></i><i></i></div>
                         <div v-else class="tour-icon"><i class="fa-solid" :class="tourStep.icon"></i></div>
                         <p class="tour-k">{{ tourStep.hero && tour.i === 0 ? '// hello' : tourStep.last ? '// done' : '// step ' + tour.i + ' of ' + (TOUR_STEPS.length - 2) }}</p>
                         <h3 class="tour-t">{{ tourStep.title }}</h3>
                         <p class="tour-b">{{ tourStep.body }}</p>
+                        <!-- v1.6 the first page asks everyone to see it once -->
+                        <p v-if="tour.i === 0" class="tour-important"><i class="fa-solid fa-triangle-exclamation"></i><span><b>IMPORTANT:</b> please go through this tour at least once. It shows how lists, watching with friends, watch links and reading work, and most questions are answered in it.</span></p>
                         <!-- the manga repository: copy it in one tap -->
                         <div v-if="tourStep.copy" class="tour-copy">
                             <span class="truncate">{{ tourStep.copy }}</span>
@@ -3335,12 +3372,6 @@
                 <span class="batch-pill-n">{{ selectedCount }}</span><span>selected</span><i class="fa-solid fa-chevron-up text-[10px]"></i>
             </button>
             <template v-else>
-            <transition name="pop">
-                <div v-if="batchSquadMenu" class="qa-menu !w-60 !origin-bottom absolute bottom-full mb-2 left-0 right-0 mx-auto z-10">
-                    <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">ADD SELECTED TO…</p>
-                    <button v-for="s in squads" :key="s.id" @click="batchAddToSquad(s)" class="qa-row"><span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: s.color || '#B490F5' }"></span><span class="truncate">{{ s.name }}</span><span class="ml-auto font-mono text-[10px] text-mute">{{ s.members.length }}</span></button>
-                </div>
-            </transition>
             <div class="batch-bar">
                 <div class="batch-count flex items-center gap-2 shrink-0 pr-2 border-r border-line2">
                     <span class="min-w-[26px] h-[26px] px-2 rounded-full bg-lilac text-onaccent font-mono text-xs font-bold flex items-center justify-center">{{ selectedCount }}</span>
@@ -3351,18 +3382,18 @@
                 </div>
                 <!-- v9.9 each status says what it does (on phones the buttons were only coloured dots) -->
                 <div class="batch-statuses flex items-center gap-1 shrink-0">
-                    <span class="batch-hint">{{ activeTab === 'coop' ? 'Squad status' : 'Add to list as' }}</span>
-                    <button v-for="s in statusPick()" :key="s" @click="batchStatus(s)" :disabled="!selectedCount || batchBusy" class="batch-btn" :title="(activeTab === 'coop' ? 'Set squad status: ' : 'Solo list: ') + STATUS_LABELS[s]">
+                    <span class="batch-hint">Add to list as</span>
+                    <button v-for="s in statusPick()" :key="s" @click="batchStatus(s)" :disabled="!selectedCount || batchBusy" class="batch-btn" :title="'Your list: ' + STATUS_LABELS[s]">
                         <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span><span>{{ STATUS_SHORT[s] }}</span>
                     </button>
                 </div>
                 <div class="batch-more flex items-center gap-1 shrink-0">
                     <button v-if="section === 'songs'" @click="openPlPicker(selectedSongs, $event)" :disabled="!selectedSongs.length" class="batch-btn shrink-0"><i class="fa-solid fa-circle-plus"></i> Add to playlist</button>
-                    <button @click="batchSquadMenu = !batchSquadMenu" :disabled="!selectedCount || batchBusy || !squads.length" class="batch-btn shrink-0"><i class="fa-solid fa-user-group"></i> Add to squad</button>
+                    <button v-if="partyType({ type: currentSection.type })" @click="batchInvite" :disabled="!selectedCount || batchBusy || !friendsList.length" class="batch-btn shrink-0" title="Invite friends to watch all of them with you"><i class="fa-solid fa-user-plus"></i> Invite friends</button>
                     <button @click="batchRemove" :disabled="!selectedCount || batchBusy" class="batch-btn !text-rose-300 shrink-0"><i class="fa-solid fa-trash-can"></i><span>Remove</span></button>
                     <button @click="toggleSelectMode" class="batch-btn batch-done-lg !bg-ink !text-inv shrink-0">Done</button>
                 </div>
-                <button @click="batchMin = true; batchSquadMenu = false" class="batch-btn batch-hide shrink-0" title="Make the bar small (you stay in select mode)"><i class="fa-solid fa-chevron-down"></i><span class="batch-hide-l">Hide</span></button>
+                <button @click="batchMin = true" class="batch-btn batch-hide shrink-0" title="Make the bar small (you stay in select mode)"><i class="fa-solid fa-chevron-down"></i><span class="batch-hide-l">Hide</span></button>
             </div>
             </template>
         </div>
@@ -3417,7 +3448,7 @@
                                 <score-input v-model="editForm.score" :big="true"></score-input>
                             </div>
                         </div>
-                        <div v-if="(editForm.anime.type || 'ANIME') === 'ANIME' && editForm.repeats.length" class="rep-strip">
+                        <div v-if="REPEAT_TYPES.includes(editForm.anime.type || 'ANIME') && editForm.repeats.length" class="rep-strip">
                             <p class="label mb-2.5 flex items-center gap-1.5"><i class="fa-solid fa-rotate-right text-[#14b8a6]"></i>Rewatches <span class="normal-case tracking-normal text-mute">{{ editForm.repeats.length }}/{{ MAX_REPEATS }} used</span></p>
                             <div class="rep-slots">
                                 <span v-for="n in MAX_REPEATS" :key="n" class="rep-slot" :class="{ used: n <= editForm.repeats.length, done: editForm.anime.episodes && (editForm.status === 'REPEATING' && n === editForm.repeats.length ? editForm.repProgress : editForm.repeats[n - 1]) >= editForm.anime.episodes, now: editForm.status === 'REPEATING' && n === editForm.repeats.length }" :title="n <= editForm.repeats.length ? 'Rewatch #' + n : 'Not used yet'">
@@ -3425,16 +3456,12 @@
                                 </span>
                             </div>
                         </div>
-                        <div>
-                            <p class="label mb-2.5">Save to</p>
-                            <button @click="editForm.inSolo = !editForm.inSolo" :class="editForm.inSolo ? 'bg-ink text-inv border-ink' : 'text-sub border-line hover:border-line2'" class="w-full py-3 rounded-2xl border text-sm font-bold transition-colors"><i class="fa-solid fa-user mr-2"></i>My solo list</button>
-                            <p class="label mt-5 mb-2.5">Watch together with squads <span class="normal-case tracking-normal text-mute">(pick as many as you like)</span></p>
-                            <div class="flex flex-wrap gap-2">
-                                <button v-for="s in squads" :key="s.id" @click="toggleFormSquad(editForm, s.id)" :class="editForm.squadIds.includes(s.id) ? 'squad-chip on' : 'squad-chip'" :style="{ '--c': s.color || '#B490F5' }" class="!text-sm !py-2">
-                                    <i class="fa-solid" :class="editForm.squadIds.includes(s.id) ? 'fa-check' : 'fa-user-group'"></i>{{ s.name }}
-                                    <span class="flex -space-x-1.5 ml-1"><user-avatar v-for="m in s.members.slice(0, 4)" :key="m.id" :user="m" :size="18"></user-avatar></span>
-                                </button>
-                                <button @click="openSquadDraft(editForm)" class="squad-chip !border-dashed !text-sm !py-2"><i class="fa-solid fa-plus"></i>New squad with friends</button>
+                        <!-- v1.6 watch it with friends (their pictures show on the poster) -->
+                        <div v-if="partyType(editForm.anime)">
+                            <p class="label mb-2.5">Watching together</p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span v-if="posterTags(editForm.anime.id).length" class="flex -space-x-1.5 mr-1"><span v-for="t in posterTags(editForm.anime.id).slice(0, 6)" :key="t.id" class="pt" :class="t.state" :title="t.user.username"><user-avatar :user="t.user" :size="26"></user-avatar></span></span>
+                                <button @click="openPartyDraft(editForm.anime)" :disabled="!friendsList.length" class="squad-chip !border-dashed !text-sm !py-2"><i class="fa-solid fa-user-plus"></i>Invite friends</button>
                             </div>
                         </div>
                         <div v-if="editForm.anime.type === 'SONG'">
@@ -3490,30 +3517,75 @@
         </div>
     </transition>
 
-    <!-- ============ NEW SQUAD ============ -->
+    <!-- ============ v1.6 WATCH TOGETHER: invite friends to one or more titles ============ -->
     <transition name="fade">
-        <div v-if="squadDraft.open" class="modal-back !z-[82]" @click.self="squadDraft.open = false">
+        <div v-if="partyDraft.open" class="modal-back !z-[82]" @click.self="partyDraft.open = false">
             <transition name="pop" appear>
-                <div class="modal-card max-w-md p-6">
-                    <div class="flex items-center justify-between mb-5">
-                        <div>
-                            <p class="kicker">// co-op group</p>
-                            <h3 class="mt-1 font-display font-bold text-ink text-xl">New squad</h3>
+                <div class="modal-card max-w-md w-full p-6 max-h-[88dvh] flex flex-col">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="kicker">// watch together</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-xl truncate">{{ partyDraft.items.length === 1 ? titleOf(partyDraft.items[0]) : partyDraft.items.length + ' titles' }}</h3>
                         </div>
-                        <button @click="squadDraft.open = false" class="icon-btn !w-9 !h-9"><i class="fa-solid fa-xmark"></i></button>
+                        <button @click="partyDraft.open = false" class="icon-btn !w-9 !h-9 shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
                     </div>
-                    <p class="label mb-2.5">Who's in? <span class="normal-case tracking-normal text-mute">({{ squadDraft.members.length }} picked + you)</span></p>
-                    <div v-if="friendsList.length" class="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-                        <button v-for="f in friendsList" :key="f.id" @click="toggleDraftMember(f.id)" :class="squadDraft.members.includes(f.id) ? 'border-lilac bg-lilac/10' : 'border-line hover:border-line2'" class="flex items-center gap-2.5 p-2 rounded-xl border text-left transition-colors">
-                            <user-avatar :user="f" :size="30"></user-avatar>
-                            <span class="text-sm text-ink font-medium truncate flex-grow">{{ f.username }}</span>
-                            <i v-if="squadDraft.members.includes(f.id)" class="fa-solid fa-circle-check text-lilac"></i>
+                    <div v-if="partyDraft.items.length > 1" class="party-covers"><img v-for="a in partyDraft.items.slice(0, 10)" :key="a.id" :src="a.coverImage?.large" :title="titleOf(a)" alt=""><span v-if="partyDraft.items.length > 10">+{{ partyDraft.items.length - 10 }}</span></div>
+                    <p class="text-xs text-sub mt-2 leading-relaxed">Friends who say yes get it on their list with your pictures on it. Everyone keeps their own status, and the episode count moves together.</p>
+                    <div class="overflow-y-auto min-h-0 flex-grow -mx-1 px-1 mt-3">
+                        <template v-if="recentSquads.length">
+                            <p class="label mb-2">Your usual groups <span class="normal-case tracking-normal text-mute">· one tap invites them</span></p>
+                            <div class="flex flex-col gap-1.5 mb-4">
+                                <button v-for="g in recentSquads" :key="g.ids.join()" @click="sendPartyInvites(g.ids)" :disabled="partyDraft.busy" class="party-squad">
+                                    <span class="flex -space-x-2 shrink-0"><user-avatar v-for="id in g.ids.slice(0, 4)" :key="id" :user="personOf(id)" :size="26"></user-avatar></span>
+                                    <span class="min-w-0 flex-grow truncate text-sm text-ink font-semibold text-left">{{ joinNames(g.ids.map(id => personOf(id).username)) }}</span>
+                                    <span class="text-[10px] text-mute font-mono shrink-0" :title="'You watch ' + g.n + ' titles together'">{{ g.n }}×</span>
+                                    <i class="fa-solid fa-paper-plane text-volt text-xs shrink-0"></i>
+                                </button>
+                            </div>
+                        </template>
+                        <p class="label mb-2">Friends</p>
+                        <input v-model="partyDraft.q" placeholder="Search your friends" class="field !py-2 !rounded-xl !text-xs">
+                        <div class="mt-2 space-y-1">
+                            <button v-for="f in partyFriends" :key="f.id" @click="!partyHas(f.id) && togglePartyPick(f.id)" :disabled="partyHas(f.id)" class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-raised text-left disabled:opacity-50 disabled:hover:bg-transparent">
+                                <user-avatar :user="f" :size="34"></user-avatar>
+                                <span class="flex-grow text-sm font-semibold text-ink truncate">{{ f.username }}</span>
+                                <span v-if="partyHas(f.id)" class="text-[11px] text-mute shrink-0">already in</span>
+                                <span v-else class="cbox" :class="{ on: partyDraft.picked.includes(f.id) }"><i class="fa-solid fa-check"></i></span>
+                            </button>
+                            <p v-if="!friendsList.length" class="text-sm text-mute text-center py-6">Add friends first (Profile → Friends), then invite them.</p>
+                            <p v-else-if="!partyFriends.length" class="text-sm text-mute text-center py-6">No friend with that name.</p>
+                        </div>
+                    </div>
+                    <label v-if="partyDraftCompleted" class="party-rewatch"><input type="checkbox" v-model="partyDraft.rewatch"><span>I’m rewatching it with them <span class="text-mute">(you finished it, so it counts as a rewatch for you while they watch it for the first time)</span></span></label>
+                    <button @click="sendPartyInvites()" :disabled="partyDraft.busy || !partyDraft.picked.length" class="btn-primary w-full mt-4"><i :class="partyDraft.busy ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'" class="fa-solid"></i> {{ partyDraft.picked.length ? 'Invite ' + joinNames(partyDraft.picked.map(id => personOf(id).username)) : 'Pick friends to invite' }}</button>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
+    <!-- ============ v1.6 SHARED PLAYLIST: who can add songs ============ -->
+    <transition name="fade">
+        <div v-if="plInvite.open && plInviteList" class="modal-back !z-[82]" @click.self="plInvite.open = false">
+            <transition name="pop" appear>
+                <div class="modal-card max-w-md w-full p-6 max-h-[88dvh] flex flex-col">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="kicker">// shared playlist</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-xl truncate">{{ plInviteList.name }}</h3>
+                        </div>
+                        <button @click="plInvite.open = false" class="icon-btn !w-9 !h-9 shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <p class="text-xs text-sub mt-2 leading-relaxed">Friends you add see it in their playlists and can add, remove and reorder songs. Only you can add or remove people, or delete it.</p>
+                    <input v-model="plInvite.q" placeholder="Search your friends" class="field !py-2 !rounded-xl !text-xs mt-4">
+                    <div class="mt-2 overflow-y-auto min-h-0 space-y-1">
+                        <button v-for="f in plInviteFriends" :key="f.id" @click="togglePlMember(plInviteList, f.id)" class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-raised text-left">
+                            <user-avatar :user="f" :size="34"></user-avatar>
+                            <span class="flex-grow text-sm font-semibold text-ink truncate">{{ f.username }}</span>
+                            <span class="cbox" :class="{ on: (plInviteList.members || []).includes(f.id) }"><i class="fa-solid fa-check"></i></span>
                         </button>
+                        <p v-if="!friendsList.length" class="text-sm text-mute text-center py-6">Add friends first (Profile → Friends).</p>
                     </div>
-                    <p v-else class="text-sm text-mute">Add friends on your Profile first.</p>
-                    <p class="label mt-5 mb-2.5">Squad name</p>
-                    <input v-model="squadDraft.name" maxlength="40" :placeholder="draftAutoName || 'e.g. Friday anime club'" class="field">
-                    <button @click="createSquad" :disabled="squadDraft.busy || !squadDraft.members.length" class="btn-primary w-full mt-6"><i :class="squadDraft.busy ? 'fa-circle-notch fa-spin' : 'fa-user-group'" class="fa-solid"></i> Create squad</button>
+                    <button @click="plInvite.open = false" class="btn-primary w-full mt-4">Done</button>
                 </div>
             </transition>
         </div>
@@ -3845,7 +3917,7 @@
                                 </div>
                                 <div class="set-block">
                                     <p class="set-title">Who can see my lists</p>
-                                    <p class="set-hint">Squad lists are always shared with that squad. This controls your personal lists, their activity and profile stats.</p>
+                                    <p class="set-hint">This controls your lists, their activity and profile stats. Friends you watch a title with always see that you’re in it.</p>
                                     <div class="space-y-4 mt-4">
                                         <div v-for="pt in PRIVACY_TYPES.filter(pt => songsOn || pt.type !== 'SONG')" :key="pt.type" class="pt-4 border-t border-line first:border-0 first:pt-0">
                                             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -3870,7 +3942,7 @@
                                     <div class="flex flex-wrap items-start justify-between gap-3">
                                         <div>
                                             <p class="set-title">Profile stats</p>
-                                            <p class="set-hint">Pick who sees each stat on your profile. <b class="text-ink">Everyone</b> includes people you’re not friends with (like squad mates). You can also hide a stat from specific people.</p>
+                                            <p class="set-hint">Pick who sees each stat on your profile. <b class="text-ink">Everyone</b> includes people you’re not friends with. You can also hide a stat from specific people.</p>
                                         </div>
                                         <div class="flex gap-1.5">
                                             <button @click="setAllStatModes('everyone')" class="squad-leave !text-sub">All public</button>
@@ -4357,11 +4429,11 @@
                     <div v-if="!randomWide" class="grid grid-cols-2 gap-2.5">
                         <div class="chip-wrap"><select v-model="randomFilter.status" :class="{ 'is-on': randomFilter.status }" class="chip w-full"><option value="">Any status</option><option v-for="s in statusPick()" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                         <div class="chip-wrap"><select v-model="randomFilter.genre" :class="{ 'is-on': randomFilter.genre }" class="chip w-full"><option value="">Any genre</option><option v-for="g in randomGenres" :key="g" :value="g">{{ g }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
-                        <div v-if="randomSourceLabel === 'squad lists' && squads.length" class="chip-wrap col-span-2"><select v-model="randomFilter.squad" :class="{ 'is-on': randomFilter.squad }" class="chip w-full"><option value="">Any squad</option><option v-for="s in squads" :key="s.id" :value="s.id">{{ s.name }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+
                     </div>
                     <div class="flex items-center justify-between mt-3 mb-5">
                         <p class="label">{{ randomWide ? 'from all ' + (({ MANGA: 'manga', GAME: 'games', TV: 'movies & shows', SONG: 'songs' })[randomWideType] || 'anime') : randomPool.length + ' match' + (randomPool.length === 1 ? '' : 'es') }}</p>
-                        <button @click="clearRandomFilters" :disabled="randomWide ? !randomWideFiltered : (!randomFilter.status && !randomFilter.genre && !randomFilter.squad)" class="text-xs font-bold text-sub hover:text-ink disabled:opacity-30 transition-colors"><i class="fa-solid fa-filter-circle-xmark mr-1"></i>Clear</button>
+                        <button @click="clearRandomFilters" :disabled="randomWide ? !randomWideFiltered : (!randomFilter.status && !randomFilter.genre)" class="text-xs font-bold text-sub hover:text-ink disabled:opacity-30 transition-colors"><i class="fa-solid fa-filter-circle-xmark mr-1"></i>Clear</button>
                     </div>
                     <div class="min-h-64 flex items-center justify-center mb-5">
                         <transition name="roll" mode="out-in">
@@ -4440,7 +4512,8 @@
                     </button>
                 </div>
                 <div class="grid grid-cols-2 gap-2 mt-2">
-                    <button @click="sheetAction('EDIT')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold"><i class="fa-solid fa-user-group mr-2 text-xs"></i>Squads & more</button>
+                    <button v-if="partyType(sheetAnime)" @click="sheetAction('PARTY')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold col-span-2"><i class="fa-solid fa-user-plus mr-2 text-xs"></i>Watch with friends</button>
+                    <button @click="sheetAction('EDIT')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold"><i class="fa-solid fa-pen mr-2 text-xs"></i>Edit & more</button>
                     <button @click="sheetAction('REMOVE')" :disabled="!isOnMyList(sheetAnime.id)" class="py-3.5 rounded-2xl bg-rose-500/10 text-rose-300 text-sm font-semibold disabled:opacity-30"><i class="fa-solid fa-trash-can mr-2 text-xs"></i>Remove all</button>
                 </div>
             </div>
