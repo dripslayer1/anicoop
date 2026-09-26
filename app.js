@@ -6061,22 +6061,36 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // Shows once per account (PREFS.tourDone, saved with your settings) after sign-in; Skip ends it, Settings → Account
         // plays it again. Each step can open a page first (go), then a spotlight slides to the first thing it finds (sel,
         // several selectors = phone / computer versions) and the card sits next to it. Nothing found: the card is centred.
+        // v1.0.1 smooth: the spotlight and card move with transforms (no blur, no animated shadows), and they're only
+        // updated when something really moved. Steps run in the Anime section (manga steps switch to Manga); the section
+        // you were in comes back at the end.
         const TOUR_KEY = 'anicoop_tour_done_v1';
-        const tour = reactive({ on: false, i: 0, rect: null, card: {}, dir: 1, busy: false });
+        const MANGA_REPO = 'https://github.com/keiyoushi/extensions';
+        const tour = reactive({ on: false, i: 0, rect: null, card: {}, dir: 1, busy: false, from: 'anime', copied: false });
         const tourPick = () => (continueWatching.value || [])[0]?.anime || (visibleResults.value || []).find(a => a?.id && (a.type || 'ANIME') === 'ANIME') || null;
+        const tourManga = async () => {
+            await waitFor(['main .poster'], 4000);
+            const m = (visibleResults.value || []).find(a => a?.id && a.type === 'MANGA');
+            if (m) await fetchAnimeDetails(m);
+        };
         const TOUR_STEPS = [
-            { icon: 'fa-wand-magic-sparkles', title: 'Welcome to anicoop 1.0', body: 'Track anime, manga, movies & TV, games and songs with your friends. This short tour shows the important parts. Skip it whenever you like; it’s in Settings → Account to watch again.', hero: true },
-            { icon: 'fa-layer-group', title: 'Pick a section', body: 'Anime, Manga & Manhwa, Movies & TV, Games or Songs. Browse, your lists and the rankings all follow the section you’re in.', go: () => openTracker('browse'), sel: ['.section-switch'] },
+            { icon: 'fa-wand-magic-sparkles', title: 'Welcome to anicoop 1.0', body: 'Track anime, manga & manhwa, movies & TV and games with your friends. This tour shows the important parts in a couple of minutes. Skip it whenever you like; it’s in Settings → Account to watch again.', hero: true },
+            { icon: 'fa-layer-group', title: 'Pick a section', body: 'Anime, Manga & Manhwa, Movies & TV or Games. Browse, your lists and the rankings all follow the section you’re in.', go: () => openTracker('browse'), sel: ['.section-switch'] },
             { icon: 'fa-compass', title: 'Your main pages', body: 'Browse finds new things, Leaderboard ranks what’s popular, Feed shows what your friends are up to, Lists holds everything you track, and Profile is your page.', sel: ['nav.seg', '.mnav'] },
             { icon: 'fa-magnifying-glass', title: 'Search from anywhere', body: 'Tap the magnifier, type a title and pick it from the results. Press Enter to see every result.', sel: ['.hdr-search'] },
-            { icon: 'fa-circle-play', title: 'Pick up where you left off', body: 'Everything you’re watching. Tap a card to open your watch link on the next episode; “+1 EP” counts one without leaving.', go: () => openTracker('browse'), sel: ['[title="Continue watching"]'], skipIfMissing: true, wide: true },
+            { icon: 'fa-circle-play', title: 'Pick up where you left off', body: 'Everything you’re watching. Tap a card to open your watch link on the next episode; “+1 EP” counts one without leaving.', go: () => openTracker('browse'), sel: ['[title="Continue watching"]'], skipIfMissing: true },
             { icon: 'fa-plus', title: 'Add in one tap', body: 'Use the + on a poster to put it on a list: Planning, Watching, Completed and more. Tap the poster itself to open its page.', go: () => openTracker('browse'), sel: ['main .poster'] },
+            { icon: 'fa-dice', title: 'Can’t decide? Random pick', body: 'Random pick chooses from your Plan to watch list (1 to 4 at a time). Don’t like it? Roll again. Like it? Add it as Watching in one tap.', go: () => openTracker('browse'), sel: ['button[title="Random pick"]'] },
             { icon: 'fa-list-check', title: 'Your list, on every title', body: 'On a title’s page: set the status, episodes and your score, then Save. Add it to a squad to share it with friends.', go: async () => { const a = tourPick(); if (a) await fetchAnimeDetails(a); }, sel: ['.det-left > .panel'], skipIfMissing: true },
-            { icon: 'fa-link', title: 'Watch with one tap', body: 'Save where you watch it (Crunchyroll, Netflix…); many anime fill this in by themselves. Watch opens your next episode, and when you come back anicoop asks how many you watched.', sel: ['.wl-box'], skipIfMissing: true },
-            { icon: 'fa-list-ul', title: 'All your lists', body: 'Filter by status or genre, change the order, and switch between Solo and Squads. “Select” edits many titles at once, and “Random” picks something for you.', go: () => openTracker('solo'), sel: ['.list-aside'] },
-            { icon: 'fa-bolt', title: 'The Feed', body: 'What your friends watch and rate. Post your own thoughts, polls and tier lists; the filters on top pick the section.', go: () => openTracker('feed'), sel: ['.feed-types', 'main'] },
+            { icon: 'fa-link', title: 'Save where you watch it', body: 'Tap “Add where you watch it”, paste the show’s page (Crunchyroll, Netflix, any site) and Save. It stays on your account, on every device. Many anime fill this in by themselves (they show AUTO). If a site’s episode links end in the number, write it in curly brackets, like …/episode-{12}, and Watch always opens your next one.', sel: ['.wl-box'], skipIfMissing: true },
+            { icon: 'fa-circle-play', title: 'Watch, then count', body: 'Watch opens your next episode in a pop-up window. When you’re back, anicoop asks how many episodes you watched: pick the number and Save. Your list, AniList and MyAnimeList all update.', sel: ['.wl-go', '.banner-play-inline', '.play-cta'], skipIfMissing: true, demo: 'ask' },
+            { icon: 'fa-list-ul', title: 'All your lists', body: 'Filter by status or genre, change the order, and switch between Solo and Squads. “Select” edits many titles at once.', go: () => openTracker('solo'), sel: ['.list-aside'] },
+            { icon: 'fa-bolt', title: 'The Feed', body: 'What your friends watch and rate. Post your own thoughts, polls and tier lists; the filters on top pick the section.', go: () => openTracker('feed'), sel: ['.feed-types'] },
             { icon: 'fa-user-group', title: 'Friends, chat & alerts', body: 'Add friends and answer requests, chat with them, and the bell tells you about new episodes and what happens with your posts.', go: () => openTracker('browse'), sel: ['button[title="Friends"]', '.mnav'] },
             { icon: 'fa-circle-user', title: 'Your profile', body: 'Your stats, favourites and rankings (tap a score to change it). Dress it up in Settings → Profile: frames, themes, effects and name styles.', go: () => openTracker('profile'), sel: [] },
+            { icon: 'fa-book-open', title: 'Reading manga & manhwa', body: 'Switch to Manga & Manhwa and open any title. The Read button opens its chapters, and the reader starts in Webtoon mode (scroll down).', manga: true, go: tourManga, sel: ['.play-cta'], skipIfMissing: true },
+            { icon: 'fa-puzzle-piece', title: 'First time: add sources', body: 'anicoop doesn’t host manga, so add sources once. Copy this link, paste it into “Install from a repository” (Read → Extensions) and tap the arrow. Then install the sources you like; “Find readable sources” marks the ones that work here.', manga: true, copy: MANGA_REPO, go: async () => { openExtensions('manga'); await nextTick(); document.querySelectorAll('details.ext-add').forEach(d => { if (d.querySelector('input[placeholder^="Repository link"]')) d.open = true; }); }, sel: ['input[placeholder^="Repository link"]'] },
+            { icon: 'fa-book-bookmark', title: 'Read & keep your place', body: 'Pick a chapter and read. Your chapter count saves by itself when you reach the end, and “Continue reading” on Browse takes you back to where you stopped.', manga: true, hero: false },
             { icon: 'fa-gear', title: 'Make it yours', body: 'Settings has the theme, how scores look, your watch-link service, and Import & sync to keep AniList and MyAnimeList up to date. The tour is there too.', go: () => openTracker('browse'), sel: ['.hdr-extra[title="Settings"]', '.section-switch'] },
             { icon: 'fa-champagne-glasses', title: 'You’re all set!', body: 'Have fun, and tell us what you think with the 💡 Feedback button.', hero: true, last: true },
         ];
@@ -6090,41 +6104,52 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             }
             return null;
         };
-        const waitFor = (sels, ms = 2500) => new Promise(ok => { const t0 = Date.now(); const tick = () => { const el = visibleEl(sels); if (el || Date.now() - t0 > ms) ok(el); else setTimeout(tick, 120); }; tick(); });
+        const waitFor = (sels, ms = 2500) => new Promise(ok => { const t0 = Date.now(); const tick = () => { const el = visibleEl(sels); if (el || Date.now() - t0 > ms) ok(el); else setTimeout(tick, 100); }; tick(); });
         let tourEl = null;
-        // spotlight + card placement (card below the spot, else above, else beside; phones: docked at the bottom)
+        const same = (a, b) => a && b && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(k => typeof a[k] === 'number' ? Math.abs(a[k] - b[k]) < 1 : a[k] === b[k]);
+        // spotlight + card placement (card below the spot, else above, else beside; phones: docked, the spot trimmed)
         const placeTour = () => {
             if (!tour.on) return;
             const vw = window.innerWidth, vh = window.innerHeight, phone = vw < 640;
-            if (!tourEl || !tourEl.isConnected) { tour.rect = null; tour.card = { center: true }; return; }
+            if (!tourEl || !tourEl.isConnected) { if (tour.rect) tour.rect = null; if (!tour.card.center) tour.card = { center: true }; return; }
             const r = tourEl.getBoundingClientRect(), pad = 8;
             const top = Math.max(6, r.top - pad), left = Math.max(6, r.left - pad);
-            const rect = { top, left, width: Math.min(vw - 12, r.right + pad) - left, height: Math.min(vh - 12, r.bottom + pad) - top };
-            tour.rect = rect;
+            const rect = { top, left, width: Math.max(20, Math.min(vw - 6, r.right + pad) - left), height: Math.max(20, Math.min(vh - 6, r.bottom + pad) - top) };
+            const cardEl = document.querySelector('.tour-card');
+            let card;
             if (phone) {   // the card docks at the bottom (or the top for things low on the screen); the spot stops before it
-                const up = rect.top + rect.height / 2 > vh * 0.55, ch = document.querySelector('.tour-card')?.offsetHeight || 280;
+                const up = rect.top + rect.height / 2 > vh * 0.55, ch = cardEl?.offsetHeight || 280;
                 if (!up) { const lim = vh - 76 - ch - 20; if (rect.top + rect.height > lim) rect.height = Math.max(36, lim - rect.top); }
                 else { const lim = 76 + ch + 12; if (rect.top < lim) { const bottom = rect.top + rect.height; rect.top = Math.min(lim, bottom - 36); rect.height = bottom - rect.top; } }
-                tour.rect = { ...rect }; tour.card = { dock: true, up }; return;
+                card = { dock: true, up };
+            } else {
+                const cw = cardEl?.offsetWidth || 360, ch = cardEl?.offsetHeight || 300, gap = 16;
+                let x = clamp(rect.left + rect.width / 2 - cw / 2, 12, vw - cw - 12), y;
+                if (rect.top + rect.height + gap + ch < vh) y = rect.top + rect.height + gap;
+                else if (rect.top - gap - ch > 0) y = rect.top - gap - ch;
+                else { y = clamp(rect.top + rect.height / 2 - ch / 2, 12, vh - ch - 12); x = rect.left + rect.width + gap + cw < vw ? rect.left + rect.width + gap : Math.max(12, rect.left - gap - cw); }
+                card = { x: Math.round(x), y: Math.round(y) };
             }
-            const cardEl = document.querySelector('.tour-card');
-            const cw = cardEl?.offsetWidth || 360, ch = cardEl?.offsetHeight || 300, gap = 16;
-            let x = clamp(rect.left + rect.width / 2 - cw / 2, 12, vw - cw - 12), y;
-            if (rect.top + rect.height + gap + ch < vh) y = rect.top + rect.height + gap;
-            else if (rect.top - gap - ch > 0) y = rect.top - gap - ch;
-            else { y = clamp(rect.top + rect.height / 2 - ch / 2, 12, vh - ch - 12); x = rect.left + rect.width + gap + cw < vw ? rect.left + rect.width + gap : Math.max(12, rect.left - gap - cw); }
-            tour.card = { x: Math.round(x), y: Math.round(y) };
+            if (!same(tour.rect, rect)) tour.rect = rect;   // only when it really moved: no needless redraws
+            if (!same(tour.card, card)) tour.card = card;
         };
-        let tourRaf = 0;
-        const tourLoop = () => { if (!tour.on) return; placeTour(); tourRaf = setTimeout(tourLoop, 250); };   // follows scrolling / resizing
+        let tourT = 0, tourQueued = false;
+        const tourSoon = () => { if (tourQueued || !tour.on) return; tourQueued = true; requestAnimationFrame(() => { tourQueued = false; placeTour(); }); };
+        const tourLoop = () => { if (!tour.on) return; placeTour(); tourT = setTimeout(tourLoop, 600); };   // late layout changes (images loading…)
+        const tourScene = (st) => {   // the section a step needs: manga steps in Manga, the rest in Anime
+            const want = st.manga ? 'manga' : 'anime';
+            if (section.value !== want && SECTIONS[want]) openSection(want);
+        };
         const showTourStep = async (i, dir = 1) => {
             if (tour.busy) return;
-            tour.busy = true;
+            tour.busy = true; tour.copied = false;
             try {
                 let n = i;
                 while (n >= 0 && n < TOUR_STEPS.length) {
                     const st = TOUR_STEPS[n];
                     sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false; hs.open = false;
+                    if (extOpen.value && !st.copy) extOpen.value = false;
+                    if (!st.hero || st.manga) tourScene(st);
                     if (st.go) { try { await st.go(); } catch {} }
                     await nextTick();
                     tourEl = st.sel?.length ? await waitFor(st.sel) : null;
@@ -6133,30 +6158,36 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 }
                 if (n < 0) n = 0;
                 if (n >= TOUR_STEPS.length) { endTour(); return; }
-                tour.i = n; tour.dir = dir;
                 if (tourEl) {   // instant: the spotlight does the gliding. Phones: the thing goes near the top, above the docked card
-                    if (window.innerWidth < 640) { const r = tourEl.getBoundingClientRect(); if (r.top > 70 && r.bottom > window.innerHeight * 0.45) window.scrollBy(0, r.top - 70); }
-                    else tourEl.scrollIntoView({ block: 'center' });
-                    await sleep(60);
+                    if (window.innerWidth < 640) { const r = tourEl.getBoundingClientRect(); if (r.top > 70 && r.bottom > window.innerHeight * 0.45) { tourEl.scrollIntoView({ block: 'start' }); const r2 = tourEl.getBoundingClientRect(); if (r2.top < 70) window.scrollBy(0, r2.top - 70); } }   // (scrolls a window it sits in too, like Extensions)
+                    else { const r = tourEl.getBoundingClientRect(); if (r.top < 70 || r.bottom > window.innerHeight - 20) tourEl.scrollIntoView({ block: 'center' }); }
                 }
+                tour.i = n; tour.dir = dir;
+                await nextTick();
                 placeTour(); await nextTick(); placeTour();   // again once the new card has its real size
             } finally { tour.busy = false; }
         };
         const startTour = async () => {
             settingsOpen.value = false;
             if (!currentUser.value) return;
+            tour.from = section.value;
             tour.on = true; tour.i = 0; tour.rect = null; tour.card = { center: true };
-            clearTimeout(tourRaf); tourLoop();
+            clearTimeout(tourT); tourLoop();
             await showTourStep(0);
         };
         const endTour = (skipped = false) => {
-            tour.on = false; clearTimeout(tourRaf); tourEl = null;
+            tour.on = false; clearTimeout(tourT); tourEl = null; extOpen.value = false;
             PREFS.tourDone = true;
             try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
-            if (!skipped) openTracker('browse');
+            if (section.value !== tour.from && SECTIONS[tour.from]) openSection(tour.from);
+            else if (!skipped) openTracker('browse');
         };
-        const tourNext = () => { if (tourStep.value?.last) endTour(); else showTourStep(tour.i + 1, 1); };
-        const tourBack = () => { if (tour.i > 0) showTourStep(tour.i - 1, -1); };
+        const tourNext = () => { if (tour.busy) return; if (tourStep.value?.last) endTour(); else showTourStep(tour.i + 1, 1); };
+        const tourBack = () => { if (!tour.busy && tour.i > 0) showTourStep(tour.i - 1, -1); };
+        const tourCopy = async (text) => {
+            try { await navigator.clipboard.writeText(text); tour.copied = true; }
+            catch { showToast('Copy it from the card: ' + text); }
+        };
         const maybeStartTour = () => {
             let seen = false; try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch {}
             if (PREFS.tourDone || seen || tour.on || !currentUser.value) return;
@@ -6170,12 +6201,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             setTimeout(tryStart, 2000);
         };
         window.addEventListener('keydown', (e) => {
-            if (!tour.on) return;
+            if (!tour.on || /INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) return;
             if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); endTour(true); }
             else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); tourNext(); }
             else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopImmediatePropagation(); tourBack(); }
         }, true);
-        window.addEventListener('resize', () => { if (tour.on) placeTour(); });
+        window.addEventListener('resize', tourSoon);
+        window.addEventListener('scroll', tourSoon, { passive: true, capture: true });
 
         // ---------- select many (batch edit) ----------
         const selectMode = ref(false);
@@ -10219,7 +10251,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

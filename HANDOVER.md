@@ -276,6 +276,13 @@ These are cumulative; the README has one section per version.
   the card goes below / above / beside it (phones: docked at the bottom or top, the spot trimmed so they never overlap).
   `PREFS.tourDone` (+ localStorage `anicoop_tour_done_v1`); `maybeStartTour` runs after `fetchSettings` and waits for
   `introMode === 'done'`. Settings → Account → Take the tour. New pages / features: add a step to TOUR_STEPS.
+- **v1.0.1 (tour "very laggy"):** removed the backdrop blur and the animated box-shadow ring; the spotlight moves with
+  translate3d (size still width / height), the card sits in `.tour-pos` moved with translate3d, the progress bar uses
+  scaleX; `placeTour` only writes `tour.rect` / `tour.card` when they changed (`same`), updates on scroll / resize via
+  rAF plus a 600 ms check. Steps now 19: + Random pick, Save where you watch it, Watch then count (`demo: 'ask'`), and
+  manga steps (`manga: true` → `tourScene` switches to Manga, others to Anime; the start section comes back in
+  `endTour`), "add sources" opens Extensions and the repository box with `copy: MANGA_REPO` (keiyoushi). No Songs in
+  the text (admins only).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
