@@ -764,3 +764,15 @@ free "API client":
     Rewatch (anime, movies & TV), Wanna Reread (manga & manhwa), Wanna Replay and In Rotation (games).
 18. **Settings → Profile decorations:** each one (avatar frame, profile theme, page background, effect, name style,
     badges) is a small row showing what you picked; tap it to open its options.
+
+## v10.3 — my watch link (includes v10.2)
+
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.3.
+
+- **v10.2:** in Lists, the Genre filter sits right under "Sort by".
+- **My watch link (anime and Movies & TV):** on a title's page, "Add where you watch it" saves any link (Crunchyroll,
+  Netflix…) with that title on your list, so it's on every device. **Watch ep N** opens it in a new tab; back on
+  anicoop a bar asks how many episodes you watched (1 by default, up to what's left). **Save** counts them like the +1
+  button (a rewatch counts on its own counter, the last episode marks it Completed, AniList / MAL sync as usual);
+  **Not yet** counts nothing. The question stays until you answer, even after a reload. Manga, games and songs don't
+  have it (the owner's choice).

@@ -29,8 +29,8 @@ For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when
 - PRs #3–#16 (v8.8 → v10.0 + handovers) are **merged into `main`**. v10.0 needed SQL 8f (`account_links.refresh_token`),
   the Edge Function redeploy (GIF paging, `mal` endpoint) and the `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` secrets; the
   owner registered the MAL API client ("anicoop", published) — whether they finished the rest is unconfirmed.
-- **v10.1 is a PR from `claude/intelligent-johnson-gofau9`** (the owner's next 18-item list). **No SQL, no Edge Function
-  change.** Check whether it was merged before starting the next change.
+- v10.1 (PR #17) is merged. **v10.3 is PR #18 from `claude/v10-2-genre-under-sort`** (v10.2 genre filter under Sort by +
+  v10.3 "my watch link"). **No SQL, no Edge Function change.** Check whether it was merged before starting the next change.
   Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
@@ -230,7 +230,13 @@ These are cumulative; the README has one section per version.
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** the v10.1 PR is open (no SQL, no Edge Function change). v10.0 is merged.
+**Stopped at:** the v10.3 PR (#18) is open (no SQL, no Edge Function change). v10.1 is merged.
+
+- **v10.3 my watch link** (anime + TV only, the owner's choice): `media_data.wl` (`entryData` / `listRow` / `withRepeats`
+  keep it). `openMyLink` opens it and sets `watchAsk` (kept in localStorage `anicoop_watch_ask_v1`, so a reload on the
+  phone still asks); `saveAsk` runs `soloNext(anime, 'EP')` n times (same rules as +1), then one upsert. `wlAtEnd`:
+  finished titles just open the link. The owner wants to improve it later (ideas: auto-fill from AniList
+  `externalLinks`, a "Continue watching" row on Home).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
@@ -303,6 +309,9 @@ These are cumulative; the README has one section per version.
 - **MangaDex chapters** arrive **newest first**, 100 at a time. Oldest-first sorting and chapter search call `loadAllChapters()`.
 
 ### Dead ends / refusals (don't retry)
+- **Watching anime inside anicoop from pirate sites** (v10.2 talk): refused adding 9anime-type sites, getting past a
+  site's protected player or Cloudflare's bot check, and playing Crunchyroll (DRM) inside the site. The owner took the
+  "my watch link" idea instead (v10.3).
 - **No MP3 ripping or downloading YouTube audio;** YouTube playback goes only through the official IFrame player. SoundCloud was discussed: it only helps with independent music, not mainstream songs.
 - **No Cloudflare bypasses,** no picking or recommending pirate sites, and no breaking site protections. "Not readable here: needs its own Android extension" sources can't run in a browser; the solution was the Suwayomi server.
 - **A website can't auto-start Suwayomi.** Advice given: add it to Windows startup (`shell:startup`), or host it on an always-on device. Installing anicoop as a web app doesn't change that; only a real desktop app (Electron/Tauri) could.
