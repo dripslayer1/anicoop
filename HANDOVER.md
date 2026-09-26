@@ -269,6 +269,13 @@ These are cumulative; the README has one section per version.
   shifting and correct browsers all end centred; a browser that ignores `moveTo` can't be fixed.
 - **v1.4:** `defaultMode` = the title's saved mode, else `'vertical'` (Webtoon) for everything (was right-to-left for
   Japanese manga).
+- **v1.0 again (after v1.4, owner: "bring back 1.0"):** footer v1.0; the cache-busting query is `?v=1.0-tour` and
+  `sw.js` is `anicoop-v1.0-tour` (a plain `1.0` was used before, so browsers could have kept old files). Count on as
+  v1.1, v1.2… (use a new query string each time). **Welcome tour:** `TOUR_STEPS` (go / sel / skipIfMissing / hero /
+  last), `startTour` / `endTour` / `tourNext` / `tourBack`; the spotlight is `.tour-spot` with a 200vmax box-shadow,
+  the card goes below / above / beside it (phones: docked at the bottom or top, the spot trimmed so they never overlap).
+  `PREFS.tourDone` (+ localStorage `anicoop_tour_done_v1`); `maybeStartTour` runs after `fetchSettings` and waits for
+  `introMode === 'done'`. Settings → Account → Take the tour. New pages / features: add a step to TOUR_STEPS.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

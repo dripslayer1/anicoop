@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.4">
+    <link rel="stylesheet" href="app.css?v=1.0-tour">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=1.4" defer></script>
+    <script src="app.js?v=1.0-tour" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v1.0</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -3191,6 +3191,32 @@
             </div>
             <p v-else class="hs-note">Searching {{ currentSection.label.toLowerCase() }} · Enter shows every result</p>
         </div>
+        <!-- v1.0 the welcome tour: a spotlight slides to each feature, the card explains it -->
+        <transition name="tour-fade">
+            <div v-if="tour.on && tourStep" class="tour" @click.stop>
+                <div v-if="!tour.rect" class="tour-dim"></div>
+                <div v-else class="tour-spot" :style="{ top: tour.rect.top + 'px', left: tour.rect.left + 'px', width: tour.rect.width + 'px', height: tour.rect.height + 'px' }"></div>
+                <div v-if="tourStep.last" class="tour-confetti" aria-hidden="true"><i v-for="n in 36" :key="n" :style="{ '--x': ((n * 37) % 100) + '%', '--d': ((n * 53) % 90) / 100 + 's', '--h': (n * 47) % 360 }"></i></div>
+                <div :key="tour.i" class="tour-card" :class="{ hero: tourStep.hero, center: !tour.rect, dock: tour.rect && tour.card.dock, up: tour.card.up, back: tour.dir < 0 }"
+                    :style="tour.rect && tour.card.x != null ? { left: tour.card.x + 'px', top: tour.card.y + 'px' } : {}" role="dialog" aria-live="polite">
+                    <div v-if="tourStep.hero" class="tour-logo"><span>A</span><i></i><i></i><i></i></div>
+                    <div v-else class="tour-icon"><i class="fa-solid" :class="tourStep.icon"></i></div>
+                    <p class="tour-k">{{ tourStep.hero && tour.i === 0 ? '// hello' : tourStep.last ? '// done' : '// step ' + tour.i + ' of ' + (TOUR_STEPS.length - 2) }}</p>
+                    <h3 class="tour-t">{{ tourStep.title }}</h3>
+                    <p class="tour-b">{{ tourStep.body }}</p>
+                    <div class="tour-bar"><i :style="{ width: (tour.i / (TOUR_STEPS.length - 1) * 100) + '%' }"></i></div>
+                    <div class="tour-actions">
+                        <button v-if="!tourStep.last" @click="endTour(true)" class="tour-skip">Skip tour</button>
+                        <span class="flex-1"></span>
+                        <button v-if="tour.i > 0 && !tourStep.last" @click="tourBack" :disabled="tour.busy" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid fa-arrow-left"></i> Back</button>
+                        <button @click="tourNext" :disabled="tour.busy" class="btn-primary !py-2 !px-5 !text-xs">
+                            <i v-if="tour.busy" class="fa-solid fa-circle-notch fa-spin"></i>
+                            {{ tour.i === 0 ? 'Show me around' : tourStep.last ? 'Start exploring' : 'Next' }} <i v-if="!tour.busy && !tourStep.last" class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
         <!-- v10.3 back from your watch link: how many episodes did you watch? -->
         <div v-if="watchAsk && currentUser" class="wask" :class="{ 'is-back': watchClosed }" @click.stop>
             <img :src="watchAsk.anime.coverImage?.large" class="wask-cover" alt="">
@@ -3423,6 +3449,11 @@
                             <!-- ACCOUNT -->
                             <template v-if="settingsTab === 'account'">
                                 <div><p class="kicker">// account</p><h3 class="mt-1 font-display font-bold text-ink text-2xl">Account</h3></div>
+                                <!-- v1.0 the welcome tour, any time -->
+                                <div class="set-block tour-set">
+                                    <div class="min-w-0"><p class="set-title">Welcome tour</p><p class="set-hint">A quick walk through the important parts of anicoop.</p></div>
+                                    <button @click="startTour" class="btn-primary !px-5 shrink-0"><i class="fa-solid fa-route"></i> Take the tour</button>
+                                </div>
                                 <div class="set-block">
                                     <p class="set-title">Username</p>
                                     <p class="set-hint">3–20 letters, numbers, _ or . — friends find and @mention you by this.</p>

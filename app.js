@@ -99,6 +99,7 @@ const defaultPrefs = () => ({
     reader: { autoMark: true, saver: false, modes: {} },   // reader: mark chapters read at the end, data saver, reading mode per title
     watchService: 'any',                                    // v10.6 automatic watch links for anime: 'any' (Crunchyroll first), a site name, or 'off'
     watchOpen: 'popup',                                     // v1.1 watch links open in a pop-up window over anicoop ('popup') or a new tab ('tab')
+    tourDone: false,                                        // v1.0 the welcome tour was finished or skipped (kept with your account)
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
 const PREFS = reactive(mergePrefs(defaultPrefs(), readJSON(PREFS_KEY)));
@@ -2792,7 +2793,7 @@ createApp({
         let settingsLoaded = false;
         const fetchSettings = async () => {
             const { data, error } = await sb.from('user_settings').select('settings, notif_prefs').eq('user_id', uid()).maybeSingle();
-            if (error) { console.warn('settings', error.message); settingsLoaded = true; return; }   // v3 database: keep local settings
+            if (error) { console.warn('settings', error.message); settingsLoaded = true; maybeStartTour(); return; }   // v3 database: keep local settings
             if (data) {
                 Object.assign(PREFS, mergePrefs(defaultPrefs(), data.settings));
                 Object.keys(notifPrefs).forEach(k => delete notifPrefs[k]);
@@ -2801,6 +2802,7 @@ createApp({
             }
             settingsLoaded = true;
             if (!data) saveSettings();   // first time: upload what this browser had
+            maybeStartTour();
         };
         const saveSettings = debounce(async () => {
             if (!uid() || !settingsLoaded) return;
@@ -6054,6 +6056,126 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 if (before) setSoloLocal(before); else soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
             }
         };
+
+        // ---------- v1.0 the welcome tour ----------
+        // Shows once per account (PREFS.tourDone, saved with your settings) after sign-in; Skip ends it, Settings → Account
+        // plays it again. Each step can open a page first (go), then a spotlight slides to the first thing it finds (sel,
+        // several selectors = phone / computer versions) and the card sits next to it. Nothing found: the card is centred.
+        const TOUR_KEY = 'anicoop_tour_done_v1';
+        const tour = reactive({ on: false, i: 0, rect: null, card: {}, dir: 1, busy: false });
+        const tourPick = () => (continueWatching.value || [])[0]?.anime || (visibleResults.value || []).find(a => a?.id && (a.type || 'ANIME') === 'ANIME') || null;
+        const TOUR_STEPS = [
+            { icon: 'fa-wand-magic-sparkles', title: 'Welcome to anicoop 1.0', body: 'Track anime, manga, movies & TV, games and songs with your friends. This short tour shows the important parts. Skip it whenever you like; it’s in Settings → Account to watch again.', hero: true },
+            { icon: 'fa-layer-group', title: 'Pick a section', body: 'Anime, Manga & Manhwa, Movies & TV, Games or Songs. Browse, your lists and the rankings all follow the section you’re in.', go: () => openTracker('browse'), sel: ['.section-switch'] },
+            { icon: 'fa-compass', title: 'Your main pages', body: 'Browse finds new things, Leaderboard ranks what’s popular, Feed shows what your friends are up to, Lists holds everything you track, and Profile is your page.', sel: ['nav.seg', '.mnav'] },
+            { icon: 'fa-magnifying-glass', title: 'Search from anywhere', body: 'Tap the magnifier, type a title and pick it from the results. Press Enter to see every result.', sel: ['.hdr-search'] },
+            { icon: 'fa-circle-play', title: 'Pick up where you left off', body: 'Everything you’re watching. Tap a card to open your watch link on the next episode; “+1 EP” counts one without leaving.', go: () => openTracker('browse'), sel: ['[title="Continue watching"]'], skipIfMissing: true, wide: true },
+            { icon: 'fa-plus', title: 'Add in one tap', body: 'Use the + on a poster to put it on a list: Planning, Watching, Completed and more. Tap the poster itself to open its page.', go: () => openTracker('browse'), sel: ['main .poster'] },
+            { icon: 'fa-list-check', title: 'Your list, on every title', body: 'On a title’s page: set the status, episodes and your score, then Save. Add it to a squad to share it with friends.', go: async () => { const a = tourPick(); if (a) await fetchAnimeDetails(a); }, sel: ['.det-left > .panel'], skipIfMissing: true },
+            { icon: 'fa-link', title: 'Watch with one tap', body: 'Save where you watch it (Crunchyroll, Netflix…); many anime fill this in by themselves. Watch opens your next episode, and when you come back anicoop asks how many you watched.', sel: ['.wl-box'], skipIfMissing: true },
+            { icon: 'fa-list-ul', title: 'All your lists', body: 'Filter by status or genre, change the order, and switch between Solo and Squads. “Select” edits many titles at once, and “Random” picks something for you.', go: () => openTracker('solo'), sel: ['.list-aside'] },
+            { icon: 'fa-bolt', title: 'The Feed', body: 'What your friends watch and rate. Post your own thoughts, polls and tier lists; the filters on top pick the section.', go: () => openTracker('feed'), sel: ['.feed-types', 'main'] },
+            { icon: 'fa-user-group', title: 'Friends, chat & alerts', body: 'Add friends and answer requests, chat with them, and the bell tells you about new episodes and what happens with your posts.', go: () => openTracker('browse'), sel: ['button[title="Friends"]', '.mnav'] },
+            { icon: 'fa-circle-user', title: 'Your profile', body: 'Your stats, favourites and rankings (tap a score to change it). Dress it up in Settings → Profile: frames, themes, effects and name styles.', go: () => openTracker('profile'), sel: [] },
+            { icon: 'fa-gear', title: 'Make it yours', body: 'Settings has the theme, how scores look, your watch-link service, and Import & sync to keep AniList and MyAnimeList up to date. The tour is there too.', go: () => openTracker('browse'), sel: ['.hdr-extra[title="Settings"]', '.section-switch'] },
+            { icon: 'fa-champagne-glasses', title: 'You’re all set!', body: 'Have fun, and tell us what you think with the 💡 Feedback button.', hero: true, last: true },
+        ];
+        const tourStep = computed(() => TOUR_STEPS[tour.i] || null);
+        const visibleEl = (sels) => {
+            for (const s of sels || []) {
+                for (const el of document.querySelectorAll(s)) {
+                    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+                    if (r.width > 4 && r.height > 4 && cs.display !== 'none' && cs.visibility !== 'hidden') return el;
+                }
+            }
+            return null;
+        };
+        const waitFor = (sels, ms = 2500) => new Promise(ok => { const t0 = Date.now(); const tick = () => { const el = visibleEl(sels); if (el || Date.now() - t0 > ms) ok(el); else setTimeout(tick, 120); }; tick(); });
+        let tourEl = null;
+        // spotlight + card placement (card below the spot, else above, else beside; phones: docked at the bottom)
+        const placeTour = () => {
+            if (!tour.on) return;
+            const vw = window.innerWidth, vh = window.innerHeight, phone = vw < 640;
+            if (!tourEl || !tourEl.isConnected) { tour.rect = null; tour.card = { center: true }; return; }
+            const r = tourEl.getBoundingClientRect(), pad = 8;
+            const top = Math.max(6, r.top - pad), left = Math.max(6, r.left - pad);
+            const rect = { top, left, width: Math.min(vw - 12, r.right + pad) - left, height: Math.min(vh - 12, r.bottom + pad) - top };
+            tour.rect = rect;
+            if (phone) {   // the card docks at the bottom (or the top for things low on the screen); the spot stops before it
+                const up = rect.top + rect.height / 2 > vh * 0.55, ch = document.querySelector('.tour-card')?.offsetHeight || 280;
+                if (!up) { const lim = vh - 76 - ch - 20; if (rect.top + rect.height > lim) rect.height = Math.max(36, lim - rect.top); }
+                else { const lim = 76 + ch + 12; if (rect.top < lim) { const bottom = rect.top + rect.height; rect.top = Math.min(lim, bottom - 36); rect.height = bottom - rect.top; } }
+                tour.rect = { ...rect }; tour.card = { dock: true, up }; return;
+            }
+            const cardEl = document.querySelector('.tour-card');
+            const cw = cardEl?.offsetWidth || 360, ch = cardEl?.offsetHeight || 300, gap = 16;
+            let x = clamp(rect.left + rect.width / 2 - cw / 2, 12, vw - cw - 12), y;
+            if (rect.top + rect.height + gap + ch < vh) y = rect.top + rect.height + gap;
+            else if (rect.top - gap - ch > 0) y = rect.top - gap - ch;
+            else { y = clamp(rect.top + rect.height / 2 - ch / 2, 12, vh - ch - 12); x = rect.left + rect.width + gap + cw < vw ? rect.left + rect.width + gap : Math.max(12, rect.left - gap - cw); }
+            tour.card = { x: Math.round(x), y: Math.round(y) };
+        };
+        let tourRaf = 0;
+        const tourLoop = () => { if (!tour.on) return; placeTour(); tourRaf = setTimeout(tourLoop, 250); };   // follows scrolling / resizing
+        const showTourStep = async (i, dir = 1) => {
+            if (tour.busy) return;
+            tour.busy = true;
+            try {
+                let n = i;
+                while (n >= 0 && n < TOUR_STEPS.length) {
+                    const st = TOUR_STEPS[n];
+                    sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false; hs.open = false;
+                    if (st.go) { try { await st.go(); } catch {} }
+                    await nextTick();
+                    tourEl = st.sel?.length ? await waitFor(st.sel) : null;
+                    if (!tourEl && st.skipIfMissing) { n += dir; continue; }
+                    break;
+                }
+                if (n < 0) n = 0;
+                if (n >= TOUR_STEPS.length) { endTour(); return; }
+                tour.i = n; tour.dir = dir;
+                if (tourEl) {   // instant: the spotlight does the gliding. Phones: the thing goes near the top, above the docked card
+                    if (window.innerWidth < 640) { const r = tourEl.getBoundingClientRect(); if (r.top > 70 && r.bottom > window.innerHeight * 0.45) window.scrollBy(0, r.top - 70); }
+                    else tourEl.scrollIntoView({ block: 'center' });
+                    await sleep(60);
+                }
+                placeTour(); await nextTick(); placeTour();   // again once the new card has its real size
+            } finally { tour.busy = false; }
+        };
+        const startTour = async () => {
+            settingsOpen.value = false;
+            if (!currentUser.value) return;
+            tour.on = true; tour.i = 0; tour.rect = null; tour.card = { center: true };
+            clearTimeout(tourRaf); tourLoop();
+            await showTourStep(0);
+        };
+        const endTour = (skipped = false) => {
+            tour.on = false; clearTimeout(tourRaf); tourEl = null;
+            PREFS.tourDone = true;
+            try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+            if (!skipped) openTracker('browse');
+        };
+        const tourNext = () => { if (tourStep.value?.last) endTour(); else showTourStep(tour.i + 1, 1); };
+        const tourBack = () => { if (tour.i > 0) showTourStep(tour.i - 1, -1); };
+        const maybeStartTour = () => {
+            let seen = false; try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch {}
+            if (PREFS.tourDone || seen || tour.on || !currentUser.value) return;
+            // after the sign-in intro animation and once your lists had a moment to load
+            const t0 = Date.now();
+            const tryStart = () => {
+                if (PREFS.tourDone || tour.on || !currentUser.value) return;
+                if (introMode.value !== 'done' && Date.now() - t0 < 10000) { setTimeout(tryStart, 400); return; }
+                startTour();
+            };
+            setTimeout(tryStart, 2000);
+        };
+        window.addEventListener('keydown', (e) => {
+            if (!tour.on) return;
+            if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); endTour(true); }
+            else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); tourNext(); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopImmediatePropagation(); tourBack(); }
+        }, true);
+        window.addEventListener('resize', () => { if (tour.on) placeTour(); });
 
         // ---------- select many (batch edit) ----------
         const selectMode = ref(false);
@@ -10097,7 +10219,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
