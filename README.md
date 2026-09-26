@@ -811,3 +811,15 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
   installed as an app put it in the bottom-right corner on a 2560×1440 screen).
 - **v1.4:** the manga reader opens in **Webtoon** (vertical scroll) for every title; a mode you pick for one title is
   still remembered for it.
+
+## v1.0 — welcome tour (after v1.4; the footer says v1.0 again)
+
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says **v1.0**.
+
+- **Welcome tour:** the first time each account opens anicoop after this update (after the sign-in animation), a tour
+  walks through the important parts: sections, the main pages, search, Continue watching, adding with +, a title's
+  list panel and watch link, Lists, the Feed, friends / chat / alerts, the profile and Settings. A spotlight slides to
+  each feature and a card explains it; it opens the right pages by itself.
+  - **Skip tour** (or Esc) ends it; ← / → keys or Back / Next move through it.
+  - It's remembered with your account (Settings), so it doesn't show again on your other devices.
+  - **Settings → Account → Take the tour** plays it again any time.
