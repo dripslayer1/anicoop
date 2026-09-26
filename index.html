@@ -19,7 +19,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://trbwiqkgrifeigntvhmh.supabase.co" crossorigin>
     <link rel="preconnect" href="https://graphql.anilist.co" crossorigin>
@@ -33,11 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.4b">
+    <link rel="stylesheet" href="app.css?v=1.5">
 
-    <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=1.4b" defer></script>
+    <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
+    <script src="app.js?v=1.5" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v1.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -1394,9 +1394,10 @@
                                                 <span class="font-mono text-xs text-mute">{{ group.length }}</span>
                                             </h3>
                                             <div :class="posterGrid()">
-                                                <poster-card v-for="(item, i) in group" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="soloEntry(item.anime.id)" :own-list="false" :i="i % 24" :quick="true" :menu-open="quickMenuFor === item.anime.id"
+                                                <poster-card v-for="(item, i) in group.slice(0, shownIn('them' + status))" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="soloEntry(item.anime.id)" :own-list="false" :i="i % 24" :quick="true" :menu-open="quickMenuFor === item.anime.id"
                                                     @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
                                             </div>
+                                            <div v-if="group.length > shownIn('them' + status)" v-infinite="() => moreIn('them' + status)" class="h-px" aria-hidden="true"></div>
                                         </section>
                                     </div>
                                 </div>
@@ -2113,7 +2114,7 @@
                                             <button v-if="att.type === 'image'" @click="lightbox = att.url" class="att"><img :src="att.url" loading="lazy" decoding="async" alt=""></button>
                                             <video v-else-if="att.type === 'video'" :src="att.url" controls preload="metadata" playsinline class="att"></video>
                                             <button v-else-if="att.type === 'youtube'" @click="playVideoLink(att)" class="att relative"><img :src="'https://i.ytimg.com/vi/' + att.id + '/hqdefault.jpg'" loading="lazy" decoding="async" alt=""><span class="play-circle !w-14 !h-14 !text-lg"><i class="fa-solid fa-play ml-1"></i></span></button>
-                                            <a v-else :href="att.url" target="_blank" rel="noopener" class="att-link"><i class="fa-solid fa-arrow-up-right-from-square"></i>{{ linkHost(att.url) }}</a>
+                                            <a v-else :href="safeHref(att.url)" target="_blank" rel="noopener" class="att-link"><i class="fa-solid fa-arrow-up-right-from-square"></i>{{ linkHost(att.url) }}</a>
                                         </template>
                                     </div>
                                     <button v-if="a.kind === 'post' && a.media_id" @click="fetchAnimeDetails(a.media_id)" class="mt-3 flex items-center gap-3 p-2 pr-4 rounded-xl bg-raised hover:bg-overlay transition-colors text-left max-w-full">
@@ -2317,7 +2318,7 @@
                                                     </div>
                                                 </div>
                                                 <div v-else-if="m.kind === 'episode'" class="msg-card !p-0 overflow-hidden">
-                                                    <a :href="m.payload?.url" target="_blank" rel="noopener" class="relative block aspect-video bg-raised">
+                                                    <a :href="safeHref(m.payload?.url)" target="_blank" rel="noopener" class="relative block aspect-video bg-raised">
                                                         <img v-if="m.payload?.thumbnail || m.payload?.cover" :src="m.payload?.thumbnail || m.payload?.cover" class="absolute inset-0 w-full h-full object-cover" alt="">
                                                         <span class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></span>
                                                         <span class="absolute left-3 bottom-2.5 right-3 text-white"><span class="block font-mono text-[10px] font-bold tracking-wider">EP {{ m.payload?.episode }} · {{ m.payload?.site || 'WATCH' }}</span><span class="block text-sm font-semibold line-clamp-1">{{ m.payload?.name }}</span></span>
@@ -2443,7 +2444,7 @@
                                                     </div>
                                                 </div>
                                                 <div v-else-if="m.kind === 'episode'" class="msg-card !p-0 overflow-hidden">
-                                                    <a :href="m.payload?.url" target="_blank" rel="noopener" class="relative block aspect-video bg-raised">
+                                                    <a :href="safeHref(m.payload?.url)" target="_blank" rel="noopener" class="relative block aspect-video bg-raised">
                                                         <img v-if="m.payload?.thumbnail || m.payload?.cover" :src="m.payload?.thumbnail || m.payload?.cover" class="absolute inset-0 w-full h-full object-cover" alt="">
                                                         <span class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></span>
                                                         <span class="absolute left-3 bottom-2.5 right-3 text-white"><span class="block font-mono text-[10px] font-bold tracking-wider">EP {{ m.payload?.episode }} · {{ m.payload?.site || 'WATCH' }}</span><span class="block text-sm font-semibold line-clamp-1">{{ m.payload?.name }}</span></span>
@@ -2662,10 +2663,10 @@
                                             </div>
                                         </div>
                                         <div class="mt-4">
-                                            <button v-if="!plAdd.open" @click="plAdd.open = true; $nextTick(() => document.getElementById('pl-add-q')?.focus())" class="btn-primary !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-plus"></i> Add songs</button>
+                                            <button v-if="!plAdd.open" @click="plAdd.open = true" class="btn-primary !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-plus"></i> Add songs</button>
                                             <div v-else class="pl-add panel !rounded-2xl p-3">
                                                 <div class="flex items-center gap-2 mb-2">
-                                                    <div class="relative flex-grow"><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-mute text-xs"></i><input id="pl-add-q" v-model="plAdd.q" placeholder="Search your songs or any song…" class="field !py-2.5 !pl-9 !rounded-xl !text-sm"></div>
+                                                    <div class="relative flex-grow"><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-mute text-xs"></i><input id="pl-add-q" v-model="plAdd.q" v-focus-select placeholder="Search your songs or any song…" class="field !py-2.5 !pl-9 !rounded-xl !text-sm"></div>
                                                     <button @click="plAdd.open = false; plAdd.q = ''" class="btn-ghost !py-2.5 !px-3.5 !text-xs shrink-0">Done</button>
                                                 </div>
                                                 <div class="pl-add-list">
@@ -2710,10 +2711,11 @@
                                     <span class="font-mono text-xs text-mute">{{ group.length }}</span>
                                 </h3>
                                 <div :class="posterGrid()">
-                                    <poster-card v-for="(item, i) in group" :key="activeTab === 'coop' ? item.key : item.anime.id" :anime="item.anime" :entry="item" :solo="activeTab === 'solo' ? item : null" :i="i % 24" :tag="activeTab === 'coop' && listFilterGroup === 'ALL' ? item.group : ''" :quick="activeTab === 'solo'" :menu-open="quickMenuFor === item.anime.id"
+                                    <poster-card v-for="(item, i) in group.slice(0, shownIn(status))" :key="activeTab === 'coop' ? item.key : item.anime.id" :anime="item.anime" :entry="item" :solo="activeTab === 'solo' ? item : null" :i="i % 24" :tag="activeTab === 'coop' && listFilterGroup === 'ALL' ? item.group : ''" :quick="activeTab === 'solo'" :menu-open="quickMenuFor === item.anime.id"
                                         :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
                                         @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="activeTab === 'solo' ? onPlusClick(item.anime) : openEditor(item.anime)"></poster-card>
                                 </div>
+                                <div v-if="group.length > shownIn(status)" v-infinite="() => moreIn(status)" class="h-px" aria-hidden="true"></div>
                             </section>
                         </div>
                     </div>
