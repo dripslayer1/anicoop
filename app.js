@@ -5946,6 +5946,37 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
 <body><div class="bg"></div><div class="card">${m.cover ? `<img class="cv" src="${esc(m.cover)}" alt="">` : ''}<div><p class="k">// anicoop · watch</p><h1>${esc(m.title || '')}</h1>
 <p class="s">${m.ep ? `Episode <b>${esc(m.ep)}</b> · ` : ''}opening <b>${esc(m.site || host)}</b>…</p><div class="bar"><i></i></div><a href="${esc(url)}" rel="noreferrer">Open now</a></div></div></body></html>`;
         };
+        // v1.3 centre the pop-up on the screen anicoop is on, then check where it really landed and correct it: some
+        // browsers (Brave with anicoop installed as an app, on a 2560×1440 screen) put it somewhere else (the bottom-right
+        // corner: twice the numbers asked for). Works while the pop-up still shows our opening screen (same site, so its spot can be read).
+        const centerWin = (win, aim0) => {
+            // the middle of the screen anicoop is on (its free area, without the taskbar)
+            const sx = screen.availLeft || 0, sy = screen.availTop || 0, sw = screen.availWidth || 1280, sh = screen.availHeight || 800;
+            // per axis: where we aimed → where it landed; the next aim comes from the last two (secant), so a browser that
+            // shifts, doubles or scales the numbers still ends up in the middle
+            const ax = { aims: [aim0?.x], got: [] }, ay = { aims: [aim0?.y], got: [] };
+            const next = (d, target) => {
+                const n = d.got.length, a1 = d.aims[n - 1], l1 = d.got[n - 1];
+                if (n < 2 || d.got[n - 2] === l1) return Math.round(a1 - (l1 - target));
+                const a0 = d.aims[n - 2], l0 = d.got[n - 2];
+                return Math.round(a1 - (l1 - target) * (a1 - a0) / (l1 - l0));
+            };
+            let tries = 0;
+            const fix = () => {
+                try {
+                    if (!win || win.closed) return;
+                    const tx = Math.round(sx + (sw - win.outerWidth) / 2), ty = Math.round(sy + (sh - win.outerHeight) / 2);
+                    ax.got.push(win.screenX); ay.got.push(win.screenY);
+                    if (Math.abs(win.screenX - tx) <= 4 && Math.abs(win.screenY - ty) <= 4) return;   // in the middle
+                    if (ax.aims[0] == null) { ax.aims[0] = win.screenX; ay.aims[0] = win.screenY; }
+                    const nx = next(ax, tx), ny = next(ay, ty);
+                    ax.aims.push(nx); ay.aims.push(ny);
+                    win.moveTo(nx, ny);
+                } catch { return; }   // it has gone to the streaming site: can't be read any more
+                if (++tries < 6) setTimeout(fix, 130);
+            };
+            setTimeout(fix, 60);
+        };
         const openWatchWindow = (url, m = {}) => {
             if (PREFS.watchOpen === 'tab' || touchUI()) { window.open(url, '_blank', 'noopener'); return; }
             const aw = screen.availWidth || 1280, ah = screen.availHeight || 800;
@@ -5956,7 +5987,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             clearInterval(watchWinT);
             const win = window.open('', 'anicoop_watch', `popup=yes,width=${w},height=${h},left=${left},top=${top}`);
             if (!win) { window.open(url, '_blank', 'noopener'); return; }   // pop-ups blocked: a tab then
-            try { win.resizeTo(w, h); win.moveTo(left, top); } catch {}   // some browsers ignore the numbers above
+            try { win.resizeTo(w, h); } catch {}
+            centerWin(win, { x: left, y: top });
             try { win.document.open(); win.document.write(watchLaunchHtml(url, m)); win.document.close(); } catch {}
             try { win.focus(); } catch {}
             setTimeout(() => { try { if (!win.closed) { win.opener = null; win.location.replace(url); } } catch { try { win.location.href = url; } catch {} } }, 900);

@@ -263,6 +263,10 @@ These are cumulative; the README has one section per version.
 - **v1.2:** the pop-up opens as `about:blank` (same origin), gets `resizeTo` / `moveTo` to the centre of `screen.avail*`,
   shows `watchLaunchHtml` (anicoop colours from the CSS variables, cover / title / episode) for 0.9 s, then `opener = null`
   and `location.replace(url)`. A previous pop-up is closed first (it's cross-origin by then, so it can't be moved).
+- **v1.3:** the owner's Brave (anicoop installed as an app, 2560×1440) put the pop-up at twice the asked position
+  (bottom-right). `centerWin` reads `win.screenX/Y` while the pop-up is still our same-origin opening screen and
+  re-aims with a secant step per axis (up to 6 tries, 130 ms apart, before the 0.9 s navigation). Simulated: doubling,
+  shifting and correct browsers all end centred; a browser that ignores `moveTo` can't be fixed.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
