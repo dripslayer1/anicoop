@@ -30,7 +30,7 @@ For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when
   the Edge Function redeploy (GIF paging, `mal` endpoint) and the `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` secrets; the
   owner registered the MAL API client ("anicoop", published) — whether they finished the rest is unconfirmed.
 - v10.1 (#17) and v10.3 (#18: v10.2 genre filter under Sort by + v10.3 "my watch link") and v10.4 (#19) are merged. **v10.5 is PR #20
-  from `claude/v10-5-continue-link`** (Continue watching cards open your link). **No SQL, no Edge
+  from `claude/v10-5-continue-link`** (Continue watching cards open your link + v10.6 auto links, {ep}, smarter question, Send). **No SQL, no Edge
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
@@ -230,7 +230,7 @@ These are cumulative; the README has one section per version.
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** the v10.5 PR (#20) is open (no SQL, no Edge Function change). v10.1 is merged.
+**Stopped at:** the v10.6 PR (#20, v10.5 + v10.6) is open (no SQL, no Edge Function change). v10.1 is merged.
 
 - **v10.3 my watch link** (anime + TV only, the owner's choice): `media_data.wl` (`entryData` / `listRow` / `withRepeats`
   keep it). `openMyLink` opens it and sets `watchAsk` (kept in localStorage `anicoop_watch_ask_v1`, so a reload on the
@@ -245,6 +245,13 @@ These are cumulative; the README has one section per version.
   title page + `watchMine` when there is no link. Manga still opens the reader. Ideas the owner was given next:
   auto-fill links from AniList, a shared squad link, "new episode out" alerts that open the link, episode-numbered
   links ({ep}), resume-by-season for TV, a "Where I watch" default service.
+- **v10.6** (owner: "implement all you think are good"): `PREFS.watchService` (any / a site / off) + `autoLinks`
+  (localStorage `anicoop_autolinks_v1`, AniList `externalLinks` STREAMING, fetched 50 ids per call for anime on your
+  list with no link; a title page fills it too). `linkInfo(a)` = own link, else the automatic one, with `{ep}` →
+  next episode (`cleanLink` keeps `{ep}` through `new URL`). The question starts at the last count for that title
+  (`anicoop_watch_n_v1`) and is dropped if the tab is hidden and back within 60 s (`quickBack`). `sendMyLink` reuses
+  the chat "episode" card. Not done (told the owner why): squad-shared links, new-episode alerts with Watch, link
+  health checks, TV seasons.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

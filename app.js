@@ -97,6 +97,7 @@ const defaultPrefs = () => ({
     repos: {},                                              // the extension repository you last opened, per section
     savedGifs: [],                                          // v9.8 GIFs you starred (like Discord favourites): { url, preview }
     reader: { autoMark: true, saver: false, modes: {} },   // reader: mark chapters read at the end, data saver, reading mode per title
+    watchService: 'any',                                    // v10.6 automatic watch links for anime: 'any' (Crunchyroll first), a site name, or 'off'
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
 const PREFS = reactive(mergePrefs(defaultPrefs(), readJSON(PREFS_KEY)));
@@ -5819,11 +5820,15 @@ createApp({
         const hasWatchLink = (a) => WL_TYPES.includes(a?.type || 'ANIME');
         const watchLinkOf = (id) => soloEntry(id)?.watchLink || '';
         const wlEdit = reactive({ id: null, text: '' });
+        // (v10.6 a link may hold {ep}: it becomes the episode you're on, e.g. …/episode-{ep} → …/episode-5)
+        const EP_MARK = 'zzanicoopepzz';
         const cleanLink = (s) => {
             s = String(s || '').trim(); if (!s) return '';
             if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
-            try { const u = new URL(s); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && s.length <= 800 ? u.href : null; } catch { return null; }
+            s = s.replace(/\{\s*(ep|episode)\s*\}/gi, EP_MARK);
+            try { const u = new URL(s); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && s.length <= 800 ? u.href.split(EP_MARK).join('{ep}') : null; } catch { return null; }
         };
+        const fillEp = (url, n) => String(url || '').split('{ep}').join(String(n));
         const startWatchLink = (a) => { wlEdit.id = a.id; wlEdit.text = watchLinkOf(a.id); };
         const saveWatchLink = async (a, clear = false) => {
             if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
@@ -5845,25 +5850,91 @@ createApp({
             if (e.status === 'REPEATING') return (e.repeats?.[e.repeats.length - 1] || 0) + 1;
             return (e.progress || 0) + 1;
         };
+        // ---- v10.6 automatic links: the official site AniList lists for an anime you haven't saved a link for ----
+        const AUTO_LINKS_KEY = 'anicoop_autolinks_v1';
+        const WATCH_SERVICES = ['Crunchyroll', 'Netflix', 'HIDIVE', 'Amazon Prime Video', 'Hulu', 'Disney Plus', 'Bilibili TV', 'YouTube'];
+        const autoLinks = reactive((() => { try { const v = JSON.parse(localStorage.getItem(AUTO_LINKS_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } })());
+        const keepAutoLinks = () => { try { const ids = Object.keys(autoLinks); ids.slice(0, Math.max(0, ids.length - 600)).forEach(k => delete autoLinks[k]); localStorage.setItem(AUTO_LINKS_KEY, JSON.stringify(autoLinks)); } catch {} };
+        const streamLinks = (ext) => { const seen = new Set(); return (ext || []).filter(l => l?.type === 'STREAMING' && /^https?:\/\//.test(l.url || '') && !seen.has(l.site) && seen.add(l.site)).map(l => ({ site: l.site, url: l.url })); };
+        const pickService = (links) => {
+            const want = PREFS.watchService || 'any';
+            if (want === 'off' || !links?.length) return null;
+            if (want !== 'any') return links.find(l => l.site === want) || null;
+            return links.find(l => /crunchyroll/i.test(l.site)) || links[0];
+        };
+        const autoLinkOf = (a) => (a?.type || 'ANIME') === 'ANIME' && a?.id ? pickService(autoLinks[a.id]) : null;
+        // what Watch opens: your own link, else the automatic one ({ep} filled in with the next episode)
+        const linkInfo = (a) => {
+            if (!a?.id || !hasWatchLink(a)) return null;
+            const own = watchLinkOf(a.id), auto = own ? null : autoLinkOf(a);
+            const raw = own || auto?.url; if (!raw) return null;
+            const url = fillEp(raw, nextEpOf(a.id));
+            let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+            return { url, host, auto: !!auto, site: auto?.site || host, perEp: raw.includes('{ep}') };
+        };
+        // fetch AniList's streaming links for the anime on your list that have no link yet (50 per call, low priority)
+        let autoBusy = false;
+        const fillAutoLinks = async () => {
+            if (autoBusy || PREFS.watchService === 'off') return;
+            const ids = soloList.value.filter(e => (e.anime?.type || 'ANIME') === 'ANIME' && !e.watchLink && ['WATCHING', 'REPEATING', 'PLANNING', 'PAUSED'].includes(e.status) && !(e.anime.id in autoLinks)).map(e => e.anime.id).slice(0, 150);
+            if (!ids.length) return;
+            autoBusy = true;
+            try {
+                for (let i = 0; i < ids.length; i += 50) {
+                    const chunk = ids.slice(i, i + 50);
+                    const d = await anilist(`query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { id externalLinks { site url type } } } }`, { ids: chunk }, { low: true });
+                    const got = new Map((d?.Page?.media || []).map(m => [m.id, streamLinks(m.externalLinks)]));
+                    chunk.forEach(id => { autoLinks[id] = got.get(id) || []; });
+                }
+                keepAutoLinks();
+            } catch {} finally { autoBusy = false; }
+        };
+        let autoT = null;
+        watch(() => soloList.value.length, () => { clearTimeout(autoT); autoT = setTimeout(fillAutoLinks, 4000); });
+        watch(() => PREFS.watchService, () => fillAutoLinks());
+        // a title's page already has its links: keep them
+        watch(() => selectedAnime.value?.externalLinks, (ext) => { const a = selectedAnime.value; if (a?.type === 'ANIME' && ext) { autoLinks[a.id] = streamLinks(ext); keepAutoLinks(); } });
         // every episode is already counted (finished, not rewatching): the link just opens, nothing to ask
         const wlAtEnd = (a) => { const e = soloEntry(a?.id), total = totalOf(e?.anime || a); return !!total && e?.status !== 'REPEATING' && nextEpOf(a.id) > total; };
-        const watchAsk = ref((() => { try { const v = JSON.parse(localStorage.getItem(WATCH_ASK_KEY) || 'null'); return v?.anime?.id ? { ...v, n: 1 } : null; } catch { return null; } })());
-        const keepAsk = () => { try { if (watchAsk.value) localStorage.setItem(WATCH_ASK_KEY, JSON.stringify({ anime: watchAsk.value.anime, from: watchAsk.value.from })); else localStorage.removeItem(WATCH_ASK_KEY); } catch {} };
+        // v10.6 the question starts at how many you watched last time for that title
+        const WATCH_N_KEY = 'anicoop_watch_n_v1';
+        const lastN = (id) => { try { return Math.max(1, Number(JSON.parse(localStorage.getItem(WATCH_N_KEY) || '{}')[id]) || 1); } catch { return 1; } };
+        const keepN = (id, n) => { try { const m = JSON.parse(localStorage.getItem(WATCH_N_KEY) || '{}'); m[id] = n; const k = Object.keys(m); k.slice(0, Math.max(0, k.length - 300)).forEach(x => delete m[x]); localStorage.setItem(WATCH_N_KEY, JSON.stringify(m)); } catch {} };
+        const watchAsk = ref((() => { try { const v = JSON.parse(localStorage.getItem(WATCH_ASK_KEY) || 'null'); return v?.anime?.id ? { ...v, n: v.n || 1 } : null; } catch { return null; } })());
+        const keepAsk = () => { try { if (watchAsk.value) localStorage.setItem(WATCH_ASK_KEY, JSON.stringify({ anime: watchAsk.value.anime, from: watchAsk.value.from, n: watchAsk.value.n, at: watchAsk.value.at })); else localStorage.removeItem(WATCH_ASK_KEY); } catch {} };
+        // v10.6 back within a minute: you only had a look, nothing to ask
+        const QUICK_BACK_MS = 60000;
+        const quickBack = () => {
+            const w = watchAsk.value;
+            if (!w?.at || document.hidden) return;
+            if (w.away && Date.now() - w.at < QUICK_BACK_MS) { watchAsk.value = null; keepAsk(); showToast('Back already? Nothing counted'); }
+            else if (w.away) { w.at = 0; keepAsk(); }   // a real watch: from now on the question just waits
+        };
+        document.addEventListener('visibilitychange', () => { const w = watchAsk.value; if (!w?.at) return; if (document.hidden) w.away = true; else quickBack(); });
+        if (watchAsk.value?.at) { watchAsk.value.away = true; setTimeout(quickBack, 0); }   // the phone reloaded the page while you were away
         const askLeft = computed(() => {   // episodes left to count (null = unknown)
             const w = watchAsk.value; if (!w) return null;
             const e = soloEntry(w.anime.id), total = totalOf(e?.anime || w.anime);
             return total ? Math.max(0, total - nextEpOf(w.anime.id) + 1) : null;
         });
         const openMyLink = (a) => {
-            const link = watchLinkOf(a.id); if (!link) return;
-            window.open(link, '_blank', 'noopener');
+            const info = linkInfo(a); if (!info) return;
+            window.open(info.url, '_blank', 'noopener');
             if (wlAtEnd(a)) return;
-            watchAsk.value = { anime: slimAnime(a), from: nextEpOf(a.id), n: 1 }; keepAsk();
+            const e = soloEntry(a.id), total = totalOf(e?.anime || a);
+            const left = total ? Math.max(1, total - nextEpOf(a.id) + 1) : 999;
+            watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: Math.min(lastN(a.id), left), at: Date.now(), away: false }; keepAsk();
+        };
+        // v10.6 send the link (on the episode you're at) to a friend in chat
+        const sendMyLink = (a) => {
+            const info = linkInfo(a); if (!info) return;
+            const n = nextEpOf(a.id);
+            sendEpisodeTo(a, { n: a.format === 'MOVIE' ? null : n, name: a.format === 'MOVIE' ? 'Watch it with me' : `Episode ${n} · watch it with me`, url: info.url, site: info.site });
         };
         // v10.4 the big Watch buttons on an anime / TV page: your saved link (manga keeps its reader)
         const watchMine = (a) => {
             if (!a) return;
-            if (watchLinkOf(a.id)) { openMyLink(a); return; }
+            if (linkInfo(a)) { openMyLink(a); return; }
             showToast('You don’t have a watch link saved for this yet. Add one in “My watch link”', 'error');
             if (!currentUser.value) return;
             startWatchLink(a);
@@ -5877,7 +5948,7 @@ createApp({
                 .sort((x, y) => (/crunchyroll/i.test(y.site) ? 1 : 0) - (/crunchyroll/i.test(x.site) ? 1 : 0));
         });
         const useOfficial = (a, l) => { wlEdit.text = l.url; saveWatchLink(a); };
-        const stepAsk = (d) => { const w = watchAsk.value; if (!w) return; const max = askLeft.value ?? 999; w.n = clamp((Number(w.n) || 0) + d, 1, Math.max(1, max)); };
+        const stepAsk = (d) => { const w = watchAsk.value; if (!w) return; const max = askLeft.value ?? 999; w.n = clamp((Number(w.n) || 0) + d, 1, Math.max(1, max)); w.at = 0; keepAsk(); };
         const closeAsk = () => { watchAsk.value = null; keepAsk(); };
         const saveAsk = async () => {
             const w = watchAsk.value; if (!w) return;
@@ -5885,6 +5956,7 @@ createApp({
             const anime = soloEntry(w.anime.id)?.anime || normMedia(w.anime);
             if (anime.type === 'TV') await fillTotal(anime);
             const want = clamp(Math.round(Number(w.n) || 1), 1, 999);
+            keepN(anime.id, want);
             const before = soloEntry(anime.id);
             let entry = null, done = 0, finishedRepeat = 0;
             for (let i = 0; i < want; i++) {   // one episode at a time: the same rules as the +1 button
@@ -8025,7 +8097,7 @@ createApp({
             if (!MEDIA_KIND[a.type]) { fetchAnimeDetails(a); return; }
             // v10.5 anime / TV: straight to your watch link (no link: its page, with the link box open)
             if (hasWatchLink(a)) {
-                if (watchLinkOf(a.id)) { openMyLink(soloEntry(a.id)?.anime || a); return; }
+                if (linkInfo(a)) { openMyLink(soloEntry(a.id)?.anime || a); return; }
                 await fetchAnimeDetails(a);
                 if (selectedAnime.value?.id === a.id) { await nextTick(); watchMine(selectedAnime.value); }
                 return;
@@ -9946,7 +10018,7 @@ createApp({
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

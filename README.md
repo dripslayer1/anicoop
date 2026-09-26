@@ -765,9 +765,9 @@ free "API client":
 18. **Settings → Profile decorations:** each one (avatar frame, profile theme, page background, effect, name style,
     badges) is a small row showing what you picked; tap it to open its options.
 
-## v10.3 – v10.5 — my watch link (includes v10.2)
+## v10.3 – v10.6 — my watch link (includes v10.2)
 
-**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.5.
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.6.
 
 - **v10.2:** in Lists, the Genre filter sits right under "Sort by".
 - **My watch link (anime and Movies & TV):** on a title's page, "Add where you watch it" saves any link (Crunchyroll,
@@ -784,3 +784,10 @@ free "API client":
 - **v10.5:** Browse → **Continue watching** (anime and Movies & TV): tapping a card opens your watch link straight
   away (and asks how many episodes afterwards) instead of the extensions window. The card shows where it opens
   ("▶ crunchyroll.com") or "no link saved"; with no link it opens the title's page with the link box ready.
+- **v10.6:**
+  - **Automatic links (anime):** no link of your own → Watch uses the official site AniList lists (Crunchyroll first),
+    marked "AUTO". Settings → Lists → **Watch links** picks your service (or Off). Your own link always wins.
+  - **{ep} links:** if a site's episode links end in the number, save …/episode-{ep} and Watch opens the right episode.
+  - **The question remembers** how many you watched last time for that title, and if you're back within a minute it
+    doesn't ask ("Back already? Nothing counted").
+  - **Send:** in "My watch link", sends the link (on your episode) to a friend in chat.

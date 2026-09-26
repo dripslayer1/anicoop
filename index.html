@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.5">
+    <link rel="stylesheet" href="app.css?v=10.6">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.5" defer></script>
+    <script src="app.js?v=10.6" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.6</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -508,7 +508,7 @@
                         <div class="absolute inset-0 bg-gradient-to-r from-base/80 to-transparent"></div>
                     </div>
                     <div class="max-w-[1200px] mx-auto px-4 md:px-8 -mt-40 md:-mt-52 relative flex flex-col md:flex-row gap-8 md:gap-12 det-wrap">
-                        <button v-if="playKind" @click="playKind === 'manga' ? openWatch() : watchMine(selectedAnime)" class="banner-play md:!hidden" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : watchLinkOf(selectedAnime.id) && !wlAtEnd(selectedAnime) ? 'Watch ep ' + nextEpOf(selectedAnime.id) : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : watchLinkOf(selectedAnime.id) ? 'on ' + linkHost(watchLinkOf(selectedAnime.id)) : 'no link saved' }}</small></span></button>
+                        <button v-if="playKind" @click="playKind === 'manga' ? openWatch() : watchMine(selectedAnime)" class="banner-play md:!hidden" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : linkInfo(selectedAnime) && !wlAtEnd(selectedAnime) ? 'Watch ep ' + nextEpOf(selectedAnime.id) : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : linkInfo(selectedAnime) ? 'on ' + linkInfo(selectedAnime).site : 'no link saved' }}</small></span></button>
                         <div class="w-full md:w-72 shrink-0 flex flex-col gap-5 det-left">
                             <div class="relative w-44 md:w-full mx-auto det-poster">
                                 <img :src="selectedAnime.coverImage?.large" class="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" alt="">
@@ -577,16 +577,20 @@
                                 <p class="label flex items-center gap-1.5"><i class="fa-solid fa-link text-lilac"></i>My watch link</p>
                                 <template v-if="wlEdit.id === selectedAnime.id">
                                     <input v-model="wlEdit.text" type="url" inputmode="url" placeholder="Paste a link, e.g. crunchyroll.com/series/…" class="field !py-2.5 !text-sm" @keydown.enter.prevent="saveWatchLink(selectedAnime)">
-                                    <p class="text-[11px] text-mute leading-snug">Tip: the show's page (not one episode) keeps working as you go. Crunchyroll's opens on your next episode.</p>
+                                    <p class="text-[11px] text-mute leading-snug">Tip: the show's page (not one episode) keeps working as you go. Crunchyroll's opens on your next episode. If a site's episode links end in the episode number, put <b class="text-sub font-mono">{ep}</b> there (…/episode-<b class="text-sub font-mono">{ep}</b>) and Watch opens the right one.</p>
                                     <div class="flex gap-2">
                                         <button @click="saveWatchLink(selectedAnime)" class="btn-primary flex-1 !py-2 !text-xs"><i class="fa-solid fa-check"></i> Save link</button>
                                         <button @click="wlEdit.id = null" class="btn-ghost !py-2 !text-xs">Cancel</button>
                                         <button v-if="watchLinkOf(selectedAnime.id)" @click="saveWatchLink(selectedAnime, true)" class="btn-ghost !py-2 !text-xs !px-3" title="Remove the link"><i class="fa-solid fa-trash-can"></i></button>
                                     </div>
                                 </template>
-                                <template v-else-if="watchLinkOf(selectedAnime.id)">
+                                <template v-else-if="linkInfo(selectedAnime)">
                                     <button @click="openMyLink(selectedAnime)" class="btn-primary w-full wl-go"><i class="fa-solid fa-play"></i> Watch {{ selectedAnime.format === 'MOVIE' || wlAtEnd(selectedAnime) ? '' : 'ep ' + nextEpOf(selectedAnime.id) }}<i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-70"></i></button>
-                                    <p class="flex items-center gap-2 text-[11px] text-mute min-w-0"><span class="truncate">{{ linkHost(watchLinkOf(selectedAnime.id)) }}</span><button @click="startWatchLink(selectedAnime)" class="ml-auto shrink-0 text-sub hover:text-ink font-semibold"><i class="fa-solid fa-pen text-[9px] mr-1"></i>Change</button></p>
+                                    <p class="flex items-center gap-2 text-[11px] text-mute min-w-0">
+                                        <span class="truncate"><span v-if="linkInfo(selectedAnime).auto" class="wl-auto" title="Picked for you from AniList's official sites (Settings → Lists → Watch links)">auto</span>{{ linkInfo(selectedAnime).auto ? linkInfo(selectedAnime).site : linkInfo(selectedAnime).host }}<span v-if="linkInfo(selectedAnime).perEp" class="text-sub"> · ep {{ nextEpOf(selectedAnime.id) }}</span></span>
+                                        <button @click="sendMyLink(selectedAnime)" class="ml-auto shrink-0 text-sub hover:text-ink font-semibold" title="Send this link to a friend in chat"><i class="fa-solid fa-paper-plane text-[9px] mr-1"></i>Send</button>
+                                        <button @click="startWatchLink(selectedAnime)" class="shrink-0 text-sub hover:text-ink font-semibold"><i class="fa-solid fa-pen text-[9px] mr-1"></i>{{ linkInfo(selectedAnime).auto ? 'Use my own' : 'Change' }}</button>
+                                    </p>
                                 </template>
                                 <button v-else @click="startWatchLink(selectedAnime)" class="rewish-btn wl-add"><i class="fa-solid fa-link"></i><span>Add where you watch it</span><i class="fa-solid fa-plus ml-auto text-[10px]"></i></button>
                                 <!-- v10.4 official streaming sites (AniList): open one, or keep it as your watch link -->
@@ -621,7 +625,7 @@
                             <div class="det-head"><p class="kicker">// <template v-if="selectedAnime.type === 'GAME'">game<span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span><span v-if="selectedAnime.coop"> · co-op</span></template><template v-else-if="selectedAnime.type === 'TV'">{{ selectedAnime.format === 'MOVIE' ? 'movie' : 'tv series' }}<span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span><span v-if="selectedAnime.status === 'RELEASING'"> · airing</span></template><template v-else-if="selectedAnime.type === 'SONG'">song<span v-if="selectedAnime.artists?.length"> · {{ selectedAnime.artists.join(', ') }}</span><span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span></template><template v-else>{{ (selectedAnime.format || 'anime').replace('_', ' ') }}<span v-if="selectedAnime.seasonYear"> · {{ (selectedAnime.season || '').toLowerCase() }} {{ selectedAnime.seasonYear }}</span></template></p>
                             <div class="mt-3 flex items-center gap-6">
                                 <h1 class="min-w-0 flex-grow font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ titleOf(selectedAnime) }}</h1>
-                                <button v-if="playKind" @click="playKind === 'manga' ? openWatch() : watchMine(selectedAnime)" class="banner-play banner-play-inline !hidden md:!flex" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : watchLinkOf(selectedAnime.id) && !wlAtEnd(selectedAnime) ? 'Watch ep ' + nextEpOf(selectedAnime.id) : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : watchLinkOf(selectedAnime.id) ? 'on ' + linkHost(watchLinkOf(selectedAnime.id)) : 'no link saved' }}</small></span></button>
+                                <button v-if="playKind" @click="playKind === 'manga' ? openWatch() : watchMine(selectedAnime)" class="banner-play banner-play-inline !hidden md:!flex" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : linkInfo(selectedAnime) && !wlAtEnd(selectedAnime) ? 'Watch ep ' + nextEpOf(selectedAnime.id) : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : linkInfo(selectedAnime) ? 'on ' + linkInfo(selectedAnime).site : 'no link saved' }}</small></span></button>
                             </div>
                             <p v-if="altTitleOf(selectedAnime)" class="mt-2 text-sub">{{ altTitleOf(selectedAnime) }}</p></div>
 
@@ -630,7 +634,7 @@
                                 <!-- v10.4 anime / TV: the Watch buttons use your saved link. On a computer the banner has it, so this one is
                                      for manga, and for anime / TV only on phones (the banner button is hidden there) -->
                                 <button v-if="playKind === 'manga'" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
-                                <button v-else-if="playKind" @click="watchMine(selectedAnime)" class="play-cta md:!hidden"><i class="fa-solid fa-play"></i> {{ isMovie || !watchLinkOf(selectedAnime.id) || wlAtEnd(selectedAnime) ? 'Watch' : 'Watch ep ' + nextEpOf(selectedAnime.id) }}<span v-if="!watchLinkOf(selectedAnime.id)" class="opacity-70 font-semibold">· no link saved</span></button>
+                                <button v-else-if="playKind" @click="watchMine(selectedAnime)" class="play-cta md:!hidden"><i class="fa-solid fa-play"></i> {{ isMovie || !linkInfo(selectedAnime) || wlAtEnd(selectedAnime) ? 'Watch' : 'Watch ep ' + nextEpOf(selectedAnime.id) }}<span v-if="!linkInfo(selectedAnime)" class="opacity-70 font-semibold">· no link saved</span></button>
                                 <button v-if="selectedAnime.trailer?.id" @click="playTrailer(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-volt text-onvolt text-xs font-bold active:scale-95 transition-transform"><i class="fa-solid fa-play text-[10px]"></i> Watch trailer</button>
                                 <button @click="sendAnimeTo(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-paper-plane text-[10px] text-lilac"></i> Send to a friend</button>
                                 <button v-if="isAniListType(selectedAnime.type)" @click="toggleFollow(selectedAnime)" :class="isFollowing(selectedAnime.id) ? 'bg-volt text-onvolt border-volt' : 'bg-raised text-ink border-line2'" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold border" :title="isFollowing(selectedAnime.id) ? 'Turn off alerts' : 'Get notified about new episodes, seasons and updates'"><i class="fa-solid text-[11px]" :class="isFollowing(selectedAnime.id) ? 'fa-bell' : 'fa-bell-slash'"></i> {{ isFollowing(selectedAnime.id) ? 'Alerts on' : 'Get alerts' }}</button>
@@ -1710,7 +1714,7 @@
                                 <img :src="item.anime.bannerImage || item.anime.coverImage?.large" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-expo group-hover:scale-105" loading="lazy" decoding="async" alt="">
                                 <div class="absolute inset-0 bg-gradient-to-r from-base via-base/85 to-base/30"></div>
                                 <div class="relative h-full p-4 flex flex-col">
-                                    <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="watchLinkOf(item.anime.id)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkHost(watchLinkOf(item.anime.id)) }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
+                                    <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="linkInfo(item.anime)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkInfo(item.anime).site }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
                                     <p class="mt-1 text-ink font-semibold truncate pr-24">{{ titleOf(item.anime) }}</p>
                                     <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}</template></p>
                                     <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
@@ -3649,6 +3653,12 @@
                             <!-- LISTS -->
                             <template v-if="settingsTab === 'lists'">
                                 <div><p class="kicker">// how your lists work</p><h3 class="mt-1 font-display font-bold text-ink text-2xl">Lists</h3></div>
+                                <!-- v10.6 automatic watch links -->
+                                <div class="set-block">
+                                    <p class="set-title">Watch links</p>
+                                    <p class="text-xs text-sub mt-1">For anime without a link of your own, Watch opens the official site AniList lists. Pick the service you have. A link you save yourself always wins.</p>
+                                    <div class="chip-wrap mt-3 max-w-xs"><select v-model="PREFS.watchService" class="chip w-full"><option value="any">Any (Crunchyroll first)</option><option v-for="s in WATCH_SERVICES" :key="s" :value="s">{{ s }} only</option><option value="off">Off: only my own links</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                                </div>
                                 <div class="grid sm:grid-cols-2 gap-4">
                                     <div class="set-block">
                                         <p class="set-title">Scoring system</p>
