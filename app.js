@@ -7659,7 +7659,8 @@ createApp({
             ...kindSources(k),
         ];
         const availRows = computed(() => {
-            const a = selectedAnime.value, k = playKind.value; if (!a || !k) return [];
+            // v10.7 manga only: anime / TV watch through your watch link now, so their sources aren't listed or checked
+            const a = selectedAnime.value, k = playKind.value; if (!a || k !== 'manga') return [];
             const rows = [];
             if (k === 'manga' && extOn('mangadex')) { const i = mangaInfo[a.id]; rows.push({ id: 'mangadex', name: 'MangaDex', st: !i ? 'checking' : i.md ? 'yes' : 'no' }); }
             availSources(k).forEach(s => { const key = `${a.id}:${s.id}`; rows.push({ id: s.id, name: s.name, st: srcMatches[key] ? 'yes' : availNo[key] || 'checking' }); });
@@ -7686,10 +7687,10 @@ createApp({
         watch(() => playKind.value && selectedAnime.value?.id, (id) => {
             if (!id) { availTok++; return; }
             const a = selectedAnime.value, k = playKind.value;
-            setTimeout(() => { if (selectedAnime.value?.id === id && (availSources(k).length || k === 'manga')) checkAvailability(a, k); }, 500);
+            setTimeout(() => { if (selectedAnime.value?.id === id && k === 'manga') checkAvailability(a, k); }, 500);
         });
         // a source that has it: open Read / Watch on it
-        watch(() => playKind.value ? availSources(playKind.value).map(s => s.id).join(',') : '', (ids, old) => { if (ids && old !== undefined && selectedAnime.value && ids !== old) checkAvailability(selectedAnime.value, playKind.value); });
+        watch(() => playKind.value === 'manga' ? availSources(playKind.value).map(s => s.id).join(',') : '', (ids, old) => { if (ids && old !== undefined && selectedAnime.value && ids !== old) checkAvailability(selectedAnime.value, playKind.value); });
         const tabAvail = (id) => availRows.value.find(r => r.id === id)?.st || null;
         const openOnSource = (id) => { readSrc.value = id; openWatch(); };
         const chooseMatch = (r) => { const a = selectedAnime.value; const s = currentSite.value; if (!a || !s) return; srcMatches[`${a.id}:${s.id}`] = { url: r.url, title: r.title, cover: r.cover || null }; saveMatches(); srcView.match = r; srcView.picking = false; loadSourceFor(); };

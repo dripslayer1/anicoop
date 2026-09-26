@@ -253,6 +253,8 @@ These are cumulative; the README has one section per version.
   the chat "episode" card. Not done (told the owner why): squad-shared links, new-episode alerts with Watch, link
   health checks, TV seasons.
 - **v10.6.1:** `cleanLink` / `fillEp` also take the number in braces (`{12}`, `{ e }`, `%7B12%7D`) as the episode slot.
+- **v10.7:** `availRows` and the background `checkAvailability` are manga only (owner: anime / TV sources "not needed
+  anymore"). The anime / TV sources window (`openWatch`) is still reachable from Extensions, nothing else links to it.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

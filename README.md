@@ -793,3 +793,5 @@ free "API client":
   - **Send:** in "My watch link", sends the link (on your episode) to a friend in chat.
 - **v10.6.1:** an episode link can have the number itself in curly brackets (…/episode-{12}); it works like {ep}. Links
   saved that way before work too.
+- **v10.7:** the "On your sources" row is gone from anime and Movies & TV pages (and those sources aren't checked in
+  the background any more). Manga keeps it.
