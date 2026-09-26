@@ -872,3 +872,21 @@ What it does:
   played count too. Games already on your list only get their hours updated. Run it again any time to refresh hours.
 - **Game pages:** "Play on Steam" shows your hours for games you own; games you don't own say "Get it on Steam" (store page).
 
+## v1.4 — Steam achievements, uncheck a status, fixes
+
+**No SQL. The Edge Function changed again: deploy it** (Supabase → Edge Functions → igdb → paste the new
+`supabase/functions/igdb/index.ts` → Deploy). Then hard-refresh: the footer says **v1.4**.
+
+- **Steam achievements** (Steam linked in Settings → Import & sync): a game's page lists them like Steam does — icon,
+  name, description (hidden ones stay hidden until you tap "show"), unlock date, and how many players have it (under 10%
+  is marked rare). Filter All / Unlocked / Locked, sort by unlocked first, recently unlocked or rarest. Your **profile**
+  shows the total over every Steam game you've played (unlocked / total, %, perfect games).
+- **Play on Steam** opens an anicoop window (cover, hours, achievements) while Steam starts the game.
+- **Uncheck a status:** in the + menu (and the phone's list sheet), tap the status it already has to take it off. If
+  it's on In Rotation / Wanna … it stays only there ("No status"); otherwise it leaves your solo list (squads untouched).
+  No-status titles are taken off AniList / MyAnimeList.
+- **In Rotation** on a game that isn't on your list no longer makes it Playing.
+- **"How many episodes did you watch?"** always starts at 1.
+- **Fixed:** Continue reading sometimes jumped ahead (e.g. rereading chapter 1 with 8 read opened 8.5). Your spot is
+  kept unless your chapter count went up after you left it.
+

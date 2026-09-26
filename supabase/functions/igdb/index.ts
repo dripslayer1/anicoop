@@ -497,6 +497,51 @@ const steamUser = async (body: Record<string, any>) => {
         cache.set(key, { at: Date.now(), body: text });
         return json(text);
     }
+    // v1.4 achievements of one game: Steam's list (names, icons, descriptions), yours (unlocked + when) and how rare each is
+    if (action === 'achievements') {
+        if (!STEAM_KEY) return json({ error: 'Steam isn’t set up yet: add STEAM_API_KEY to the Edge Function secrets' }, 500);
+        const id = String(body.steamid || ''), app = Number(body.appid);
+        if (!STEAM_ID.test(id) || !Number.isInteger(app) || app <= 0) return json({ error: 'Not allowed' }, 400);
+        const key = `steamach\n${id}\n${app}`, hit = cache.get(key);
+        if (hit && Date.now() - hit.at < CACHE_MS / 5) return json(hit.body);
+        const k = encodeURIComponent(STEAM_KEY);
+        const [schema, mine, global] = await Promise.all([
+            fetch(`https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=${k}&appid=${app}&l=english`).then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${k}&steamid=${id}&appid=${app}&l=english`).then(r => r.json()).catch(() => null),
+            fetch(`https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${app}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        const list = schema?.game?.availableGameStats?.achievements || [];
+        const got = new Map((mine?.playerstats?.achievements || []).map((a: any) => [a.apiname, a]));
+        const pct = new Map((global?.achievementpercentages?.achievements || []).map((a: any) => [a.name, Number(a.percent) || 0]));
+        const items = list.map((a: any) => {
+            const m: any = got.get(a.name);
+            return { api: a.name, name: a.displayName || a.name, desc: a.description || '', icon: a.icon || '', gray: a.icongray || a.icon || '', hidden: !!a.hidden,
+                done: !!m?.achieved, at: m?.unlocktime || 0, pct: Math.round((pct.get(a.name) ?? -1) * 10) / 10 };
+        });
+        // no list from the player call: private game details, or the game has no achievements
+        const text = JSON.stringify({ items, private: !!list.length && !mine?.playerstats?.success, error: mine?.playerstats?.error || '' });
+        cache.set(key, { at: Date.now(), body: text });
+        return json(text);
+    }
+    // v1.4 unlocked / total for many games at once (your profile's achievement count), 40 per call
+    if (action === 'achsummary') {
+        if (!STEAM_KEY) return json({ error: 'Steam isn’t set up yet: add STEAM_API_KEY to the Edge Function secrets' }, 500);
+        const id = String(body.steamid || '');
+        const apps = (Array.isArray(body.appids) ? body.appids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0).slice(0, 40);
+        if (!STEAM_ID.test(id) || !apps.length) return json({ error: 'Not allowed' }, 400);
+        const k = encodeURIComponent(STEAM_KEY), out: Record<string, { done: number; total: number }> = {};
+        const one = async (app: number) => {
+            const ck = `steamachs\n${id}\n${app}`, hit = cache.get(ck);
+            if (hit && Date.now() - hit.at < CACHE_MS * 3) { const v = JSON.parse(hit.body); if (v) out[app] = v; return; }
+            const d = await fetch(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${k}&steamid=${id}&appid=${app}`).then(r => r.json()).catch(() => null);
+            const list = d?.playerstats?.success ? (d.playerstats.achievements || []) : null;
+            const v = list && list.length ? { done: list.filter((a: any) => a.achieved).length, total: list.length } : null;
+            cache.set(ck, { at: Date.now(), body: JSON.stringify(v) });
+            if (v) out[app] = v;
+        };
+        for (let i = 0; i < apps.length; i += 8) await Promise.all(apps.slice(i, i + 8).map(one));
+        return json({ games: out });
+    }
     if (action === 'summary') {
         const id = String(body.steamid || '');
         if (!STEAM_ID.test(id)) return json({ error: 'Not allowed' }, 400);

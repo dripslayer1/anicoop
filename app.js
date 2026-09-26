@@ -31,6 +31,9 @@ Object.values(LABEL_SETS).forEach(set => { set.labels.REPEATING = 'Repeating'; s
 LABEL_SETS.MANGA.labels.REWISH = LABEL_SETS.MANGA.short.REWISH = 'Wanna Reread';
 LABEL_SETS.GAME.labels.REWISH = LABEL_SETS.GAME.short.REWISH = 'Wanna Replay';
 LABEL_SETS.GAME.labels.ROTATION = LABEL_SETS.GAME.short.ROTATION = 'In Rotation';
+// v1.4 "no status": a title that's only on a mark list (In Rotation, Wanna …) after you unchecked its status. It shows
+// in those lists only, and isn't sent to AniList / MyAnimeList (it's taken off there).
+Object.values(LABEL_SETS).forEach(set => { set.labels.NONE = 'No status'; set.short.NONE = 'No status'; });
 // v10 "Wanna rewatch" (anime, movies & TV): not a status of its own but a mark on a title you've seen, so it keeps its
 // status (Completed…) and also shows in its own "Wanna Rewatch" list. Saved with the entry (media_data.rw).
 const REWISH_TYPES = ['ANIME', 'TV', 'MANGA', 'GAME'];
@@ -74,7 +77,7 @@ const typeOfId = (id) => id >= SONG_BASE ? 'SONG' : id >= MOVIE_BASE && id < PER
 const SECTION_LIST = Object.values(SECTIONS);
 const ACCENTS = ['#B490F5', '#D4FF3A', '#FF4D8D', '#3b82f6', '#22c55e', '#f59e0b', '#22d3ee', '#f97316'];
 const THEME_ACCENTS = ['#D4FF3A', '#B490F5', '#FF4D8D', '#22d3ee', '#3b82f6', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#F5F5F7'];
-const STATUS_COLORS = { WATCHING: '#3b82f6', PLANNING: '#f59e0b', COMPLETED: '#22c55e', REPEATING: '#14b8a6', PAUSED: '#a855f7', DROPPED: '#ef4444', REWISH: '#ec4899', ROTATION: '#06b6d4' };
+const STATUS_COLORS = { WATCHING: '#3b82f6', PLANNING: '#f59e0b', COMPLETED: '#22c55e', REPEATING: '#14b8a6', PAUSED: '#a855f7', DROPPED: '#ef4444', REWISH: '#ec4899', ROTATION: '#06b6d4', NONE: '#71717a' };
 const RELATION_ORDER = ['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY', 'SPIN_OFF', 'ALTERNATIVE', 'SUMMARY', 'COMPILATION', 'CONTAINS', 'OTHER', 'CHARACTER', 'SOURCE', 'ADAPTATION'];
 
 // ---------- helpers ----------
@@ -2021,7 +2024,7 @@ const QuickAdd = {
                         <span class="font-mono text-[11px] font-bold text-volt w-2.5">+1</span> {{ UNIT.ep }}
                         <span class="ml-auto font-mono text-[10px] text-mute"><template v-if="entry?.status === 'REPEATING'"><i class="fa-solid fa-rotate-right text-[8px]"></i>{{ (entry.repeats || []).length }} · {{ (entry.repeats || [])[(entry.repeats || []).length - 1] || 0 }}</template><template v-else>{{ anime.type === 'SONG' ? '▶ ' : '' }}{{ entry?.progress || 0 }}</template>{{ anime.type === 'GAME' ? ' hrs' : anime.type === 'SONG' ? ' plays' : '/' + (anime.type === 'MANGA' ? fmtChapter(lastChapterOf(anime)) : (anime.episodes || '?')) }}</span>
                     </button>
-                    <button v-for="s in ['PLANNING', 'WATCHING', 'COMPLETED', 'PAUSED', 'DROPPED']" :key="s" @click="pick(s)" class="qa-row" :class="entry?.status === s ? 'bg-overlay' : ''">
+                    <button v-for="s in ['PLANNING', 'WATCHING', 'COMPLETED', 'PAUSED', 'DROPPED']" :key="s" @click="pick(s)" class="qa-row" :class="entry?.status === s ? 'bg-overlay' : ''" :title="entry?.status === s ? 'Tap again to take it off' : ''">
                         <span class="qa-dot" :style="{ '--dot': STATUS_COLORS[s] }"></span> {{ labelOf(s) }}
                         <i v-if="entry?.status === s" class="fa-solid fa-check ml-auto text-[10px]"></i>
                     </button>
@@ -2645,8 +2648,9 @@ createApp({
             const list = (Array.isArray(entries) ? entries : [entries]).map(withRepeats);
             const { error } = await sb.from('list_entries').upsert(list.map(soloRow), { onConflict: 'user_id,media_id' });
             if (error) throw error;
-            list.forEach(e => alEnqueue(e.anime.id, alSaveOp(e)));
-            list.forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: { status: e.status, score: e.score, progress: e.progress, repeats: e.repeats, anime: { episodes: e.anime?.episodes || 0 } } }));
+            list.forEach(e => alEnqueue(e.anime.id, e.status === 'NONE' ? { kind: 'delete' } : alSaveOp(e)));
+            list.filter(e => e.status === 'NONE').forEach(e => malEnqueue(e.anime.id, { kind: 'delete' }));
+            list.filter(e => e.status !== 'NONE').forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: { status: e.status, score: e.score, progress: e.progress, repeats: e.repeats, anime: { episodes: e.anime?.episodes || 0 } } }));
         };
         // AniList counts a rewatch's episodes in "progress" and the finished rewatches in "repeat"
         const alSaveOp = (e) => {
@@ -5767,15 +5771,16 @@ createApp({
             let entry;
             if (cur) entry = { ...cur, [flag]: !cur[flag] };
             else {
-                const status = key === 'ROTATION' ? 'WATCHING' : 'COMPLETED';
+                const status = key === 'ROTATION' ? 'NONE' : 'COMPLETED';   // (v1.4 In Rotation doesn't make it Playing)
                 if (status === 'COMPLETED') await fillTotal(anime);
                 entry = { anime: normMedia(anime), status, score: 0, progress: status === 'COMPLETED' ? (totalOf(anime) || 0) : 0, repeats: [], lilbro: false, rewish: false, rotation: false, [flag]: true };
             }
+            if (cur && !entry[flag] && entry.status === 'NONE' && !entry.rewish && !entry.rotation) { await dropFromSolo(anime, `${titleOf(anime)} is off ${label}`); return; }
             setSoloLocal(entry);
             try {
                 await upsertSolo(entry);
-                if (!cur) logActivity(entry.anime, null, entry);
-                showToast(entry[flag] ? `${titleOf(anime)} → ${label}${cur ? '' : ' (and ' + statusLabelFor(anime.type, entry.status) + ')'}` : `${titleOf(anime)} is off ${label}`);
+                if (!cur && entry.status !== 'NONE') logActivity(entry.anime, null, entry);
+                showToast(entry[flag] ? `${titleOf(anime)} → ${label}${cur || entry.status === 'NONE' ? '' : ' (and ' + statusLabelFor(anime.type, entry.status) + ')'}` : `${titleOf(anime)} is off ${label}`);
             } catch (err) { if (cur) setSoloLocal(cur); else fetchSolo(); showToast('Could not save: ' + (err.message || err), 'error'); }
         };
         const toggleRewish = (anime) => toggleFlag(anime, 'REWISH');
@@ -5790,8 +5795,28 @@ createApp({
             quickSolo(m, st);
         };
         const addOn = (m, st) => FLAG_OF[st] ? isFlagged(m?.id, st) : soloEntry(m?.id)?.status === st;
+        // v1.4 tap a status it already has to take it off: it stays only on its mark lists (In Rotation, Wanna …),
+        // or leaves your solo list if it has none (squad lists aren't touched)
+        const dropFromSolo = async (anime, msg) => {
+            const cur = soloEntry(anime.id); if (!cur) return;
+            soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
+            if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
+            try { await deleteSolo(anime.id); showToast(msg || `${titleOf(anime)} is off your list`); }
+            catch (err) { setSoloLocal(cur); showToast('Could not save: ' + (err.message || err), 'error'); }
+        };
+        const uncheckStatus = async (anime) => {
+            const cur = soloEntry(anime.id); if (!cur) return;
+            const label = statusLabelFor(anime.type, cur.status);
+            if (!cur.rewish && !cur.rotation) { await dropFromSolo(anime, `${titleOf(anime)} is off ${label} (and your list)`); return; }
+            const entry = { ...cur, status: 'NONE' };
+            setSoloLocal(entry);
+            if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
+            try { await upsertSolo(entry); showToast(`${titleOf(anime)} is off ${label}`); }
+            catch (err) { setSoloLocal(cur); showToast('Could not save: ' + (err.message || err), 'error'); }
+        };
         const quickSolo = async (anime, action) => {
             if (action === 'REMOVE') { removeEverywhere(anime); return; }
+            if (STATUS_ORDER.includes(action) && action !== 'REPEATING' && soloEntry(anime.id)?.status === action) { uncheckStatus(anime); return; }
             if (FLAG_OF[action]) { toggleFlag(anime, action); return; }   // v10.1 the + menu's "Wanna …" / "In rotation"
             if (action === 'COMPLETED' || action === 'REPEATING') await fillTotal(anime);
             const { entry, error } = soloNext(anime, action);
@@ -5916,10 +5941,6 @@ createApp({
         watch(() => selectedAnime.value?.externalLinks, (ext) => { const a = selectedAnime.value; if (a?.type === 'ANIME' && ext) { autoLinks[a.id] = streamLinks(ext); keepAutoLinks(); } });
         // every episode is already counted (finished, not rewatching): the link just opens, nothing to ask
         const wlAtEnd = (a) => { const e = soloEntry(a?.id), total = totalOf(e?.anime || a); return !!total && e?.status !== 'REPEATING' && nextEpOf(a.id) > total; };
-        // v10.6 the question starts at how many you watched last time for that title
-        const WATCH_N_KEY = 'anicoop_watch_n_v1';
-        const lastN = (id) => { try { return Math.max(1, Number(JSON.parse(localStorage.getItem(WATCH_N_KEY) || '{}')[id]) || 1); } catch { return 1; } };
-        const keepN = (id, n) => { try { const m = JSON.parse(localStorage.getItem(WATCH_N_KEY) || '{}'); m[id] = n; const k = Object.keys(m); k.slice(0, Math.max(0, k.length - 300)).forEach(x => delete m[x]); localStorage.setItem(WATCH_N_KEY, JSON.stringify(m)); } catch {} };
         const watchAsk = ref((() => { try { const v = JSON.parse(localStorage.getItem(WATCH_ASK_KEY) || 'null'); return v?.anime?.id ? { ...v, n: v.n || 1 } : null; } catch { return null; } })());
         const keepAsk = () => { try { if (watchAsk.value) localStorage.setItem(WATCH_ASK_KEY, JSON.stringify({ anime: watchAsk.value.anime, from: watchAsk.value.from, n: watchAsk.value.n })); else localStorage.removeItem(WATCH_ASK_KEY); } catch {} };
         // (v10.7.1 the "back within a minute: nothing to ask" rule is gone: the owner found it annoying when testing)
@@ -5935,7 +5956,7 @@ createApp({
             if (wlAtEnd(a)) return;
             const e = soloEntry(a.id), total = totalOf(e?.anime || a);
             const left = total ? Math.max(1, total - nextEpOf(a.id) + 1) : 999;
-            watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: Math.min(lastN(a.id), left) }; keepAsk();
+            watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: 1 }; keepAsk();   // v1.4 always starts at 1 (the owner's choice)
         };
         // v1.1 a pop-up window over anicoop (streaming sites refuse to be shown inside another site, so a window of its
         // own is as close as it gets). One window is reused; phones and "New tab" in Settings open a tab instead.
@@ -6049,7 +6070,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const anime = soloEntry(w.anime.id)?.anime || normMedia(w.anime);
             if (anime.type === 'TV') await fillTotal(anime);
             const want = clamp(Math.round(Number(w.n) || 1), 1, 999);
-            keepN(anime.id, want);
             const before = soloEntry(anime.id);
             let entry = null, done = 0, finishedRepeat = 0;
             for (let i = 0; i < want; i++) {   // one episode at a time: the same rules as the +1 button
@@ -8127,7 +8147,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (!v || rd.loading || !rd.pages.length) return;
             const c = rd.chapter; if (Number.isNaN(chNum(c))) return;
             const seg = rdSeg.value, page = Math.min(rd.i - (seg?.start || 0), (seg?.count || rd.pages.length) - 1);
-            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), n: seg?.count || rd.pages.length, at: Date.now() };
+            readPos[rd.manga.id] = { ch: c.ch, chId: c.id, src: c.src || 'mangadex', page: Math.max(0, page), n: seg?.count || rd.pages.length, prog: myProgress(rd.manga), at: Date.now() };
             saveReadPos();
             syncReadPosSoon(rd.manga.id);
         });
@@ -8396,7 +8416,9 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const resumeReading = async (a) => {
             const e = soloEntry(a.id), prog = myProgress(a);
             const pos = [readPos[a.id], e?.readPos].filter(p => p?.ch != null && !Number.isNaN(parseFloat(p.ch))).sort((x, y) => (y.at || 0) - (x.at || 0))[0] || null;
-            const movedOn = pos && prog > Math.floor(parseFloat(pos.ch)) && e?.updatedAt && new Date(e.updatedAt).getTime() > (pos.at || 0) + 60000;
+            // (v1.4 "moved on" = your chapter count went up since the spot was saved. Comparing dates misfired: saving the
+            // spot itself makes the entry look updated, so reading chapter 1 again with 8 read jumped to 8.5.)
+            const movedOn = pos && pos.prog != null && prog > pos.prog && prog > Math.floor(parseFloat(pos.ch));
             const want = pos && !movedOn ? parseFloat(pos.ch) : null;
             const finished = want != null && pos.n > 0 && pos.page >= pos.n - 1;
             if (pos?.src && readTabs.value.some(t => t.id === pos.src)) readSrc.value = pos.src;   // the same source as last time
@@ -10084,6 +10106,55 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             } catch (err) { steamAcc.error = err.message || String(err); showToast('Steam import failed: ' + steamAcc.error, 'error'); }
             finally { steamAcc.importing = false; steamAcc.step = ''; }
         };
+        // ---- v1.4 Steam achievements: on a game's page (like Steam's own list) and the total on your profile ----
+        const ach = reactive({ app: null, items: [], loading: false, error: '', private: false, filter: 'all', sort: 'steam', shown: 24, reveal: {} });
+        const loadAch = async (appid, force = false) => {
+            const id = PREFS.steam?.id; if (!id || !appid) return;
+            if (!force && ach.app === appid && ach.items.length) return;
+            Object.assign(ach, { app: appid, loading: true, error: '', private: false, shown: 24, reveal: {} });
+            if (ach.app !== appid || force) ach.items = [];
+            try {
+                const d = await steamFn({ action: 'achievements', steamid: id, appid });
+                if (ach.app !== appid) return;
+                ach.items = d.items || []; ach.private = !!d.private;
+            } catch (err) { if (ach.app === appid) ach.error = err.message || String(err); }
+            finally { if (ach.app === appid) ach.loading = false; }
+        };
+        watch(() => selectedAnime.value?.type === 'GAME' && PREFS.steam?.id ? selectedAnime.value.steamId || null : null, (app) => { if (app) loadAch(app); else { ach.app = null; ach.items = []; } });
+        const achStats = computed(() => { const t = ach.items.length, d = ach.items.filter(a => a.done).length; return { done: d, total: t, pct: t ? Math.round(d / t * 100) : 0 }; });
+        const achView = computed(() => {
+            let list = ach.items.filter(a => ach.filter === 'all' || (ach.filter === 'done' ? a.done : !a.done));
+            if (ach.sort === 'rare') list = [...list].sort((x, y) => (x.pct < 0 ? 999 : x.pct) - (y.pct < 0 ? 999 : y.pct));
+            else if (ach.sort === 'recent') list = [...list].sort((x, y) => (y.at || 0) - (x.at || 0) || (x.done === y.done ? 0 : x.done ? -1 : 1));
+            else list = [...list].sort((x, y) => (x.done === y.done ? 0 : x.done ? -1 : 1));   // Steam's order: unlocked first
+            return list;
+        });
+        const achDate = (t) => t ? new Date(t * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        // your profile: unlocked / total over every game you've played on Steam (40 games per call, kept 6 hours)
+        const ACH_TOTAL_KEY = 'anicoop_steam_ach_v1';
+        const achTotal = reactive({ done: 0, total: 0, perfect: 0, games: 0, loading: false, at: 0 });
+        const loadAchTotal = async (force = false) => {
+            const id = PREFS.steam?.id; if (!id || !steamAcc.lib || achTotal.loading) return;
+            if (!force) { try { const c = JSON.parse(localStorage.getItem(ACH_TOTAL_KEY) || 'null'); if (c?.id === id && Date.now() - c.at < 6 * 3600e3) { Object.assign(achTotal, c.v, { at: c.at }); return; } } catch {} }
+            const apps = Object.values(steamAcc.lib).filter(g => g.mins > 0).sort((a, b) => b.mins - a.mins).map(g => g.appid).slice(0, 600);
+            achTotal.loading = true;
+            try {
+                const all = {};
+                for (let i = 0; i < apps.length; i += 40) Object.assign(all, (await steamFn({ action: 'achsummary', steamid: id, appids: apps.slice(i, i + 40) })).games || {});
+                const vals = Object.values(all);
+                const v = { done: vals.reduce((n, x) => n + x.done, 0), total: vals.reduce((n, x) => n + x.total, 0), perfect: vals.filter(x => x.done === x.total).length, games: vals.length };
+                Object.assign(achTotal, v, { at: Date.now() });
+                try { localStorage.setItem(ACH_TOTAL_KEY, JSON.stringify({ id, at: achTotal.at, v })); } catch {}
+            } catch {} finally { achTotal.loading = false; }
+        };
+        watch(() => activeTab.value === 'profile' && !viewUserId.value && PREFS.steam?.id && steamCount.value ? PREFS.steam.id : null, (id) => { if (id) loadAchTotal(); });
+        // v1.4 Play on Steam: a small anicoop window while Steam starts the game (your hours and achievements in it)
+        const steamPlay = reactive({ open: false, game: null, tries: 0 });
+        const playOnSteam = (g) => {
+            if (!g?.steamId) return;
+            Object.assign(steamPlay, { open: true, game: g, tries: steamPlay.game?.id === g.id ? steamPlay.tries + 1 : 1 });
+            setTimeout(() => { if (steamPlay.open) location.href = 'steam://run/' + g.steamId; }, 650);
+        };
         const malFn = async (payload) => {
             const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'mal', ...payload } });
             if (error) {
@@ -10407,7 +10478,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

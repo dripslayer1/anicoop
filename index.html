@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.3">
+    <link rel="stylesheet" href="app.css?v=1.4b">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=1.3" defer></script>
+    <script src="app.js?v=1.4b" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.3</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v1.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -636,7 +636,7 @@
                                 <button v-if="playKind === 'manga'" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
                                 <button v-else-if="playKind" @click="watchMine(selectedAnime)" class="play-cta md:!hidden"><i class="fa-solid fa-play"></i> {{ isMovie || !linkInfo(selectedAnime) || wlAtEnd(selectedAnime) ? 'Watch' : 'Watch ep ' + nextEpOf(selectedAnime.id) }}<span v-if="!linkInfo(selectedAnime)" class="opacity-70 font-semibold">· no link saved</span></button>
                                 <!-- v1.1 games on Steam: Steam opens and starts it (or offers to install it) -->
-                                <a v-if="selectedAnime.type === 'GAME' && selectedAnime.steamId && (!steamAcc.lib || steamOwned(selectedAnime.steamId))" :href="'steam://run/' + selectedAnime.steamId" class="steam-play" title="Opens Steam and starts the game (Steam offers to install it if you don't have it yet)"><i class="fa-brands fa-steam"></i> Play on Steam<span v-if="steamOwned(selectedAnime.steamId)?.mins" class="steam-hrs">{{ steamHours(steamOwned(selectedAnime.steamId)) }} h</span></a>
+                                <a v-if="selectedAnime.type === 'GAME' && selectedAnime.steamId && (!steamAcc.lib || steamOwned(selectedAnime.steamId))" href="#" @click.prevent="playOnSteam(selectedAnime)" class="steam-play" title="Opens Steam and starts the game (Steam offers to install it if you don't have it yet)"><i class="fa-brands fa-steam"></i> Play on Steam<span v-if="steamOwned(selectedAnime.steamId)?.mins" class="steam-hrs">{{ steamHours(steamOwned(selectedAnime.steamId)) }} h</span></a>
                                 <a v-else-if="selectedAnime.type === 'GAME' && selectedAnime.steamId" :href="'https://store.steampowered.com/app/' + selectedAnime.steamId" target="_blank" rel="noopener" class="steam-play" title="Not in your Steam library: open its store page"><i class="fa-brands fa-steam"></i> Get it on Steam</a>
                                 <button v-if="selectedAnime.trailer?.id" @click="playTrailer(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-volt text-onvolt text-xs font-bold active:scale-95 transition-transform"><i class="fa-solid fa-play text-[10px]"></i> Watch trailer</button>
                                 <button @click="sendAnimeTo(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-paper-plane text-[10px] text-lilac"></i> Send to a friend</button>
@@ -736,6 +736,37 @@
                                         <p v-else class="text-xs text-mute">{{ !selectedAnime.steamId ? 'This game isn’t on Steam.' : gameExtra.steam === false ? 'Couldn’t load Steam info right now.' : 'Loading Steam info…' }}</p>
                                     </div>
                                 </div>
+
+                                <!-- v1.4 Steam achievements (your Steam account linked in Settings → Import & sync) -->
+                                <section v-if="PREFS.steam && selectedAnime.steamId && (ach.loading || ach.items.length || ach.private || ach.error)" class="mt-8 max-w-3xl ach-sec">
+                                    <div class="flex flex-wrap items-end justify-between gap-3">
+                                        <div>
+                                            <p class="kicker">// steam</p>
+                                            <h3 class="mt-1 font-display font-semibold text-ink text-xl">Achievements <span v-if="achStats.total" class="font-mono text-sm text-sub">{{ achStats.done }} / {{ achStats.total }}</span></h3>
+                                        </div>
+                                        <div v-if="ach.items.length" class="flex items-center gap-2">
+                                            <div class="seg !h-9"><button v-for="f in [{ v: 'all', l: 'All' }, { v: 'done', l: 'Unlocked' }, { v: 'locked', l: 'Locked' }]" :key="f.v" @click="ach.filter = f.v; ach.shown = 24" :class="{ 'is-on': ach.filter === f.v }" class="seg-btn !px-2.5 !text-[11px]">{{ f.l }}</button></div>
+                                            <div class="chip-wrap"><select v-model="ach.sort" class="chip !h-9 !text-xs"><option value="steam">Unlocked first</option><option value="recent">Recently unlocked</option><option value="rare">Rarest first</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                                            <button @click="loadAch(selectedAnime.steamId, true)" :disabled="ach.loading" class="icon-btn !w-9 !h-9" title="Check Steam again"><i class="fa-solid fa-rotate text-xs" :class="{ 'fa-spin': ach.loading }"></i></button>
+                                        </div>
+                                    </div>
+                                    <div v-if="achStats.total" class="ach-bar mt-4"><i :style="{ transform: 'scaleX(' + achStats.pct / 100 + ')' }"></i><span>{{ achStats.pct }}%</span></div>
+                                    <p v-if="ach.loading && !ach.items.length" class="text-xs text-mute mt-4"><i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>Loading from Steam…</p>
+                                    <p v-else-if="ach.error" class="text-xs text-pink mt-4">{{ ach.error }}</p>
+                                    <p v-else-if="ach.private" class="text-xs text-sub mt-4 leading-relaxed">Steam didn’t share your achievements for this game. In Steam: <span class="text-ink">Profile → Edit Profile → Privacy Settings → Game details: Public</span>.</p>
+                                    <div v-if="ach.items.length" class="mt-4 grid sm:grid-cols-2 gap-2">
+                                        <div v-for="a in achView.slice(0, ach.shown)" :key="a.api" class="ach-row" :class="{ done: a.done }">
+                                            <img :src="a.done ? a.icon : a.gray" class="ach-ico" loading="lazy" alt="">
+                                            <div class="min-w-0 flex-1">
+                                                <p class="ach-name">{{ a.name }}</p>
+                                                <p v-if="a.hidden && !a.done && !ach.reveal[a.api]" class="ach-desc"><button @click="ach.reveal[a.api] = true" class="ach-reveal"><i class="fa-solid fa-eye-slash"></i> Hidden achievement · show</button></p>
+                                                <p v-else class="ach-desc">{{ a.desc || '—' }}</p>
+                                                <p class="ach-meta"><span v-if="a.done"><i class="fa-solid fa-check"></i> {{ achDate(a.at) }}</span><span v-else><i class="fa-solid fa-lock"></i> Locked</span><span v-if="a.pct >= 0" :class="{ rare: a.pct < 10 }">{{ a.pct }}% of players</span></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button v-if="achView.length > ach.shown" @click="ach.shown += 48" class="btn-ghost mt-3 !py-2 !text-xs">Show {{ Math.min(48, achView.length - ach.shown) }} more</button>
+                                </section>
                             </template>
 
                             <div v-if="detailTags.length || (selectedAnime.tags || []).some(t => t.isMediaSpoiler)" class="mt-6 flex flex-wrap items-center gap-1.5 max-w-3xl">
@@ -2760,6 +2791,16 @@
                                     </button>
                                 </div>
                             </div>
+                            <!-- v1.4 Steam achievements over every game you've played (Settings → Import & sync links Steam) -->
+                            <div v-if="PREFS.steam && (achTotal.total || achTotal.loading)" class="ach-total mt-3">
+                                <i class="fa-brands fa-steam"></i>
+                                <div class="min-w-0 flex-1">
+                                    <p class="ach-total-t"><b>{{ achTotal.done.toLocaleString() }}</b> of {{ achTotal.total.toLocaleString() }} Steam achievements<span v-if="achTotal.loading" class="text-mute"> · counting…</span></p>
+                                    <div class="ach-bar mt-1.5"><i :style="{ transform: 'scaleX(' + (achTotal.total ? achTotal.done / achTotal.total : 0) + ')' }"></i></div>
+                                    <p class="ach-total-s">{{ achTotal.total ? Math.round(achTotal.done / achTotal.total * 100) : 0 }}% · {{ achTotal.perfect }} perfect game{{ achTotal.perfect === 1 ? '' : 's' }} · from {{ achTotal.games }} game{{ achTotal.games === 1 ? '' : 's' }} with achievements</p>
+                                </div>
+                                <button @click="loadAchTotal(true)" :disabled="achTotal.loading" class="icon-btn !w-8 !h-8 shrink-0" title="Count again"><i class="fa-solid fa-rotate text-[11px]" :class="{ 'fa-spin': achTotal.loading }"></i></button>
+                            </div>
                         </div>
                     </section>
 
@@ -3236,6 +3277,33 @@
                                 <i v-if="tour.busy" class="fa-solid fa-circle-notch fa-spin"></i>
                                 {{ tour.i === 0 ? 'Show me around' : tourStep.last ? 'Start exploring' : 'Next' }} <i v-if="!tour.busy && !tourStep.last" class="fa-solid fa-arrow-right"></i>
                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+        <!-- v1.4 Play on Steam: an anicoop window while Steam starts the game -->
+        <transition name="fade">
+            <div v-if="steamPlay.open && steamPlay.game" class="modal-back !z-[95]" @click.self="steamPlay.open = false">
+                <div class="steam-launch" role="dialog">
+                    <div class="sl-bg" :style="{ backgroundImage: 'url(' + (steamPlay.game.bannerImage || steamPlay.game.coverImage?.large || '') + ')' }"></div>
+                    <button @click="steamPlay.open = false" class="icon-btn !w-9 !h-9 sl-x" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="sl-body">
+                        <img :src="steamPlay.game.coverImage?.large" class="sl-cover" alt="">
+                        <div class="min-w-0">
+                            <p class="sl-k"><i class="fa-brands fa-steam"></i> starting in Steam</p>
+                            <h3 class="sl-t">{{ titleOf(steamPlay.game) }}</h3>
+                            <p class="sl-s">
+                                <span v-if="steamOwned(steamPlay.game.steamId)?.mins"><i class="fa-solid fa-clock"></i> {{ steamHours(steamOwned(steamPlay.game.steamId)) }} h played</span>
+                                <span v-if="ach.app === steamPlay.game.steamId && achStats.total"><i class="fa-solid fa-trophy"></i> {{ achStats.done }} / {{ achStats.total }} achievements</span>
+                            </p>
+                            <div class="sl-bar"><i></i></div>
+                            <p class="sl-hint">Your browser may ask to open Steam: allow it. Nothing happens? Steam may not be installed on this device.</p>
+                            <div class="flex flex-wrap gap-2 mt-4">
+                                <button @click="playOnSteam(steamPlay.game)" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid fa-play"></i> Open Steam again</button>
+                                <a :href="'https://store.steampowered.com/app/' + steamPlay.game.steamId" target="_blank" rel="noopener" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid fa-store"></i> Store page</a>
+                                <button @click="steamPlay.open = false" class="btn-ghost !py-2 !px-4 !text-xs">Close</button>
+                            </div>
                         </div>
                     </div>
                 </div>
