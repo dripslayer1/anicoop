@@ -5902,17 +5902,8 @@ createApp({
         const lastN = (id) => { try { return Math.max(1, Number(JSON.parse(localStorage.getItem(WATCH_N_KEY) || '{}')[id]) || 1); } catch { return 1; } };
         const keepN = (id, n) => { try { const m = JSON.parse(localStorage.getItem(WATCH_N_KEY) || '{}'); m[id] = n; const k = Object.keys(m); k.slice(0, Math.max(0, k.length - 300)).forEach(x => delete m[x]); localStorage.setItem(WATCH_N_KEY, JSON.stringify(m)); } catch {} };
         const watchAsk = ref((() => { try { const v = JSON.parse(localStorage.getItem(WATCH_ASK_KEY) || 'null'); return v?.anime?.id ? { ...v, n: v.n || 1 } : null; } catch { return null; } })());
-        const keepAsk = () => { try { if (watchAsk.value) localStorage.setItem(WATCH_ASK_KEY, JSON.stringify({ anime: watchAsk.value.anime, from: watchAsk.value.from, n: watchAsk.value.n, at: watchAsk.value.at })); else localStorage.removeItem(WATCH_ASK_KEY); } catch {} };
-        // v10.6 back within a minute: you only had a look, nothing to ask
-        const QUICK_BACK_MS = 60000;
-        const quickBack = () => {
-            const w = watchAsk.value;
-            if (!w?.at || document.hidden) return;
-            if (w.away && Date.now() - w.at < QUICK_BACK_MS) { watchAsk.value = null; keepAsk(); showToast('Back already? Nothing counted'); }
-            else if (w.away) { w.at = 0; keepAsk(); }   // a real watch: from now on the question just waits
-        };
-        document.addEventListener('visibilitychange', () => { const w = watchAsk.value; if (!w?.at) return; if (document.hidden) w.away = true; else quickBack(); });
-        if (watchAsk.value?.at) { watchAsk.value.away = true; setTimeout(quickBack, 0); }   // the phone reloaded the page while you were away
+        const keepAsk = () => { try { if (watchAsk.value) localStorage.setItem(WATCH_ASK_KEY, JSON.stringify({ anime: watchAsk.value.anime, from: watchAsk.value.from, n: watchAsk.value.n })); else localStorage.removeItem(WATCH_ASK_KEY); } catch {} };
+        // (v10.7.1 the "back within a minute: nothing to ask" rule is gone: the owner found it annoying when testing)
         const askLeft = computed(() => {   // episodes left to count (null = unknown)
             const w = watchAsk.value; if (!w) return null;
             const e = soloEntry(w.anime.id), total = totalOf(e?.anime || w.anime);
@@ -5924,7 +5915,7 @@ createApp({
             if (wlAtEnd(a)) return;
             const e = soloEntry(a.id), total = totalOf(e?.anime || a);
             const left = total ? Math.max(1, total - nextEpOf(a.id) + 1) : 999;
-            watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: Math.min(lastN(a.id), left), at: Date.now(), away: false }; keepAsk();
+            watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: Math.min(lastN(a.id), left) }; keepAsk();
         };
         // v10.6 send the link (on the episode you're at) to a friend in chat
         const sendMyLink = (a) => {
@@ -5949,7 +5940,7 @@ createApp({
                 .sort((x, y) => (/crunchyroll/i.test(y.site) ? 1 : 0) - (/crunchyroll/i.test(x.site) ? 1 : 0));
         });
         const useOfficial = (a, l) => { wlEdit.text = l.url; saveWatchLink(a); };
-        const stepAsk = (d) => { const w = watchAsk.value; if (!w) return; const max = askLeft.value ?? 999; w.n = clamp((Number(w.n) || 0) + d, 1, Math.max(1, max)); w.at = 0; keepAsk(); };
+        const stepAsk = (d) => { const w = watchAsk.value; if (!w) return; const max = askLeft.value ?? 999; w.n = clamp((Number(w.n) || 0) + d, 1, Math.max(1, max)); keepAsk(); };
         const closeAsk = () => { watchAsk.value = null; keepAsk(); };
         const saveAsk = async () => {
             const w = watchAsk.value; if (!w) return;
@@ -7538,7 +7529,9 @@ createApp({
             else showToast(a ? `No source in this list has “${titleOf(a)}”. Try another language or repository.` : 'No working sources in this list. Try another language or repository.', 'error');
         };
         // open the Extensions window for a section (and the title you're on)
-        const openExtensions = (kind = playKind.value || 'manga', title = playKind.value === kind ? selectedAnime.value : null) => {
+        // v10.7.1 manga only: anime / TV watch through your watch link, so their extensions are never shown
+        const openExtensions = (kind = 'manga', title = playKind.value === 'manga' ? selectedAnime.value : null) => {
+            kind = 'manga';
             if (repoScan.running && (kind !== extKind.value || title?.id !== extFor.value?.id)) repoScan.running = false;
             if (kind !== extKind.value || title?.id !== extFor.value?.id) Object.assign(repoScan, { done: 0, total: 0, found: 0, onlyOk: false });
             extKind.value = kind; extFor.value = title || null;

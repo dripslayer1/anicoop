@@ -788,10 +788,15 @@ free "API client":
   - **Automatic links (anime):** no link of your own → Watch uses the official site AniList lists (Crunchyroll first),
     marked "AUTO". Settings → Lists → **Watch links** picks your service (or Off). Your own link always wins.
   - **{ep} links:** if a site's episode links end in the number, save …/episode-{ep} and Watch opens the right episode.
-  - **The question remembers** how many you watched last time for that title, and if you're back within a minute it
-    doesn't ask ("Back already? Nothing counted").
+  - **The question remembers** how many you watched last time for that title,.
   - **Send:** in "My watch link", sends the link (on your episode) to a friend in chat.
 - **v10.6.1:** an episode link can have the number itself in curly brackets (…/episode-{12}); it works like {ep}. Links
   saved that way before work too.
 - **v10.7:** the "On your sources" row is gone from anime and Movies & TV pages (and those sources aren't checked in
   the background any more). Manga keeps it.
+- **v10.7.1:** the "Back already? Nothing counted" rule is gone: the question always waits for your answer.
+
+## v1.0 — renumbered (after v10.7.1)
+
+The owner restarted the version numbers: the footer now says **v1.0** (it follows v10.7.1). **No SQL, no Edge Function
+change.** Also in this update: the Extensions window only shows manga (anime / TV watch through your watch link).

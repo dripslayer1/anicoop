@@ -249,12 +249,14 @@ These are cumulative; the README has one section per version.
   (localStorage `anicoop_autolinks_v1`, AniList `externalLinks` STREAMING, fetched 50 ids per call for anime on your
   list with no link; a title page fills it too). `linkInfo(a)` = own link, else the automatic one, with `{ep}` →
   next episode (`cleanLink` keeps `{ep}` through `new URL`). The question starts at the last count for that title
-  (`anicoop_watch_n_v1`) and is dropped if the tab is hidden and back within 60 s (`quickBack`). `sendMyLink` reuses
+  (`anicoop_watch_n_v1`) (v10.7.1 removed the 60-second `quickBack` rule at the owner's request). `sendMyLink` reuses
   the chat "episode" card. Not done (told the owner why): squad-shared links, new-episode alerts with Watch, link
   health checks, TV seasons.
 - **v10.6.1:** `cleanLink` / `fillEp` also take the number in braces (`{12}`, `{ e }`, `%7B12%7D`) as the episode slot.
 - **v10.7:** `availRows` and the background `checkAvailability` are manga only (owner: anime / TV sources "not needed
-  anymore"). The anime / TV sources window (`openWatch`) is still reachable from Extensions, nothing else links to it.
+  anymore"). The anime / TV sources window (`openWatch`) isn't reachable any more.
+- **v10.7.1 / v1.0:** the 60-second quick-return rule is gone; `openExtensions` is forced to `'manga'`. **The owner renumbered
+  the app to v1.0** (footer, `?v=1.0`, `sw.js` VERSION `anicoop-v1.0`): count on from there (v1.1, v1.2…), not v10.x.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
