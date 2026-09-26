@@ -765,9 +765,9 @@ free "API client":
 18. **Settings → Profile decorations:** each one (avatar frame, profile theme, page background, effect, name style,
     badges) is a small row showing what you picked; tap it to open its options.
 
-## v10.3 — my watch link (includes v10.2)
+## v10.3 / v10.4 — my watch link (includes v10.2)
 
-**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.3.
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.4.
 
 - **v10.2:** in Lists, the Genre filter sits right under "Sort by".
 - **My watch link (anime and Movies & TV):** on a title's page, "Add where you watch it" saves any link (Crunchyroll,
@@ -776,3 +776,8 @@ free "API client":
   button (a rewatch counts on its own counter, the last episode marks it Completed, AniList / MAL sync as usual);
   **Not yet** counts nothing. The question stays until you answer, even after a reload. Manga, games and songs don't
   have it (the owner's choice).
+- **v10.4:** on anime and Movies & TV pages the big **Watch** button opens your saved link (and asks how many episodes
+  afterwards). No link saved → a message, and the link box opens. The extra "Watch · continue" button is gone on
+  computers (phones keep it, their banner button is hidden). Manga keeps Read as before. Anime pages list the
+  **official sites** AniList has (Crunchyroll first, then Netflix, HIDIVE…): open one, or tap **Use** to save it as
+  your watch link.

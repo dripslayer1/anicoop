@@ -1963,3 +1963,12 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
   .wask-step { margin-left: 48px; }
   .wask > .btn-primary { flex: 1; justify-content: center; }
 }
+
+/* ===== v10.4 official streaming links in "My watch link" ===== */
+.wl-off { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid rgb(var(--c-line)); }
+.wl-off > p { padding-top: 8px; }
+.wl-off-row { display: flex; align-items: center; gap: 6px; }
+.wl-off-site { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgb(var(--c-line)); font-size: 12px; font-weight: 700; color: rgb(var(--c-ink)); border-left: 3px solid var(--oc); }
+.wl-off-use { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; color: rgb(var(--c-sub)); border: 1px solid rgb(var(--c-line)); }
+.wl-off-use.is-on { color: #22c55e; border-color: rgb(34 197 94 / .4); }
+@media (hover: hover) { .wl-off-site:hover, .wl-off-use:not(.is-on):hover { border-color: rgb(var(--c-line2)); color: rgb(var(--c-ink)); } }

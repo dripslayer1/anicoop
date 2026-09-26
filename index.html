@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.3">
+    <link rel="stylesheet" href="app.css?v=10.4">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.3" defer></script>
+    <script src="app.js?v=10.4" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.3</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -508,7 +508,7 @@
                         <div class="absolute inset-0 bg-gradient-to-r from-base/80 to-transparent"></div>
                     </div>
                     <div class="max-w-[1200px] mx-auto px-4 md:px-8 -mt-40 md:-mt-52 relative flex flex-col md:flex-row gap-8 md:gap-12 det-wrap">
-                        <button v-if="playKind" @click="openWatch" class="banner-play md:!hidden" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : isMovie ? 'sources' : 'episodes & sources' }}</small></span></button>
+                        <button v-if="playKind" @click="playKind === 'manga' ? openWatch() : watchMine(selectedAnime)" class="banner-play md:!hidden" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : watchLinkOf(selectedAnime.id) && !wlAtEnd(selectedAnime) ? 'Watch ep ' + nextEpOf(selectedAnime.id) : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : watchLinkOf(selectedAnime.id) ? 'on ' + linkHost(watchLinkOf(selectedAnime.id)) : 'no link saved' }}</small></span></button>
                         <div class="w-full md:w-72 shrink-0 flex flex-col gap-5 det-left">
                             <div class="relative w-44 md:w-full mx-auto det-poster">
                                 <img :src="selectedAnime.coverImage?.large" class="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" alt="">
@@ -589,6 +589,15 @@
                                     <p class="flex items-center gap-2 text-[11px] text-mute min-w-0"><span class="truncate">{{ linkHost(watchLinkOf(selectedAnime.id)) }}</span><button @click="startWatchLink(selectedAnime)" class="ml-auto shrink-0 text-sub hover:text-ink font-semibold"><i class="fa-solid fa-pen text-[9px] mr-1"></i>Change</button></p>
                                 </template>
                                 <button v-else @click="startWatchLink(selectedAnime)" class="rewish-btn wl-add"><i class="fa-solid fa-link"></i><span>Add where you watch it</span><i class="fa-solid fa-plus ml-auto text-[10px]"></i></button>
+                                <!-- v10.4 official streaming sites (AniList): open one, or keep it as your watch link -->
+                                <div v-if="officialLinks.length" class="wl-off">
+                                    <p class="text-[11px] text-mute">Official sites</p>
+                                    <div v-for="l in officialLinks" :key="l.site" class="wl-off-row">
+                                        <a :href="l.url" target="_blank" rel="noopener" class="wl-off-site" :style="{ '--oc': l.color || '#F47521' }"><img v-if="l.icon" :src="l.icon" alt="" class="w-4 h-4 rounded-sm"><i v-else class="fa-solid fa-play text-[9px]"></i><span class="truncate">{{ l.site }}</span><i class="fa-solid fa-arrow-up-right-from-square text-[9px] opacity-60 ml-auto"></i></a>
+                                        <button v-if="watchLinkOf(selectedAnime.id) !== l.url" @click="useOfficial(selectedAnime, l)" class="wl-off-use" :title="'Save ' + l.site + ' as your watch link'"><i class="fa-solid fa-link"></i> Use</button>
+                                        <span v-else class="wl-off-use is-on" title="This is your watch link"><i class="fa-solid fa-check"></i></span>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- more info -->
@@ -612,13 +621,16 @@
                             <div class="det-head"><p class="kicker">// <template v-if="selectedAnime.type === 'GAME'">game<span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span><span v-if="selectedAnime.coop"> · co-op</span></template><template v-else-if="selectedAnime.type === 'TV'">{{ selectedAnime.format === 'MOVIE' ? 'movie' : 'tv series' }}<span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span><span v-if="selectedAnime.status === 'RELEASING'"> · airing</span></template><template v-else-if="selectedAnime.type === 'SONG'">song<span v-if="selectedAnime.artists?.length"> · {{ selectedAnime.artists.join(', ') }}</span><span v-if="selectedAnime.seasonYear"> · {{ selectedAnime.seasonYear }}</span></template><template v-else>{{ (selectedAnime.format || 'anime').replace('_', ' ') }}<span v-if="selectedAnime.seasonYear"> · {{ (selectedAnime.season || '').toLowerCase() }} {{ selectedAnime.seasonYear }}</span></template></p>
                             <div class="mt-3 flex items-center gap-6">
                                 <h1 class="min-w-0 flex-grow font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ titleOf(selectedAnime) }}</h1>
-                                <button v-if="playKind" @click="openWatch" class="banner-play banner-play-inline !hidden md:!flex" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : isMovie ? 'sources' : 'episodes & sources' }}</small></span></button>
+                                <button v-if="playKind" @click="playKind === 'manga' ? openWatch() : watchMine(selectedAnime)" class="banner-play banner-play-inline !hidden md:!flex" :aria-label="playKind === 'manga' ? 'Read' : 'Watch'"><span class="bp-icon"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i></span><span class="bp-text"><b>{{ playKind === 'manga' ? 'Read' : isMovie ? 'Watch movie' : watchLinkOf(selectedAnime.id) && !wlAtEnd(selectedAnime) ? 'Watch ep ' + nextEpOf(selectedAnime.id) : 'Watch' }}</b><small>{{ playKind === 'manga' ? 'chapters & sources' : watchLinkOf(selectedAnime.id) ? 'on ' + linkHost(watchLinkOf(selectedAnime.id)) : 'no link saved' }}</small></span></button>
                             </div>
                             <p v-if="altTitleOf(selectedAnime)" class="mt-2 text-sub">{{ altTitleOf(selectedAnime) }}</p></div>
 
                             <div class="flex flex-wrap gap-2 mt-6 det-actions">
                                 <!-- Read / Watch: opens the window with your sources and every chapter / episode -->
-                                <button v-if="playKind" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
+                                <!-- v10.4 anime / TV: the Watch buttons use your saved link. On a computer the banner has it, so this one is
+                                     for manga, and for anime / TV only on phones (the banner button is hidden there) -->
+                                <button v-if="playKind === 'manga'" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
+                                <button v-else-if="playKind" @click="watchMine(selectedAnime)" class="play-cta md:!hidden"><i class="fa-solid fa-play"></i> {{ isMovie || !watchLinkOf(selectedAnime.id) || wlAtEnd(selectedAnime) ? 'Watch' : 'Watch ep ' + nextEpOf(selectedAnime.id) }}<span v-if="!watchLinkOf(selectedAnime.id)" class="opacity-70 font-semibold">· no link saved</span></button>
                                 <button v-if="selectedAnime.trailer?.id" @click="playTrailer(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-volt text-onvolt text-xs font-bold active:scale-95 transition-transform"><i class="fa-solid fa-play text-[10px]"></i> Watch trailer</button>
                                 <button @click="sendAnimeTo(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-paper-plane text-[10px] text-lilac"></i> Send to a friend</button>
                                 <button v-if="isAniListType(selectedAnime.type)" @click="toggleFollow(selectedAnime)" :class="isFollowing(selectedAnime.id) ? 'bg-volt text-onvolt border-volt' : 'bg-raised text-ink border-line2'" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold border" :title="isFollowing(selectedAnime.id) ? 'Turn off alerts' : 'Get notified about new episodes, seasons and updates'"><i class="fa-solid text-[11px]" :class="isFollowing(selectedAnime.id) ? 'fa-bell' : 'fa-bell-slash'"></i> {{ isFollowing(selectedAnime.id) ? 'Alerts on' : 'Get alerts' }}</button>
