@@ -1,6 +1,7 @@
 # anicoop: handover
 
-For the next agent/session taking over. Last updated at v1.5 (2026-09-26), the "full deep check" release (see §3, v1.5).
+For the next agent/session taking over. Last updated at v1.6 (2026-09-26): squads replaced by "watch together" friend
+tags (see §3, v1.6). v1.5 was the "full deep check" release.
 
 > **v9.9 session (new account, working on the owner's own Windows PC):** the repo lives at
 > `C:\Users\drips\Downloads\anicoop\anicoop`. Node.js LTS and GitHub CLI were installed there this session; `gh` is logged
@@ -12,7 +13,7 @@ For the next agent/session taking over. Last updated at v1.5 (2026-09-26), the "
 
 ## 1. Project goal and current status
 
-**anicoop** is a social tracker for a group of friends. It covers **anime, manga/manhwa, movies & TV, games and songs**. It has solo lists, shared "squad" lists, a feed, chat, profiles, rankings, tier lists, and an in-app manga reader and video player that use extensions/sources the user installs.
+**anicoop** is a social tracker for a group of friends. It covers **anime, manga/manhwa, movies & TV, games and songs**. It has one list per person with friends tagged on shared titles (v1.6 "watch together"; squads before that), a feed, chat, profiles, rankings, tier lists, and an in-app manga reader and video player that use extensions/sources the user installs.
 
 - **Repo:** `dripslayer1/anicoop`. Working branch: `claude/intelligent-johnson-gofau9`. The default branch is `main`.
 - **Hosting:** now **GitHub Pages**, served from this public repo (the owner used Netlify Drop before). There is no build step. The repo must stay public for free GitHub Pages, so every file in it is publicly downloadable.
@@ -34,11 +35,11 @@ For the next agent/session taking over. Last updated at v1.5 (2026-09-26), the "
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.5'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.6'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.5'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.6'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -382,6 +383,51 @@ These are cumulative; the README has one section per version.
     - `exportLists('json' | 'csv')` + `downloadFile` (Settings → Import & sync → Download my lists).
     - What's new: `whatsNew` / `maybeWhatsNew` (after sign-in, waits for the intro; skipped + marked seen for someone who
       hasn't done the tour) / `openWhatsNew`, key `anicoop_seen_version`.
+
+- **v1.6 "watch together"** (owner's spec: tags instead of fixed squads). Needs **SQL 8h** (also as the standalone
+  `supabase/v1.6.sql`, which the owner runs); no Edge Function change. Tested: the SQL on PGlite (in-memory Postgres,
+  `scratchpad/pg/run16.mjs`: squad move once, re-run adds nothing, invites / join / drop alerts, RLS, group picture,
+  playlist guard) and the app against a fake Supabase in the Browser pane (`.claude/fakedb.js`, not in git).
+  - **Data:** `watch_parties` (one per title per group: media_id, media_data, shared `progress`, `legacy_squad`) and
+    `party_members` (state invited | joined | dropped | declined | left, invited_by, updated_at). Read-only for clients
+    (RLS via `is_party_member`); all writes through RPCs `party_invite(p_items jsonb, p_members uuid[])` (reuses your
+    joined/dropped party for the title, else makes one with you joined; friends only), `party_respond(pid, state)`,
+    `party_progress(pid, n)` (joined members only), `party_cancel(pid, member)`. Trigger `notify_party` →
+    notifications `party_invite` / `party_joined` / `party_dropped` (new column `notifications.party_id`, pref key
+    `squad`). The squad move is a DO block guarded by `app_config` key `squads_moved`; it sets `anicoop.buddy_sync` so
+    the watch-buddy trigger doesn't copy the titles. Squad tables are untouched (no longer read by the app).
+  - **Client** (`// v1.6 watch together` in app.js, where the squads code was): `parties`, `partiesByMedia` (your joined
+    or dropped parties per media id), `partyTags` / `tagsOf` / `posterTags` (friends per title: joined > dropped > invited),
+    `partyInvites` / `sectionInvites` / `inviteFor` / `answerInvite` (join: Completed → a new rewatch at the party's count,
+    else Watching/Planning at max(own, party)). Sync: `upsertSolo` → `partyAfterSave` (DROPPED → dropped, active again →
+    joined, a real count change (from `savedState`, filled by fetchSolo / saves / realtime) → `party_progress`);
+    `deleteSolo` → `partyAfterDelete` (left; Undo rejoins via `leftNow`). `pullParties` moves your entry **forward only**
+    to the party's count, and only for party moves newer than your member row (`pullTarget`: party.updated_at >
+    member.updated_at), so moved squads don't change anyone's own count. Realtime: `watch_parties` UPDATE →
+    `onPartyRealtime`; `party_members` → `refreshPartiesSoon`.
+  - UI: PosterCard prop `people` (`.party-tags`, `.pt.invited` faded, `.pt.dropped` grey); title page `.party-box`
+    (`detailParty`: people with their own list status from friendEntries); `partyDraft` invite window with `recentSquads`
+    (friend combos from your parties, by count then recency; one tap sends); Lists: `listWith` ("Watching with", all of
+    them), `strictSolo` (`.solo-toggle`), `listFormat` / `formatKey` / `listFormats` (Type filter), invites strip;
+    Select → Invite friends (`batchInvite`); + menu / phone sheet action `PARTY`; profile "Watching together" (your
+    groups → `openGroupList`) and "N titles together" on a friend's profile (`sharedWith`). `PARTY_TYPES` = ANIME,
+    MANGA, TV. The `coop` tab, squad modals, squad chips in the editors, random "squad" filter and batch "Add to squad"
+    are gone; an old `activeTab = 'coop'` history entry becomes `solo`.
+  - **Other v1.6:** `REPEAT_TYPES` (ANIME, TV: rewatch for movies & TV); shared playlists (`playlists.members`, guard
+    trigger: only the owner changes members, a member can remove themselves; `notify_playlist_member`; client
+    `plMine` / `plShared` / `plPeople` / `editSongs` re-reads songs before a change / `plInvite` / `leavePlaylist`);
+    group chat pictures (`set_group_avatar(gid, url)` any member, https only; `changeGroupPic` → cropper target
+    `group` → `saveGroupPic` uploads to `<uid>/group-…jpg`); chat search (`chatQ`, `chatFriendHits`, `chatOthers` =
+    ilike `%q%` on profiles, `chatNewFriends` listed under the chats); Steam achievements folded (`ach.open`);
+    `DragFab` throw physics (velocity from the last ~90 ms of the drag, bounces 0.78, drag 0.9988^ms, spin, catch it
+    mid-flight; `is-flying` / `is-bump`).
+  - **Tour:** `tourFrozen` while a step's `go` runs (the old spot lost its element for a moment → card to the middle
+    and back = the flicker); the card is always placed by numbers (`tour.card.x/y`, `.unplaced` until measured); the
+    dark cover is `tourDim` (4 black panels + 4 corner pieces inside one `opacity: .72` layer, transform-only) plus
+    `.tour-ring` (was a 150vmax box-shadow redrawn every frame). Step 0 has `.tour-important` (red).
+  - **"Unknown user" (v1.5 regression):** the owner's `profiles` table has **no `created_at` column** (made before it
+    was in the schema), so `PROFILE_COLS` with it made every people list fail. Removed; `selectProfiles` retries with
+    `*` on any error. Checked against the live API (`?select=created_at` → 400).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

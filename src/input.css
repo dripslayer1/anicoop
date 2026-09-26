@@ -1945,18 +1945,29 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 /* ===== v1.0 welcome tour (v1.0.1: smooth — only transform / opacity animate, no blur, no animated shadows) ===== */
 .tour-set { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .tour { position: fixed; inset: 0; z-index: 200; }
-/* the spotlight: a see-through box whose big shadow darkens everything else. It moves with translate3d (GPU); only
-   its size uses width / height. With nothing to point at it shrinks to the middle, so the whole screen is dimmed. */
-.tour-spot { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 16px; box-shadow: 0 0 0 150vmax rgb(0 0 0 / .72); pointer-events: none;
-  will-change: transform; transition: transform .45s cubic-bezier(.2,.9,.25,1), width .45s cubic-bezier(.2,.9,.25,1), height .45s cubic-bezier(.2,.9,.25,1); }
-.tour-spot.gone { transform: translate3d(50vw, 50vh, 0); width: 0; height: 0; }
-.tour-spot > i { position: absolute; inset: -2px; border-radius: 18px; border: 2px solid rgb(var(--c-volt)); }
-.tour-spot:not(.gone) > i::after { content: ""; position: absolute; inset: -2px; border-radius: 18px; border: 2px solid rgb(var(--c-volt)); animation: tour-ring 1.8s ease-out infinite; will-change: transform, opacity; }
-.tour-spot.gone > i { display: none; }
+/* v1.6 the spotlight: four black panels around the spot and four round corners inside it, all in one see-through layer
+   (so where they overlap it isn't darker). They only slide / stretch with transforms, which the graphics card does
+   without redrawing anything. (The old spot was a box with a shadow several screens big: redrawn on every frame.) */
+.tour-dim { position: absolute; inset: 0; opacity: .72; pointer-events: none; overflow: hidden; }
+.tour-dim > i { position: absolute; left: 0; top: 0; background: #000; transform-origin: 0 0; will-change: transform; transition: transform .45s cubic-bezier(.2,.9,.25,1); }
+.tour-dim > i.c { width: 14px; height: 14px; background: none; }
+.tour-dim > i.tl { background: radial-gradient(circle at 100% 100%, transparent 13.5px, #000 14px); }
+.tour-dim > i.tr { background: radial-gradient(circle at 0 100%, transparent 13.5px, #000 14px); }
+.tour-dim > i.bl { background: radial-gradient(circle at 100% 0, transparent 13.5px, #000 14px); }
+.tour-dim > i.br { background: radial-gradient(circle at 0 0, transparent 13.5px, #000 14px); }
+.tour-ring { position: absolute; left: 0; top: 0; pointer-events: none; transition: transform .45s cubic-bezier(.2,.9,.25,1), width .45s cubic-bezier(.2,.9,.25,1), height .45s cubic-bezier(.2,.9,.25,1); }
+.tour-ring > i { position: absolute; inset: -2px; border-radius: 16px; border: 2px solid rgb(var(--c-volt)); }
+.tour-ring > i::after { content: ""; position: absolute; inset: -2px; border-radius: 16px; border: 2px solid rgb(var(--c-volt)); animation: tour-ring 1.8s ease-out infinite; }
+.tour-ring.gone { opacity: 0; }
 @keyframes tour-ring { from { transform: scale(1); opacity: .7; } to { transform: scale(1.08); opacity: 0; } }
+.tour-important { margin-top: 12px; display: flex; gap: 9px; align-items: flex-start; text-align: left; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.45;
+  color: #fca5a5; background: rgb(239 68 68 / .12); border: 1px solid rgb(239 68 68 / .45); }
+.tour-important i { color: #ef4444; margin-top: 2px; }
+.tour-important b { color: #ef4444; letter-spacing: .04em; }
+.theme-light .tour-important { color: #b91c1c; }
 /* the card: its box moves with translate3d, the card inside pops in */
 .tour-pos { position: absolute; left: 0; top: 0; width: 360px; max-width: calc(100vw - 24px); will-change: transform; transition: transform .45s cubic-bezier(.2,.9,.25,1); }
-.tour-pos.center { left: 50%; top: 50%; transform: translate(-50%, -50%); transition: none; }
+.tour-pos.unplaced { visibility: hidden; transition: none; }
 .tour-pos.hero { width: 440px; }
 .tour-pos.dock { left: 12px; right: 12px; top: auto; bottom: calc(76px + env(safe-area-inset-bottom)); width: auto; max-width: none; transform: none !important; transition: none; }
 .tour-pos.dock.up { bottom: auto; top: 76px; }
@@ -2000,7 +2011,7 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 @keyframes tour-fall { from { transform: translate3d(0, 0, 0) rotate(0); opacity: 1; } to { transform: translate3d(0, 105vh, 0) rotate(720deg); opacity: .2; } }
 .tour-fade-enter-active, .tour-fade-leave-active { transition: opacity .25s ease; }
 .tour-fade-enter-from, .tour-fade-leave-to { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .tour-spot, .tour-pos, .tour-bar i { transition: none; } .tour-card, .tour-icon, .tour-logo span, .tour-logo i, .tour-spot > i::after, .tour-confetti i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tour-dim > i, .tour-ring, .tour-pos, .tour-bar i { transition: none; } .tour-card, .tour-icon, .tour-logo span, .tour-logo i, .tour-ring > i::after, .tour-confetti i { animation: none; } }
 
 /* ===== v1.0.2 during the tour: pages and posters appear at once (their fade-ins made the Lists step stutter) ===== */
 .tour-on .poster-in, .tour-on .view-enter-active, .tour-on .view-leave-active { animation: none !important; transition: none !important; }
@@ -2076,3 +2087,61 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .wn-icon { width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgb(var(--c-volt) / .14); color: rgb(var(--c-volt)); font-size: 13px; }
 @keyframes wn-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .wn-item { animation: none; } }
+
+/* ===== v1.6 watching together: friends' pictures on posters, the title page box, invites ===== */
+.party-tags { display: inline-flex; align-items: center; padding: 3px 5px 3px 3px; border-radius: 999px; background: rgb(var(--c-base) / .8); backdrop-filter: none; }
+.party-tags .pt + .pt { margin-left: -7px; }
+.pt { display: inline-flex; border-radius: 999px; }
+.pt.invited { opacity: .42; filter: saturate(.4); }
+.pt.invited > span { box-shadow: 0 0 0 1.5px rgb(var(--c-sub)) !important; outline: 1.5px dashed rgb(var(--c-base)); outline-offset: -1.5px; }
+.pt.dropped { filter: grayscale(1); opacity: .55; }
+.pt-more { margin-left: 3px; font-family: "Space Mono", monospace; font-size: 9px; font-weight: 700; color: rgb(var(--c-ink)); }
+.party-invite { padding: 12px; border-radius: 14px; background: rgb(var(--c-lilac) / .1); border: 1px solid rgb(var(--c-lilac) / .35); }
+.party-people { display: flex; flex-direction: column; gap: 4px; }
+.party-person { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 12px; }
+@media (hover: hover) { .party-person:hover { background: rgb(var(--c-raised)); } }
+.party-person.invited .av, .party-person.invited > button:first-child > span:first-child { opacity: .5; }
+.party-person.dropped > button:first-child > span:first-child, .party-person.left > button:first-child > span:first-child { filter: grayscale(1); opacity: .6; }
+.party-person.dropped .text-mute { color: #ef4444; }
+.party-squad { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 14px; border: 1px solid rgb(var(--c-line)); background: rgb(var(--c-raised)); transition: border-color .15s; }
+@media (hover: hover) { .party-squad:hover { border-color: rgb(var(--c-volt) / .6); } }
+.party-squad:disabled { opacity: .5; }
+.party-covers { display: flex; gap: 4px; margin-top: 12px; overflow: hidden; }
+.party-covers img { width: 30px; height: 42px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+.party-covers span { align-self: center; font-size: 11px; color: rgb(var(--c-sub)); padding-left: 4px; }
+.party-rewatch { margin-top: 12px; display: flex; gap: 10px; align-items: flex-start; font-size: 12px; line-height: 1.4; color: rgb(var(--c-ink)); padding: 10px 12px; border-radius: 12px; background: rgb(20 184 166 / .1); border: 1px solid rgb(20 184 166 / .35); cursor: pointer; }
+.party-rewatch input { margin-top: 2px; accent-color: #14b8a6; width: 15px; height: 15px; flex-shrink: 0; }
+.party-inv-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.party-inv { display: flex; gap: 12px; padding: 10px; border-radius: 16px; background: rgb(var(--c-surface)); border: 1px solid rgb(var(--c-lilac) / .35); }
+.party-inv-art { width: 58px; height: 82px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: rgb(var(--c-raised)); }
+.party-inv-art img { width: 100%; height: 100%; object-fit: cover; }
+/* "Strictly solo": a switch at the top of the list */
+.solo-toggle { display: inline-flex; align-items: center; gap: 9px; height: 44px; padding: 0 16px 0 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: rgb(var(--c-sub)); border: 1px solid rgb(var(--c-line2)); transition: color .15s, border-color .15s; }
+.solo-toggle .st-track { position: relative; width: 30px; height: 18px; border-radius: 999px; background: rgb(var(--c-line2)); transition: background .2s; }
+.solo-toggle .st-track i { position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 999px; background: #fff; transition: transform .2s cubic-bezier(.2,.9,.25,1); }
+.solo-toggle.on { color: rgb(var(--c-ink)); border-color: rgb(var(--c-volt) / .6); }
+.solo-toggle.on .st-track { background: rgb(var(--c-volt)); }
+.solo-toggle.on .st-track i { transform: translateX(12px); background: rgb(var(--c-onvolt)); }
+@media (hover: hover) { .solo-toggle:hover { color: rgb(var(--c-ink)); } }
+
+/* ===== v1.6 group chat picture (tap to change) ===== */
+.group-pic { position: relative; width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; background: rgb(var(--c-overlay)); color: rgb(var(--c-sub)); }
+.group-pic img { width: 100%; height: 100%; object-fit: cover; }
+.group-pic-edit { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / .55); color: #fff; font-size: 12px; opacity: 0; transition: opacity .15s; }
+.group-pic:hover .group-pic-edit, .group-pic:focus-visible .group-pic-edit, .group-pic:disabled .group-pic-edit { opacity: 1; }
+@media (hover: none) { .group-pic-edit { opacity: .0; } .group-pic:active .group-pic-edit { opacity: 1; } }
+
+/* ===== v1.6 Steam achievements: folded, tap the header ===== */
+.ach-head { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px 16px; border-radius: 18px; border: 1px solid rgb(var(--c-line)); background: rgb(var(--c-surface)); transition: border-color .15s; }
+@media (hover: hover) { .ach-head:hover { border-color: rgb(var(--c-line2)); } }
+.ach-mini { flex: 1; max-width: 180px; height: 5px; border-radius: 9px; background: rgb(var(--c-line)); overflow: hidden; margin-left: auto; }
+.ach-mini i { display: block; height: 100%; width: 100%; background: #f59e0b; transform-origin: left; }
+.ach-open-l { flex-shrink: 0; font-size: 12px; font-weight: 700; color: rgb(var(--c-sub)); display: inline-flex; align-items: center; gap: 6px; }
+.ach-open-l i { font-size: 10px; transition: transform .2s; }
+.ach-head:not(:has(.ach-mini)) .ach-open-l { margin-left: auto; }
+
+/* ===== v1.6 the song circle: throw it and it bounces around the screen ===== */
+.pbar-peek.is-flying { transition: none; cursor: grabbing; }
+.pbar-peek.is-bump { box-shadow: 0 12px 30px -10px rgb(0 0 0 / .8), 0 0 34px -2px rgb(var(--c-volt)); }
+.pbar-peek.is-bump img, .pbar-peek.is-bump .pbar-peek-eq { animation: peek-bump .26s cubic-bezier(.2,1.6,.4,1); }
+@keyframes peek-bump { 40% { transform: scale(.82); } }
