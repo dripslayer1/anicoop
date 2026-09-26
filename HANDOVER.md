@@ -29,9 +29,9 @@ For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when
 - PRs #3–#16 (v8.8 → v10.0 + handovers) are **merged into `main`**. v10.0 needed SQL 8f (`account_links.refresh_token`),
   the Edge Function redeploy (GIF paging, `mal` endpoint) and the `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` secrets; the
   owner registered the MAL API client ("anicoop", published) — whether they finished the rest is unconfirmed.
-- v10.1 (PR #17) is merged. **v10.3 is PR #18 from `claude/v10-2-genre-under-sort`** (v10.2 genre filter under Sort by +
-  v10.3 "my watch link" + v10.4 Watch buttons use it). **No SQL, no Edge Function change.** Check whether it was merged before starting the next change.
-  Check whether it was merged before starting the next change.
+- v10.1 (#17) and v10.3 (#18: v10.2 genre filter under Sort by + v10.3 "my watch link") are merged. **v10.4 is PR #19
+  from `claude/v10-4-watch-buttons`** (Watch buttons use your link, official streaming links). **No SQL, no Edge
+  Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
 - `sw.js`: `const VERSION = 'anicoop-v10.1'`
@@ -230,7 +230,7 @@ These are cumulative; the README has one section per version.
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** the v10.4 PR (#18) is open (no SQL, no Edge Function change). v10.1 is merged.
+**Stopped at:** the v10.4 PR (#19) is open (no SQL, no Edge Function change). v10.1 is merged.
 
 - **v10.3 my watch link** (anime + TV only, the owner's choice): `media_data.wl` (`entryData` / `listRow` / `withRepeats`
   keep it). `openMyLink` opens it and sets `watchAsk` (kept in localStorage `anicoop_watch_ask_v1`, so a reload on the
