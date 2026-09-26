@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v{{ APP_VERSION }}</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -1751,7 +1751,7 @@
                                 <div class="relative h-full p-4 flex flex-col">
                                     <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="linkInfo(item.anime)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkInfo(item.anime).site }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
                                     <p class="mt-1 truncate pr-24"><!-- v1.1 the name opens the title's page (the card itself opens your watch link) --><button @click.stop="fetchAnimeDetails(item.anime)" class="cw-name" title="Open its page">{{ titleOf(item.anime) }}</button></p>
-                                    <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}</template></p>
+                                    <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}<span v-if="newEps(item)" class="cw-new" :title="newEps(item) + ' episode' + (newEps(item) === 1 ? '' : 's') + ' out that you haven’t counted yet'">{{ newEps(item) }} new</span></template></p>
                                     <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
                                 </div>
                                 <button v-if="section === 'songs'" @click.stop="playPreview(item.anime, continueWatching.map(x => x.anime))" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-volt text-onvolt flex items-center justify-center transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]" :title="isPlaying(item.anime) ? 'Pause' : 'Play'"><i class="fa-solid text-sm" :class="player.loading && player.song?.id === item.anime.id ? 'fa-circle-notch fa-spin' : isPlaying(item.anime) ? 'fa-pause' : 'fa-play ml-0.5'"></i></button>
@@ -3197,17 +3197,18 @@
             </div>
             <button v-if="!systemNotifOn" @click="enableSystemNotifs" class="mx-3 mb-2 w-[calc(100%-1.5rem)] flex items-center gap-2 px-3 py-2 rounded-xl bg-lilac/10 text-lilac text-xs font-semibold"><i class="fa-solid fa-bell"></i> Turn on desktop notifications</button>
             <div class="max-h-[60dvh] overflow-y-auto px-2 pb-2">
-                <button v-for="n in notifications" :key="n.id" @click="openNotification(n)" class="w-full flex items-start gap-3 p-2.5 rounded-xl text-left hover:bg-overlay transition-colors" :class="{ 'bg-lilac/[.06]': !n.read }">
+                <div v-for="n in notifications" :key="n.id" @click="openNotification(n)" @keydown.enter.self="openNotification(n)" role="button" tabindex="0" class="w-full flex items-start gap-3 p-2.5 rounded-xl text-left hover:bg-overlay transition-colors cursor-pointer" :class="{ 'bg-lilac/[.06]': !n.read }">
                     <user-avatar v-if="n.actor_id" :user="personOf(n.actor_id)" :size="34"></user-avatar>
                     <span v-else class="w-[34px] h-[34px] rounded-full bg-overlay text-volt flex items-center justify-center shrink-0"><i class="fa-solid text-sm" :class="notifIcon(n)"></i></span>
                     <span class="min-w-0 flex-grow">
                         <span class="block text-[13px] text-ink leading-snug">{{ notifText(n) }}</span>
                         <span v-if="notifQuote(n)" class="block text-xs text-sub mt-0.5 line-clamp-2">{{ notifQuote(n) }}</span>
                         <span class="block text-[11px] text-mute mt-1">{{ timeAgo(n.created_at) }}</span>
+                        <button v-if="alertWatch(n)" @click.stop="watchFromAlert(n)" class="notif-watch" :title="'Open your link on ' + alertWatch(n).site"><i class="fa-solid fa-play"></i> Watch<span class="opacity-70"> · {{ alertWatch(n).site }}</span></button>
                     </span>
                     <img v-if="n.media_cover" :src="n.media_cover" class="w-8 h-11 rounded-md object-cover shrink-0" alt="">
                     <span v-if="!n.read" class="w-2 h-2 rounded-full bg-pink shrink-0 mt-1.5"></span>
-                </button>
+                </div>
                 <p v-if="!notifications.length" class="text-center text-sm text-mute py-10">Nothing yet — when friends comment or add you to squads, it shows up here.</p>
             </div>
         </div>
@@ -3549,6 +3550,11 @@
                                 <div class="set-block tour-set">
                                     <div class="min-w-0"><p class="set-title">Welcome tour</p><p class="set-hint">A quick walk through the important parts of anicoop.</p></div>
                                     <button @click="startTour" class="btn-primary !px-5 shrink-0"><i class="fa-solid fa-route"></i> Take the tour</button>
+                                </div>
+                                <!-- v1.5 what changed in this version -->
+                                <div class="set-block tour-set">
+                                    <div class="min-w-0"><p class="set-title">What’s new in v{{ APP_VERSION }}</p><p class="set-hint">The newest changes, in a short list.</p></div>
+                                    <button @click="openWhatsNew" class="btn-ghost !px-5 shrink-0"><i class="fa-solid fa-gift"></i> See what’s new</button>
                                 </div>
                                 <div class="set-block">
                                     <p class="set-title">Username</p>
@@ -4210,6 +4216,12 @@
                                         <details v-if="importState.result.missingTitles?.length" class="mt-2 text-xs text-sub"><summary class="cursor-pointer text-ink font-semibold">Show the {{ importState.result.missingTitles.length }} that couldn’t be matched</summary><ul class="mt-2 space-y-1 pl-4 list-disc"><li v-for="t in importState.result.missingTitles" :key="t">{{ t }}</li></ul><p class="mt-2 text-mute">AniList doesn’t have these (or lists them under a very different name). Search for them in Browse and add them by hand.</p></details>
                                     </template>
                                 </div>
+                                <!-- v1.5 your lists as a file -->
+                                <div class="pt-4"><p class="kicker">// keep a copy</p><h3 class="mt-1 font-display font-bold text-ink text-2xl">Download my lists</h3><p class="set-hint">Saves everything on your lists to this device. The backup file has every title with its status, score, progress, rewatches, marks and watch link, plus your squads, favourites and playlists. The spreadsheet opens in Excel, Google Sheets or Numbers.</p></div>
+                                <div class="set-block flex flex-wrap items-center gap-2">
+                                    <button @click="exportLists('json')" class="btn-primary !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-file-arrow-down"></i> Backup file (.json)</button>
+                                    <button @click="exportLists('csv')" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-table"></i> Spreadsheet (.csv)</button>
+                                </div>
                             </template>
                         </div>
                     </div>
@@ -4438,7 +4450,7 @@
     <!-- ============ TRAILER PLAYER ============ -->
     <!-- ============ READ / WATCH (sources + every chapter / episode of the title you're on) ============ -->
     <transition name="fade">
-        <div v-if="wp.open && selectedAnime && playKind" class="modal-back wp-back !z-[85]" @click.self="wp.open = false">
+        <div v-if="wp.open && selectedAnime && playKind === 'manga'" class="modal-back wp-back !z-[85]" @click.self="wp.open = false">
             <transition name="pop" appear>
                 <div class="modal-card wp-card">
                     <div class="wp-hero">
@@ -4451,7 +4463,6 @@
                             <div class="flex flex-wrap items-center gap-2 mt-3">
                                 <button v-if="wpContinue" @click="playContinue" class="btn-primary !py-2.5 !px-5 !text-sm"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open-reader' : 'fa-play'"></i> {{ wpStarted ? 'Continue' : playKind === 'manga' ? 'Start reading' : 'Play' }}<span v-if="wpContinue.label" class="opacity-70">· {{ wpContinue.label }}</span></button>
                                 <label v-if="playKind === 'manga' && extOn('local')" class="btn-ghost !py-2.5 !px-4 !text-xs cursor-pointer"><i class="fa-solid fa-file-zipper"></i> Open CBZ / ZIP / images<input type="file" accept=".cbz,.zip,image/*" multiple class="hidden" @change="openLocalFiles"></label>
-                                <label v-if="playKind !== 'manga' && extOn('localvideo')" class="btn-ghost !py-2.5 !px-4 !text-xs cursor-pointer"><i class="fa-solid fa-file-video"></i> Play a file<input type="file" accept="video/*" class="hidden" @change="openLocalVideo"></label>
                                 <button @click="openExtensions()" class="btn-ghost !py-2.5 !px-4 !text-xs"><i class="fa-solid fa-puzzle-piece"></i> Extensions<span v-if="readTabs.length" class="opacity-60">· {{ readTabs.length }}</span></button>
                             </div>
                         </div>
@@ -4478,8 +4489,8 @@
 
                         <!-- list header -->
                         <div class="flex flex-wrap items-center justify-between gap-3 mt-5 mb-3">
-                            <h4 class="font-display font-semibold text-ink text-xl">{{ playKind === 'manga' ? 'Chapters' : isMovie ? 'Movie' : 'Episodes' }}
-                                <span class="font-mono text-xs text-mute">{{ playKind === 'manga' ? chapterList.length + (readSrc === 'mangadex' && reader.total > chapterList.length ? ' of ' + reader.total : '') : isMovie ? '' : wpRows.length }}</span></h4>
+                            <h4 class="font-display font-semibold text-ink text-xl">Chapters
+                                <span class="font-mono text-xs text-mute">{{ chapterList.length + (readSrc === 'mangadex' && reader.total > chapterList.length ? ' of ' + reader.total : '') }}</span></h4>
                             <div class="flex items-center gap-2 min-w-0">
                                 <div v-if="playKind === 'manga' && chapterList.length > 8" class="relative ch-find">
                                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-mute text-[11px]"></i>
@@ -4487,7 +4498,6 @@
                                 </div>
                                 <button v-if="playKind === 'manga' && chapterList.length > 1" @click="toggleChSort" class="ch-sort" :title="chSort === 'asc' ? 'Oldest first — click for newest first' : 'Newest first — click for oldest first'"><i class="fa-solid" :class="reader.loading && chSort === 'asc' ? 'fa-circle-notch fa-spin' : chSort === 'asc' ? 'fa-arrow-up-1-9' : 'fa-arrow-down-9-1'"></i>{{ chSort === 'asc' ? 'Oldest first' : 'Newest first' }}</button>
                                 <div v-if="playKind === 'manga' && readSrc === 'mangadex'" class="chip-wrap"><select v-model="reader.lang" class="chip !h-9 !text-xs"><option v-for="l in readLangs" :key="l.v" :value="l.v">{{ l.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
-                                <div v-if="selectedAnime.type === 'TV' && !isMovie && seasonsOf(selectedAnime).length" class="chip-wrap"><select v-model.number="wp.season" class="chip !h-9 !text-xs"><option v-for="x in seasonsOf(selectedAnime)" :key="x.n" :value="x.n">{{ x.name || 'Season ' + x.n }} ({{ x.episodes }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
                             </div>
                         </div>
                         <p v-if="currentSite && srcView.match && !srcView.picking" class="text-[11px] text-mute -mt-1 mb-3 truncate">On {{ currentSite.name }} as “{{ srcView.match.title }}” · <button @click="changeMatch" class="text-sub hover:text-ink underline">wrong title?</button></p>
@@ -4511,7 +4521,7 @@
                         </div>
 
                         <!-- manga: chapters -->
-                        <div v-else-if="playKind === 'manga'" class="panel overflow-hidden">
+                        <div v-else class="panel overflow-hidden">
                             <div v-if="(readSrc === 'mangadex' ? reader.loading : srcView.loading) && !chapterList.length" class="p-4 space-y-2"><div v-for="n in 5" :key="n" class="h-11 rounded-xl skeleton"></div></div>
                             <p v-else-if="!readTabs.length" class="p-5 text-sm text-mute">Chapters show up here once you install a source.</p>
                             <p v-else-if="readSrc === 'mangadex' && !readInfo?.md" class="p-5 text-sm text-mute">{{ readInfo ? 'MangaDex doesn’t have this title. Pick another source above.' : 'Looking for it on MangaDex…' }}</p>
@@ -4533,71 +4543,10 @@
                             <button v-if="!chQ.trim() && (chapterList.length > reader.shown || (readSrc === 'mangadex' && reader.chapters.length < reader.total))" @click="showMoreChapters" :disabled="reader.loading" class="w-full py-3 text-xs font-bold text-sub hover:text-ink hover:bg-raised transition-colors border-t border-line"><i class="fa-solid mr-1.5" :class="reader.loading ? 'fa-circle-notch fa-spin' : 'fa-chevron-down'"></i>Show more chapters</button>
                         </div>
 
-                        <!-- anime, movies & TV: episodes (Netflix-style) -->
-                        <div v-else>
-                            <p v-if="currentSite && srcView.loading" class="wp-note"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Looking for it on {{ currentSite.name }}…</p>
-                            <p v-else-if="currentSite && srcView.error" class="wp-note">{{ srcView.error }}</p>
-                            <p v-if="directSrc" class="wp-note !text-mute"><i class="fa-solid mr-2" :class="directSrc.type === 'youtube' ? 'fa-play' : 'fa-link'"></i>{{ directSrc.type === 'youtube' ? 'Pick an episode: anicoop looks for a free, official upload of it on YouTube.' : 'Pick an episode: it plays from ' + directSrc.name + '.' }}</p>
-                            <div v-if="selectedAnime.type === 'TV' && !isMovie && tvSeasons[selectedAnime.id + ':' + wp.season] === 'loading'" class="space-y-2"><div v-for="n in 4" :key="n" class="h-24 rounded-xl skeleton"></div></div>
-                            <p v-else-if="!wpRows.length" class="wp-note">{{ readTabs.length ? 'No episodes found on this source.' : 'Episodes show up here once you install a source.' }}</p>
-                            <div class="ep-list">
-                                <div v-for="r in wpRows.slice(0, wpShown)" :key="r.key" class="ep-row" :class="{ watched: r.watched, off: !r.play }" role="button" tabindex="0" @click="playRow(r)" @keydown.enter.self="playRow(r)">
-                                    <span class="ep-row-n">{{ isMovie ? '' : r.n }}</span>
-                                    <span class="ep-row-thumb">
-                                        <img v-if="r.thumb" :src="r.thumb" loading="lazy" decoding="async" alt="">
-                                        <i v-else class="fa-solid" :class="isMovie ? 'fa-film' : 'fa-tv'"></i>
-                                        <span class="ep-row-play"><i class="fa-solid" :class="r.play ? 'fa-play' : 'fa-lock'"></i></span>
-                                        <span v-if="r.watched" class="ep-row-bar"></span>
-                                    </span>
-                                    <span class="ep-row-body">
-                                        <span class="ep-row-top"><b>{{ r.title }}</b><span v-if="r.runtime" class="ep-row-len">{{ r.runtime }}m</span></span>
-                                        <span v-if="r.desc" class="ep-row-desc">{{ r.desc }}</span>
-                                        <span v-if="!r.play" class="ep-row-miss">{{ !readTabs.length ? 'Install a source to watch' : srcView.loading ? 'Checking the source…' : srcView.picking ? 'Pick the right title above' : 'Not on this source' }}</span>
-                                    </span>
-                                    <button v-if="r.abs" @click.stop="toggleRowWatched(r)" class="ep-check" :class="{ on: r.watched }" :title="r.watched ? 'Mark unwatched' : 'Mark watched up to here'"><i class="fa-solid fa-check"></i></button>
-                                </div>
-                            </div>
-                            <button v-if="wpRows.length > wpShown" @click="wpShown += 40" class="btn-ghost w-full mt-3 !py-2.5 !text-xs"><i class="fa-solid fa-chevron-down mr-1.5"></i>Show more · {{ wpRows.length - wpShown }} left</button>
-                        </div>
-                        <p class="mt-4 text-[11px] text-mute">{{ playKind === 'manga' ? 'Chapters come from the source you pick. Website sources are read without their ads or trackers.' : 'Episodes come from the source you pick. Players open in a locked frame here, so they can’t open pop-ups or send you to other sites.' }}</p>
+                        <p class="mt-4 text-[11px] text-mute">Chapters come from the source you pick. Website sources are read without their ads or trackers.</p>
                     </div>
                 </div>
             </transition>
-        </div>
-    </transition>
-
-    <!-- ============ VIDEO PLAYER (anime, movies & TV) ============ -->
-    <transition name="fade">
-        <div v-if="vp.open" class="vplayer force-dark">
-            <div class="vp-top">
-                <button @click="closeVideo" class="yt-btn" aria-label="Close (Esc)"><i class="fa-solid fa-arrow-left"></i></button>
-                <div class="min-w-0 flex-grow">
-                    <p class="text-white font-semibold text-sm truncate">{{ vp.anime ? titleOf(vp.anime) : '' }}</p>
-                    <p class="text-white/60 text-xs truncate">{{ vp.label }}<span v-if="vp.ep?.title && vp.ep.title !== vp.label && !vp.local"> · {{ vp.ep.title }}</span></p>
-                </div>
-                <button @click="openMusic()" class="yt-btn" title="Music" aria-label="Music"><i class="fa-solid fa-music"></i></button>
-                <button v-if="vp.abs && !vp.local" @click="markEpisodeWatched" :disabled="vp.marked" class="vp-btn" :class="{ on: vp.marked }"><i class="fa-solid fa-check"></i><span class="hidden sm:inline">{{ vp.marked ? 'Watched' : 'Mark watched' }}</span></button>
-            </div>
-            <div class="vp-stage">
-                <div v-if="vp.loading" class="vp-msg"><i class="fa-solid fa-circle-notch fa-spin text-2xl"></i><span>Finding the players…</span></div>
-                <div v-else-if="vp.error && !vpServer" class="vp-msg"><i class="fa-solid fa-triangle-exclamation text-2xl text-amber-400"></i><span>{{ vp.error }}</span></div>
-                <template v-else-if="vpServer">
-                    <iframe v-if="vpServer.kind === 'embed'" :key="vpServer.url + (vp.safe ? ':safe' : '')" :src="vpServer.url" :sandbox="vp.safe ? 'allow-scripts allow-same-origin allow-forms allow-presentation' : null"
-                        allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin" class="vp-frame" title="Video player"></iframe>
-                    <video v-else id="vp-video" :key="vpServer.url" controls autoplay playsinline class="vp-frame" @timeupdate="onVideoTime" @error="onVideoError"></video>
-                    <div v-if="vp.error" class="vp-toast">{{ vp.error }}</div>
-                </template>
-            </div>
-            <div class="vp-bottom">
-                <button @click="vpGo(-1)" :disabled="!vpNeighbour(-1)" class="vp-btn"><i class="fa-solid fa-backward-step"></i><span class="hidden sm:inline">Previous</span></button>
-                <div v-if="vp.servers.length > 1" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0 flex-grow justify-center">
-                    <span class="text-white/50 text-[11px] font-bold uppercase tracking-wider shrink-0">Server</span>
-                    <button v-for="(sv, n) in vp.servers" :key="sv.url" @click="pickServer(n)" class="vp-server" :class="{ on: vp.i === n }">{{ sv.name }}<span v-if="sv.kind !== 'embed'" class="opacity-60"> · {{ sv.kind === 'hls' ? 'stream' : 'file' }}</span></button>
-                </div>
-                <span v-else class="flex-grow"></span>
-                <button v-if="vpServer?.kind === 'embed'" @click="vp.safe = !vp.safe" class="vp-btn" :title="vp.safe ? 'The player can’t open pop-ups or other sites. Turn off only if it refuses to load.' : 'Pop-ups and redirects are allowed right now'"><i class="fa-solid" :class="vp.safe ? 'fa-shield-halved' : 'fa-shield'"></i><span class="hidden sm:inline">{{ vp.safe ? 'Pop-up blocker on' : 'Pop-up blocker off' }}</span></button>
-                <button @click="vpGo(1)" :disabled="!vpNeighbour(1)" class="vp-btn"><span class="hidden sm:inline">Next</span><i class="fa-solid fa-forward-step"></i></button>
-            </div>
         </div>
     </transition>
 
@@ -4696,34 +4645,6 @@
                                 </div>
                             </div>
                         </template>
-                    </div>
-
-                    <!-- player links (anime, movies & TV) -->
-                    <div v-if="extKind !== 'manga'" class="mt-6">
-                        <p class="label mb-2.5">Player links <span class="text-mute">· {{ extPlayers.length }}</span></p>
-                        <div v-if="extPlayers.length" class="space-y-2">
-                            <div v-for="p in extPlayers" :key="p.id" class="ext-card !py-2.5">
-                                <span class="w-9 h-9 rounded-lg bg-raised text-sub flex items-center justify-center shrink-0"><i class="fa-solid fa-link"></i></span>
-                                <div class="min-w-0 flex-grow">
-                                    <p class="text-ink font-semibold text-sm truncate">{{ p.name }}</p>
-                                    <p class="text-[11px] text-mute truncate font-mono">{{ p.url }}</p>
-                                </div>
-                                <button @click="removePlayerLink(p.id)" class="btn-ghost !py-2 !px-3 !text-xs shrink-0">Remove</button>
-                            </div>
-                        </div>
-                        <details class="ext-add mt-2" :open="!extPlayers.length">
-                            <summary><i class="fa-solid fa-plus mr-2"></i>Add a player link</summary>
-                            <form @submit.prevent="addPlayerLink" class="space-y-2.5 mt-3">
-                                <input v-model="plForm.name" maxlength="40" placeholder="Name (optional)" class="field !py-2.5 !text-sm">
-                                <input v-model="plForm.url" :placeholder="extKind === 'tv' ? 'Shows, e.g. https://player.example/tv/{tmdb}/{season}/{episode}' : 'e.g. https://player.example/anime/{anilist}/{episode}'" class="field !py-2.5 !text-sm font-mono">
-                                <input v-if="extKind === 'tv'" v-model="plForm.movieUrl" placeholder="Movies (optional), e.g. https://player.example/movie/{tmdb}" class="field !py-2.5 !text-sm font-mono">
-                                <p class="text-[11px] text-mute leading-relaxed">The address of a player page, with blanks anicoop fills in for the episode you pick:
-                                    <span class="font-mono text-sub">{tmdb} {imdb}</span>{{ extKind === 'anime' ? ' ' : '' }}<span v-if="extKind === 'anime'" class="font-mono text-sub">{anilist} {mal}</span> <span class="font-mono text-sub">{season} {episode} {title}</span>.
-                                    It plays inside the pop-up-blocking frame. Only add players you’re allowed to use.</p>
-                                <p v-if="plForm.msg" class="text-xs text-sub">{{ plForm.msg }}</p>
-                                <button type="submit" :disabled="!plForm.url.trim()" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid fa-plus"></i> Add</button>
-                            </form>
-                        </details>
                     </div>
 
                     <!-- website sources (settings-only extensions) -->
@@ -5146,6 +5067,30 @@
         </div>
     </transition>
 
+    <!-- ============ v1.5 WHAT'S NEW (once per version) ============ -->
+    <transition name="fade">
+        <div v-if="whatsNew.open" class="modal-back !z-[93]" @click.self="whatsNew.open = false">
+            <transition name="pop" appear>
+                <div class="modal-card max-w-md w-full p-6 overflow-y-auto overscroll-contain" style="max-height: 88dvh">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="kicker">// what’s new</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-2xl">anicoop v{{ APP_VERSION }}</h3>
+                        </div>
+                        <button @click="whatsNew.open = false" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <ul class="mt-5 space-y-3">
+                        <li v-for="(it, k) in whatsNewItems" :key="k" class="wn-item" :style="{ '--i': k }">
+                            <span class="wn-icon"><i class="fa-solid" :class="it.icon"></i></span>
+                            <span class="min-w-0"><b class="block text-ink text-sm">{{ it.t }}</b><span class="block text-[13px] text-sub mt-0.5 leading-snug">{{ it.d }}</span></span>
+                        </li>
+                    </ul>
+                    <button @click="whatsNew.open = false" class="btn-primary w-full mt-6">Got it</button>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
     <!-- ============ 6th REWATCH (hidden achievement) ============ -->
     <transition name="fade">
         <div v-if="lilBro.open" class="modal-back !z-[93]" @click.self="lilBro.open = false">
@@ -5195,6 +5140,7 @@
         <div v-if="toast.message" :class="toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-ink text-inv'" class="lift-pbar fixed z-[125] bottom-24 md:bottom-8 left-0 right-0 mx-auto md:left-auto md:right-8 md:mx-0 w-max max-w-[calc(100vw-2rem)] px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3">
             <i :class="toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-check'" class="fa-solid"></i>
             <span class="font-semibold text-sm">{{ toast.message }}</span>
+            <button v-if="toast.action" @click="runToastAction" class="toast-act">{{ toast.action.label }}</button>
         </div>
     </transition>
 

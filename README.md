@@ -891,7 +891,7 @@ What it does:
   kept unless your chapter count went up after you left it.
 
 
-## v1.5 — full check: fixes, security and speed
+## v1.5 — full check: fixes, security and speed, plus the add-ons you picked
 
 **Run one small SQL (below) and deploy the Edge Function again** (Supabase → Edge Functions → igdb → paste the new
 `supabase/functions/igdb/index.ts` → Deploy). Then hard-refresh: the footer says **v1.5**.
@@ -903,7 +903,27 @@ create policy "admin: 18+ settings" on public.app_config for update to authentic
   using (key = 'adult' and public.has_perm('manage_18')) with check (key = 'adult' and public.has_perm('manage_18'));
 ```
 
+**New (the add-ons you picked)**
+- **"2 new"** on Continue watching cards: an airing anime with episodes out that you haven't counted yet.
+- **Watch from your alerts:** a new-episode alert in the bell (for an anime you have a watch link for, yours or the
+  automatic one) has a **Watch** button: it opens your link on your next episode and asks how many you watched.
+- **Undo:** after removing a title (the + menu, the phone sheet, or Select → Remove) or unchecking a status, the message
+  at the bottom has an **Undo** button for a few seconds. Everything comes back as it was (score, progress, rewatches,
+  marks, watch link, reading spot, squad lists).
+- **Steam hours, daily:** once a day when you open anicoop, the hours on the Steam games on your list follow Steam (only
+  ever up; statuses and scores are left alone).
+- **Achievements on your game posters:** e.g. 🏆 45/78 under the hours (games you've played on Steam).
+- **Download my lists** (Settings → Import & sync): a backup file with everything (lists, squads, favourites, playlists)
+  or a spreadsheet (one row per title) saved to your device.
+- **What's new:** after each update a small window lists what changed (once, on each device). Settings → Account → "See
+  what's new" opens it again. People who are new get the tour instead.
+
+**Removed (you said yes):** the hidden anime / movies & TV "sources" (the in-site video player, player links, Internet
+Archive, YouTube episodes), switched off since v10.7 — about 430 lines less to load. Manga reading is unchanged.
+
 **Fixed**
+- **AniList sync** also tried to send games, movies & TV and songs to AniList (which refused them and showed a "last sync
+  problem"). Only anime and manga go there now.
 - **Security:** a link inside someone's post or a chat episode card could be a disguised script (`javascript:`) that runs
   inside anicoop when clicked. Only real web links (http / https) are clickable now.
 - **Security (the SQL above):** a role with the "Manage 18+" power could also change other app settings (who sees

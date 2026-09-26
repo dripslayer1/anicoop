@@ -37,7 +37,9 @@ For the next agent/session taking over. Last updated at v1.5 (2026-09-26), the "
 - `sw.js`: `const REL = '1.5'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
-- `index.html`: both `?v=` cache-busters (app.css, app.js), plus the footer `<span>v1.5</span>` (around line 217)
+- `index.html`: both `?v=` cache-busters (app.css, app.js)
+- `app.js`: `const APP_VERSION = '1.5'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+  what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
 ---
@@ -357,9 +359,29 @@ These are cumulative; the README has one section per version.
   - Edge Function: `cachePut` (≤ ~20 M characters, ≤ 1 MB per answer, oldest out first) replaced `cache.set` +
     "over 800 → clear". `PRIVATE_HOST` also blocks `::ffff:` / `fe80:` addresses and `.local` / `.internal` / `.lan` names.
   - Dead code removed (moreWatch, readSources, MD_LINKS, media links + their per-page query, openAlbum/artistView,
-    buddyList, favVAs, … see the v1.5 commit). **Still in the code but unreachable since v10.7:** the anime / TV
-    source machinery (video templates, `vp` player, player links, Internet Archive, YouTube episodes, `wp` episode rows).
-    It was offered to the owner as a removal (ask before deleting it).
+    buddyList, favVAs, viewedTab, … see the v1.5 commits).
+  - **Owner said yes → removed:** the anime / movies & TV source machinery (video templates animestream / dooplay /
+    genericvideo, `guess.videos`, `epMeta` / `embedFrom` / `videoOf`, Internet Archive, `sourceApi.videos`, player links
+    `PREFS.players`, YouTube episodes, the `vp` player, the TV episode guide `tvSeasons` / `wpRows`, their CSS). The Read
+    window (`wp`) is manga-only; `readTabs` = MangaDex + manga sources; `templatesFor()` returns every template.
+    Kept: `MEDIA_KIND` / `playKind` (the anime / TV Watch buttons use it), `isMovie`, `detailEpisodes` (anime page).
+  - `alEnqueue` skips ids ≥ GAME_BASE (games / TV / songs were sent to AniList and failed).
+  - **Add-ons (owner picked all):**
+    - `showToast(msg, type, action)` with `{ label, run }` → a button on the message (`runToastAction`); Undo =
+      `undoOf(snapshotOf(ids), msg)` → `restoreEntries` (upsertSolo + upsertSquadEntry) in removeEverywhere, batchRemove,
+      dropFromSolo, uncheckStatus.
+    - `newEps(item)` = aired (nextAiringEpisode, airingAt passed → that episode) − progress, anime RELEASING, not rewatches
+      → `.cw-new` on Continue watching cards.
+    - `alertWatch(n)` / `watchFromAlert(n)`: media_episode notifications of an ANIME with `linkInfo` → `.notif-watch`
+      (the notification row is a `div role=button` now: no button inside a button).
+    - `syncSteamHours`: once a day (`anicoop_steamsync:<uid>` = localDay) after `loadSteamLib`, progress = Steam hours
+      when higher; one upsertSolo.
+    - `achByApp` (module level, Steam appid → { done, total }) from `loadAchTotal` (cached with `apps` in
+      `anicoop_steam_ach_v1`, loaded on the profile and in the Games section) and `loadAch`; PosterCard shows
+      `.poster-ach` on your own game posters.
+    - `exportLists('json' | 'csv')` + `downloadFile` (Settings → Import & sync → Download my lists).
+    - What's new: `whatsNew` / `maybeWhatsNew` (after sign-in, waits for the intro; skipped + marked seen for someone who
+      hasn't done the tour) / `openWhatsNew`, key `anicoop_seen_version`.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
