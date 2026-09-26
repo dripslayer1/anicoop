@@ -257,6 +257,9 @@ These are cumulative; the README has one section per version.
   anymore"). The anime / TV sources window (`openWatch`) isn't reachable any more.
 - **v10.7.1 / v1.0:** the 60-second quick-return rule is gone; `openExtensions` is forced to `'manga'`. **The owner renumbered
   the app to v1.0** (footer, `?v=1.0`, `sw.js` VERSION `anicoop-v1.0`): count on from there (v1.1, v1.2…), not v10.x.
+- **v1.1:** `openWatchWindow` — `window.open(url, 'anicoop_watch', 'popup=yes,…')` centred, `win.opener = null`, polled
+  every 0.7 s; when it closes, `watchClosed` pulses the question bar. `PREFS.watchOpen` popup | tab; phones (`touchUI`)
+  and blocked pop-ups fall back to a tab. **Not an iframe:** streaming sites send X-Frame-Options / CSP frame-ancestors.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
