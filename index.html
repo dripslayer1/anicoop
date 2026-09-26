@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.0.2">
+    <link rel="stylesheet" href="app.css?v=1.0.3">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=1.0.2" defer></script>
+    <script src="app.js?v=1.0.3" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.0.2</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v1.0.3</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -3194,7 +3194,7 @@
         <!-- v1.0 the welcome tour: a spotlight slides to each feature, the card explains it
              (v1.0.1 both move with transforms only, so it stays smooth) -->
         <transition name="tour-fade">
-            <div v-if="tour.on && tourStep" class="tour" @click.stop>
+            <div v-if="tour.on && tourStep" class="tour" :class="{ interactive: tourStep.interactive }" @click.stop>
                 <div class="tour-spot" :class="{ gone: !tour.rect }" :style="tour.rect ? { transform: 'translate3d(' + tour.rect.left + 'px,' + tour.rect.top + 'px,0)', width: tour.rect.width + 'px', height: tour.rect.height + 'px' } : {}"><i></i></div>
                 <div v-if="tourStep.last" class="tour-confetti" aria-hidden="true"><i v-for="n in 36" :key="n" :style="{ '--x': ((n * 37) % 100) + '%', '--d': ((n * 53) % 90) / 100 + 's', '--h': (n * 47) % 360 }"></i></div>
                 <div class="tour-pos" :class="{ center: !tour.rect, dock: tour.rect && tour.card.dock, up: tour.card.up, hero: tourStep.hero }"
@@ -3209,6 +3209,12 @@
                         <div v-if="tourStep.copy" class="tour-copy">
                             <span class="truncate">{{ tourStep.copy }}</span>
                             <button @click="tourCopy(tourStep.copy)" :class="{ on: tour.copied }"><i class="fa-solid" :class="tour.copied ? 'fa-check' : 'fa-copy'"></i> {{ tour.copied ? 'Copied' : 'Copy link' }}</button>
+                        </div>
+                        <!-- v1.0.3 the paste step: how it's going, and a way out -->
+                        <div v-if="tourStep.paste" class="tour-status" :class="tourRepoState">
+                            <template v-if="tourRepoState === 'done'"><i class="fa-solid fa-circle-check"></i> Loaded {{ srcForm.repoItems.length }} sources. Tap Next.</template>
+                            <template v-else-if="tourRepoState === 'loading'"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading the sources…</template>
+                            <template v-else><span class="flex-1">{{ tourRepoState === 'error' ? srcForm.repoMsg : 'Waiting for you to paste it…' }}</span><button @click="tourPasteRepo">Do it for me</button></template>
                         </div>
                         <!-- what the question looks like -->
                         <div v-if="tourStep.demo === 'ask'" class="tour-demo" aria-hidden="true">
@@ -4652,13 +4658,13 @@
                         <details class="ext-add mt-2" :open="!extSources.length || !!srcForm.repoItems.length">
                             <summary><i class="fa-solid fa-box-archive mr-2"></i>Install from a repository</summary>
                             <div class="mt-3 space-y-2.5">
-                                <form @submit.prevent="loadRepo" class="flex gap-2">
+                                <form @submit.prevent="loadRepo" class="flex gap-2 tour-repo-form">
                                     <input v-model="srcForm.repo" :placeholder="'Repository link, e.g. ' + (extKind === 'manga' ? 'https://github.com/keiyoushi/extensions' : 'https://github.com/yuzono/anime-repo')" class="field !py-2.5 !text-sm">
                                     <button type="submit" :disabled="srcForm.repoBusy || !srcForm.repo.trim()" class="btn-primary !py-2 !px-4 !text-xs shrink-0"><i class="fa-solid" :class="srcForm.repoBusy ? 'fa-circle-notch fa-spin' : 'fa-arrow-right'"></i></button>
                                 </form>
                                 <p class="text-[11px] text-mute leading-relaxed">Works with {{ extKind === 'manga' ? 'Mihon / Tachiyomi' : 'Aniyomi' }} repositories (paste the GitHub page or its <span class="font-mono">index.min.json</span>) and anicoop’s own <span class="font-mono">{"sources": [{"name", "baseUrl", "template"}]}</span> files.</p>
                                 <p v-if="srcForm.repoMsg" class="text-xs text-sub">{{ srcForm.repoMsg }}</p>
-                                <div v-if="srcForm.repoItems.length && srcForm.repoKind === extKind" class="space-y-2">
+                                <div v-if="srcForm.repoItems.length && srcForm.repoKind === extKind" class="space-y-2 tour-repo-list">
                                     <p class="text-xs text-ink font-semibold">{{ srcForm.repoName }} <span class="text-mute font-normal">· {{ repoShown.length }} of {{ srcForm.repoItems.length }} sources</span></p>
                                     <div class="flex gap-2">
                                         <input v-model="srcForm.repoQ" placeholder="Search sources…" class="field !py-2 !text-xs">

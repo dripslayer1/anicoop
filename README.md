@@ -830,3 +830,6 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
   place**). Songs aren't mentioned any more (only admins see them).
 - **v1.0.2:** the tour's step 9 → 10 (a title's page → Lists) no longer stutters: while the tour runs, pages and
   posters appear without their fade-in, and the spotlight waits until the page has finished building.
+- **v1.0.3:** the tour's manga sources part is hands-on: **copy** the repository link, then **paste it & load it**
+  yourself in the highlighted box (the page behind the card works during that step; "Do it for me" pastes and loads it),
+  then **install your sources** from the loaded list.

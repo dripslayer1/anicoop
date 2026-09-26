@@ -286,6 +286,10 @@ These are cumulative; the README has one section per version.
 - **v1.0.2 (step 9 → 10 still lagged):** Lists mounts hundreds of `.poster-in` cards, each with its own staggered
   fade-in. While the tour runs, `<html class="tour-on">` turns off `.poster-in` and the `view` page transition, and
   `tourSettle` (2 animation frames + requestIdleCallback, max 0.4 s) runs after each step's `go` before the spotlight moves.
+- **v1.0.3:** manga sources in the tour are 3 steps: copy (`copy`), paste & load (`paste`, `interactive`: `.tour.interactive`
+  lets clicks through to the page, only the card catches them; `tourRepoState` shows loading / done / error;
+  `tourPasteRepo` = "Do it for me"), install (`interactive`, spotlight `.tour-repo-list`). Hooks: `.tour-repo-form`,
+  `.tour-repo-list` in the Extensions window. Tested against the real keiyoushi repo (2338 sources loaded).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
