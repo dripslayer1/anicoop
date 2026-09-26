@@ -5825,10 +5825,11 @@ createApp({
         const cleanLink = (s) => {
             s = String(s || '').trim(); if (!s) return '';
             if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
-            s = s.replace(/\{\s*(ep|episode)\s*\}/gi, EP_MARK);
+            s = s.replace(/(\{|%7B)\s*(ep|episode|e|\d{1,5})\s*(\}|%7D)/gi, EP_MARK);   // v10.6.1 {ep}, {episode} or the number itself in { }
             try { const u = new URL(s); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && s.length <= 800 ? u.href.split(EP_MARK).join('{ep}') : null; } catch { return null; }
         };
-        const fillEp = (url, n) => String(url || '').split('{ep}').join(String(n));
+        // (v10.6.1 links saved before with the number in { } — …/episode-%7B12%7D — work too)
+        const fillEp = (url, n) => String(url || '').replace(/(\{|%7B)\s*(ep|episode|e|\d{1,5})\s*(\}|%7D)/gi, String(n));
         const startWatchLink = (a) => { wlEdit.id = a.id; wlEdit.text = watchLinkOf(a.id); };
         const saveWatchLink = async (a, clear = false) => {
             if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
@@ -5870,7 +5871,7 @@ createApp({
             const raw = own || auto?.url; if (!raw) return null;
             const url = fillEp(raw, nextEpOf(a.id));
             let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
-            return { url, host, auto: !!auto, site: auto?.site || host, perEp: raw.includes('{ep}') };
+            return { url, host, auto: !!auto, site: auto?.site || host, perEp: url !== raw };
         };
         // fetch AniList's streaming links for the anime on your list that have no link yet (50 per call, low priority)
         let autoBusy = false;
@@ -7658,7 +7659,8 @@ createApp({
             ...kindSources(k),
         ];
         const availRows = computed(() => {
-            const a = selectedAnime.value, k = playKind.value; if (!a || !k) return [];
+            // v10.7 manga only: anime / TV watch through your watch link now, so their sources aren't listed or checked
+            const a = selectedAnime.value, k = playKind.value; if (!a || k !== 'manga') return [];
             const rows = [];
             if (k === 'manga' && extOn('mangadex')) { const i = mangaInfo[a.id]; rows.push({ id: 'mangadex', name: 'MangaDex', st: !i ? 'checking' : i.md ? 'yes' : 'no' }); }
             availSources(k).forEach(s => { const key = `${a.id}:${s.id}`; rows.push({ id: s.id, name: s.name, st: srcMatches[key] ? 'yes' : availNo[key] || 'checking' }); });
@@ -7685,10 +7687,10 @@ createApp({
         watch(() => playKind.value && selectedAnime.value?.id, (id) => {
             if (!id) { availTok++; return; }
             const a = selectedAnime.value, k = playKind.value;
-            setTimeout(() => { if (selectedAnime.value?.id === id && (availSources(k).length || k === 'manga')) checkAvailability(a, k); }, 500);
+            setTimeout(() => { if (selectedAnime.value?.id === id && k === 'manga') checkAvailability(a, k); }, 500);
         });
         // a source that has it: open Read / Watch on it
-        watch(() => playKind.value ? availSources(playKind.value).map(s => s.id).join(',') : '', (ids, old) => { if (ids && old !== undefined && selectedAnime.value && ids !== old) checkAvailability(selectedAnime.value, playKind.value); });
+        watch(() => playKind.value === 'manga' ? availSources(playKind.value).map(s => s.id).join(',') : '', (ids, old) => { if (ids && old !== undefined && selectedAnime.value && ids !== old) checkAvailability(selectedAnime.value, playKind.value); });
         const tabAvail = (id) => availRows.value.find(r => r.id === id)?.st || null;
         const openOnSource = (id) => { readSrc.value = id; openWatch(); };
         const chooseMatch = (r) => { const a = selectedAnime.value; const s = currentSite.value; if (!a || !s) return; srcMatches[`${a.id}:${s.id}`] = { url: r.url, title: r.title, cover: r.cover || null }; saveMatches(); srcView.match = r; srcView.picking = false; loadSourceFor(); };

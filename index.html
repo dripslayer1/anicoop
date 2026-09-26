@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.6">
+    <link rel="stylesheet" href="app.css?v=10.7">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.6" defer></script>
+    <script src="app.js?v=10.7" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.6</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.7</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -577,7 +577,7 @@
                                 <p class="label flex items-center gap-1.5"><i class="fa-solid fa-link text-lilac"></i>My watch link</p>
                                 <template v-if="wlEdit.id === selectedAnime.id">
                                     <input v-model="wlEdit.text" type="url" inputmode="url" placeholder="Paste a link, e.g. crunchyroll.com/series/…" class="field !py-2.5 !text-sm" @keydown.enter.prevent="saveWatchLink(selectedAnime)">
-                                    <p class="text-[11px] text-mute leading-snug">Tip: the show's page (not one episode) keeps working as you go. Crunchyroll's opens on your next episode. If a site's episode links end in the episode number, put <b class="text-sub font-mono">{ep}</b> there (…/episode-<b class="text-sub font-mono">{ep}</b>) and Watch opens the right one.</p>
+                                    <p class="text-[11px] text-mute leading-snug">Tip: the show's page (not one episode) keeps working as you go. Crunchyroll's opens on your next episode. If a site's episode links end in the episode number, put the number in curly brackets, like …/episode-<b class="text-sub font-mono">{12}</b> (or type <b class="text-sub font-mono">{ep}</b>), and Watch always opens your next episode.</p>
                                     <div class="flex gap-2">
                                         <button @click="saveWatchLink(selectedAnime)" class="btn-primary flex-1 !py-2 !text-xs"><i class="fa-solid fa-check"></i> Save link</button>
                                         <button @click="wlEdit.id = null" class="btn-ghost !py-2 !text-xs">Cancel</button>
