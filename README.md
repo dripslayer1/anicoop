@@ -809,3 +809,5 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
   before the site loads. The site itself and the browser's window bar can't be restyled by another website.
 - **v1.3:** the pop-up checks where it really opened and moves itself to the middle of the screen (Brave with anicoop
   installed as an app put it in the bottom-right corner on a 2560×1440 screen).
+- **v1.4:** the manga reader opens in **Webtoon** (vertical scroll) for every title; a mode you pick for one title is
+  still remembered for it.

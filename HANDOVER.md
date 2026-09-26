@@ -267,6 +267,8 @@ These are cumulative; the README has one section per version.
   (bottom-right). `centerWin` reads `win.screenX/Y` while the pop-up is still our same-origin opening screen and
   re-aims with a secant step per axis (up to 6 tries, 130 ms apart, before the 0.9 s navigation). Simulated: doubling,
   shifting and correct browsers all end centred; a browser that ignores `moveTo` can't be fixed.
+- **v1.4:** `defaultMode` = the title's saved mode, else `'vertical'` (Webtoon) for everything (was right-to-left for
+  Japanese manga).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
