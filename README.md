@@ -823,3 +823,8 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
   - **Skip tour** (or Esc) ends it; ← / → keys or Back / Next move through it.
   - It's remembered with your account (Settings), so it doesn't show again on your other devices.
   - **Settings → Account → Take the tour** plays it again any time.
+- **v1.0.1:** the tour is smooth now (the spotlight and card glide with GPU-friendly moves; no blur or glowing shadows
+  redrawn every frame). New steps: **Random pick**, **Save where you watch it** (how to add a link, AUTO links,
+  …/episode-{12}), **Watch, then count** (with a picture of the question), and three manga steps (**Reading manga**,
+  **First time: add sources** with a Copy link button for https://github.com/keiyoushi/extensions, **Read & keep your
+  place**). Songs aren't mentioned any more (only admins see them).
