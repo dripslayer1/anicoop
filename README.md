@@ -800,3 +800,7 @@ free "API client":
 
 The owner restarted the version numbers: the footer now says **v1.0** (it follows v10.7.1). **No SQL, no Edge Function
 change.** Also in this update: the Extensions window only shows manga (anime / TV watch through your watch link).
+- **v1.1:** watch links open in a **pop-up window** over anicoop on computers (one window, reused), not a new tab.
+  Close it and the "how many episodes" bar lights up. Settings → Lists → **Open watch links in** switches back to a new
+  tab. Phones always use a tab. (Crunchyroll, Netflix… refuse to be shown inside another site, so it can't be a
+  window inside the page.)

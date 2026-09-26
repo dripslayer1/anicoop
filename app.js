@@ -98,6 +98,7 @@ const defaultPrefs = () => ({
     savedGifs: [],                                          // v9.8 GIFs you starred (like Discord favourites): { url, preview }
     reader: { autoMark: true, saver: false, modes: {} },   // reader: mark chapters read at the end, data saver, reading mode per title
     watchService: 'any',                                    // v10.6 automatic watch links for anime: 'any' (Crunchyroll first), a site name, or 'off'
+    watchOpen: 'popup',                                     // v1.1 watch links open in a pop-up window over anicoop ('popup') or a new tab ('tab')
 });
 const mergePrefs = (base, extra) => ({ ...base, ...(extra || {}), activity: { ...base.activity, ...(extra?.activity || {}) }, hiddenGenres: { ...base.hiddenGenres, ...(extra?.hiddenGenres || {}) }, reader: { ...base.reader, ...(extra?.reader || {}) } });
 const PREFS = reactive(mergePrefs(defaultPrefs(), readJSON(PREFS_KEY)));
@@ -5911,11 +5912,33 @@ createApp({
         });
         const openMyLink = (a) => {
             const info = linkInfo(a); if (!info) return;
-            window.open(info.url, '_blank', 'noopener');
+            openWatchWindow(info.url);
             if (wlAtEnd(a)) return;
             const e = soloEntry(a.id), total = totalOf(e?.anime || a);
             const left = total ? Math.max(1, total - nextEpOf(a.id) + 1) : 999;
             watchAsk.value = { anime: slimAnime(e?.anime || a), from: nextEpOf(a.id), n: Math.min(lastN(a.id), left) }; keepAsk();
+        };
+        // v1.1 a pop-up window over anicoop (streaming sites refuse to be shown inside another site, so a window of its
+        // own is as close as it gets). One window is reused; phones and "New tab" in Settings open a tab instead.
+        let watchWin = null, watchWinT = null;
+        const watchClosed = ref(false);   // the pop-up was just closed: the question bar lights up
+        const openWatchWindow = (url) => {
+            if (PREFS.watchOpen === 'tab' || touchUI()) { window.open(url, '_blank', 'noopener'); return; }
+            const aw = screen.availWidth || 1280, ah = screen.availHeight || 800;
+            const w = Math.round(Math.min(1280, aw * 0.85)), h = Math.round(Math.min(820, ah * 0.85));
+            const left = Math.round((screen.availLeft || 0) + (aw - w) / 2), top = Math.round((screen.availTop || 0) + (ah - h) / 2);
+            const win = window.open(url, 'anicoop_watch', `popup=yes,width=${w},height=${h},left=${left},top=${top}`);
+            if (!win) { window.open(url, '_blank', 'noopener'); return; }   // pop-ups blocked: a tab then
+            try { win.opener = null; } catch {}   // the site can't reach back into anicoop
+            try { win.focus(); } catch {}
+            watchWin = win; watchClosed.value = false;
+            clearInterval(watchWinT);
+            watchWinT = setInterval(() => {
+                let closed = true; try { closed = !watchWin || watchWin.closed; } catch {}
+                if (!closed) return;
+                clearInterval(watchWinT); watchWin = null;
+                if (watchAsk.value) { watchClosed.value = true; setTimeout(() => { watchClosed.value = false; }, 2400); }
+            }, 700);
         };
         // v10.6 send the link (on the episode you're at) to a friend in chat
         const sendMyLink = (a) => {
@@ -10013,7 +10036,7 @@ createApp({
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

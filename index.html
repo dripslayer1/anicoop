@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.0">
+    <link rel="stylesheet" href="app.css?v=1.1">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=1.0" defer></script>
+    <script src="app.js?v=1.1" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v1.0</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v1.1</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -3192,7 +3192,7 @@
             <p v-else class="hs-note">Searching {{ currentSection.label.toLowerCase() }} · Enter shows every result</p>
         </div>
         <!-- v10.3 back from your watch link: how many episodes did you watch? -->
-        <div v-if="watchAsk && currentUser" class="wask" @click.stop>
+        <div v-if="watchAsk && currentUser" class="wask" :class="{ 'is-back': watchClosed }" @click.stop>
             <img :src="watchAsk.anime.coverImage?.large" class="wask-cover" alt="">
             <div class="min-w-0 flex-1">
                 <p class="wask-q">How many episodes did you watch?</p>
@@ -3658,6 +3658,9 @@
                                     <p class="set-title">Watch links</p>
                                     <p class="text-xs text-sub mt-1">For anime without a link of your own, Watch opens the official site AniList lists. Pick the service you have. A link you save yourself always wins.</p>
                                     <div class="chip-wrap mt-3 max-w-xs"><select v-model="PREFS.watchService" class="chip w-full"><option value="any">Any (Crunchyroll first)</option><option v-for="s in WATCH_SERVICES" :key="s" :value="s">{{ s }} only</option><option value="off">Off: only my own links</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                                    <p class="set-title mt-5">Open watch links in</p>
+                                    <div class="chip-wrap mt-3 max-w-xs"><select v-model="PREFS.watchOpen" class="chip w-full"><option value="popup">A pop-up window over anicoop</option><option value="tab">A new tab</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                                    <p class="set-hint mt-2">Phones always open a new tab. Streaming sites don’t allow being shown inside another website, so the pop-up is its own window.</p>
                                 </div>
                                 <div class="grid sm:grid-cols-2 gap-4">
                                     <div class="set-block">

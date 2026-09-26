@@ -1975,3 +1975,7 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 
 /* ===== v10.6 automatic watch link tag ===== */
 .wl-auto { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 6px; font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--c-lilac)); background: rgb(var(--c-lilac) / .14); vertical-align: 1px; }
+
+/* ===== v1.1 the pop-up was closed: the episode question lights up ===== */
+.wask.is-back { animation: wask-back 1.2s ease-out 2; border-color: rgb(var(--c-volt)); }
+@keyframes wask-back { 0% { box-shadow: 0 0 0 0 rgb(var(--c-volt) / .55), 0 18px 50px rgba(0,0,0,.45); } 100% { box-shadow: 0 0 0 14px rgb(var(--c-volt) / 0), 0 18px 50px rgba(0,0,0,.45); } }
