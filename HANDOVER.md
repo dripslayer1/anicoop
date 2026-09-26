@@ -29,8 +29,8 @@ For the next agent/session taking over. Last updated at v10.1 (2026-09-26), when
 - PRs #3–#16 (v8.8 → v10.0 + handovers) are **merged into `main`**. v10.0 needed SQL 8f (`account_links.refresh_token`),
   the Edge Function redeploy (GIF paging, `mal` endpoint) and the `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET` secrets; the
   owner registered the MAL API client ("anicoop", published) — whether they finished the rest is unconfirmed.
-- v10.1 (#17) and v10.3 (#18: v10.2 genre filter under Sort by + v10.3 "my watch link") are merged. **v10.4 is PR #19
-  from `claude/v10-4-watch-buttons`** (Watch buttons use your link, official streaming links). **No SQL, no Edge
+- v10.1 (#17) and v10.3 (#18: v10.2 genre filter under Sort by + v10.3 "my watch link") and v10.4 (#19) are merged. **v10.5 is PR #20
+  from `claude/v10-5-continue-link`** (Continue watching cards open your link). **No SQL, no Edge
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
@@ -230,7 +230,7 @@ These are cumulative; the README has one section per version.
 
 ## 3. Where we stopped / immediate next steps
 
-**Stopped at:** the v10.4 PR (#19) is open (no SQL, no Edge Function change). v10.1 is merged.
+**Stopped at:** the v10.5 PR (#20) is open (no SQL, no Edge Function change). v10.1 is merged.
 
 - **v10.3 my watch link** (anime + TV only, the owner's choice): `media_data.wl` (`entryData` / `listRow` / `withRepeats`
   keep it). `openMyLink` opens it and sets `watchAsk` (kept in localStorage `anicoop_watch_ask_v1`, so a reload on the
@@ -241,6 +241,10 @@ These are cumulative; the README has one section per version.
   (the extensions window) is only reached from manga now, plus the "On your sources" chips. `.play-cta` is manga +
   phones only (on phones `.det-wrap > .banner-play` is hidden by CSS, so it is their only Watch button).
   `officialLinks` = AniList `externalLinks` type STREAMING (Crunchyroll first); **Use** saves one as the watch link.
+- **v10.5:** `continueItem` (Browse → Continue watching) for anime / TV: `openMyLink` without leaving Browse, or the
+  title page + `watchMine` when there is no link. Manga still opens the reader. Ideas the owner was given next:
+  auto-fill links from AniList, a shared squad link, "new episode out" alerts that open the link, episode-numbered
+  links ({ep}), resume-by-season for TV, a "Where I watch" default service.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

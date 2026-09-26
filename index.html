@@ -33,11 +33,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=10.4">
+    <link rel="stylesheet" href="app.css?v=10.5">
 
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=10.4" defer></script>
+    <script src="app.js?v=10.5" defer></script>
 </head>
 <body>
 
@@ -214,7 +214,7 @@
             </main>
 
             <footer class="intro-el i-foot absolute bottom-5 left-6 md:left-12 xl:left-28 right-6 flex flex-wrap gap-x-6 gap-y-1 label !text-mute pointer-events-none">
-                <span>v10.4</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
+                <span>v10.5</span><span>made for the squad</span><span v-if="introMode !== 'done'">press any key to skip</span>
             </footer>
         </section>
 
@@ -1710,7 +1710,7 @@
                                 <img :src="item.anime.bannerImage || item.anime.coverImage?.large" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-expo group-hover:scale-105" loading="lazy" decoding="async" alt="">
                                 <div class="absolute inset-0 bg-gradient-to-r from-base via-base/85 to-base/30"></div>
                                 <div class="relative h-full p-4 flex flex-col">
-                                    <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}</p>
+                                    <p class="label !text-sub truncate pr-24">{{ item.repeatNo ? 'solo · rewatch #' + item.repeatNo : item.squadName ? 'squad · ' + item.squadName : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="watchLinkOf(item.anime.id)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkHost(watchLinkOf(item.anime.id)) }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
                                     <p class="mt-1 text-ink font-semibold truncate pr-24">{{ titleOf(item.anime) }}</p>
                                     <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}</template></p>
                                     <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>

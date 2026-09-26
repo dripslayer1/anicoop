@@ -8023,6 +8023,13 @@ createApp({
         const continueItem = async (item) => {
             const a = item?.anime; if (!a) return;
             if (!MEDIA_KIND[a.type]) { fetchAnimeDetails(a); return; }
+            // v10.5 anime / TV: straight to your watch link (no link: its page, with the link box open)
+            if (hasWatchLink(a)) {
+                if (watchLinkOf(a.id)) { openMyLink(soloEntry(a.id)?.anime || a); return; }
+                await fetchAnimeDetails(a);
+                if (selectedAnime.value?.id === a.id) { await nextTick(); watchMine(selectedAnime.value); }
+                return;
+            }
             await fetchAnimeDetails(a);
             if (selectedAnime.value?.id !== a.id) return;
             await nextTick(); openWatch();

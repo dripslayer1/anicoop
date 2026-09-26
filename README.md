@@ -765,9 +765,9 @@ free "API client":
 18. **Settings → Profile decorations:** each one (avatar frame, profile theme, page background, effect, name style,
     badges) is a small row showing what you picked; tap it to open its options.
 
-## v10.3 / v10.4 — my watch link (includes v10.2)
+## v10.3 – v10.5 — my watch link (includes v10.2)
 
-**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.4.
+**No SQL, no Edge Function change.** Merge, hard-refresh (Ctrl+Shift+R), the footer says v10.5.
 
 - **v10.2:** in Lists, the Genre filter sits right under "Sort by".
 - **My watch link (anime and Movies & TV):** on a title's page, "Add where you watch it" saves any link (Crunchyroll,
@@ -781,3 +781,6 @@ free "API client":
   computers (phones keep it, their banner button is hidden). Manga keeps Read as before. Anime pages list the
   **official sites** AniList has (Crunchyroll first, then Netflix, HIDIVE…): open one, or tap **Use** to save it as
   your watch link.
+- **v10.5:** Browse → **Continue watching** (anime and Movies & TV): tapping a card opens your watch link straight
+  away (and asks how many episodes afterwards) instead of the extensions window. The card shows where it opens
+  ("▶ crunchyroll.com") or "no link saved"; with no link it opens the title's page with the link box ready.
