@@ -5860,6 +5860,23 @@ createApp({
             if (wlAtEnd(a)) return;
             watchAsk.value = { anime: slimAnime(a), from: nextEpOf(a.id), n: 1 }; keepAsk();
         };
+        // v10.4 the big Watch buttons on an anime / TV page: your saved link (manga keeps its reader)
+        const watchMine = (a) => {
+            if (!a) return;
+            if (watchLinkOf(a.id)) { openMyLink(a); return; }
+            showToast('You don’t have a watch link saved for this yet. Add one in “My watch link”', 'error');
+            if (!currentUser.value) return;
+            startWatchLink(a);
+            nextTick(() => document.querySelector('.wl-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        };
+        // v10.4 the official streaming sites AniList lists for an anime (Crunchyroll, Netflix, HIDIVE…)
+        const officialLinks = computed(() => {
+            const a = selectedAnime.value; if (!a || a.type !== 'ANIME') return [];
+            const seen = new Set();
+            return (a.externalLinks || []).filter(l => l.type === 'STREAMING' && /^https?:\/\//.test(l.url || '') && !seen.has(l.site) && seen.add(l.site))
+                .sort((x, y) => (/crunchyroll/i.test(y.site) ? 1 : 0) - (/crunchyroll/i.test(x.site) ? 1 : 0));
+        });
+        const useOfficial = (a, l) => { wlEdit.text = l.url; saveWatchLink(a); };
         const stepAsk = (d) => { const w = watchAsk.value; if (!w) return; const max = askLeft.value ?? 999; w.n = clamp((Number(w.n) || 0) + d, 1, Math.max(1, max)); };
         const closeAsk = () => { watchAsk.value = null; keepAsk(); };
         const saveAsk = async () => {
@@ -9922,7 +9939,7 @@ createApp({
             notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedTab, viewedStats, viewedRanked, viewedList, viewedIsFriend, sharedSquads, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isRewish, toggleRewish, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, rewishOn, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchAddToSquad, batchRemove, batchBusy, batchSquadMenu,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
