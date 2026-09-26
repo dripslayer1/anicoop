@@ -5833,6 +5833,19 @@ createApp({
         };
         // (v10.6.1 links saved before with the number in { } — …/episode-%7B12%7D — work too)
         const fillEp = (url, n) => String(url || '').replace(/(\{|%7B)\s*(ep|episode|e|\d{1,5})\s*(\}|%7D)/gi, String(n));
+        // v1.1 no brackets needed: a link that ends in the episode number (…/episode-7, …-7/, …/7.html, ?ep=7) gets its
+        // number swapped for the next episode. Not when the word before it is season / part / vol, or the number is
+        // more than the episode count (an id, a year…).
+        const EP_END = /([\/\-_=.])(\d{1,4})((?:\.html?|\.php)?\/?)$/i;
+        const epSlotOf = (url, a) => {
+            const s = String(url || ''); if (!s || /(\{|%7B)\s*(ep|episode|e|\d{1,5})\s*(\}|%7D)/i.test(s)) return null;
+            const hash = s.indexOf('#'), body = hash < 0 ? s : s.slice(0, hash), tail = hash < 0 ? '' : s.slice(hash);
+            const m = EP_END.exec(body); if (!m) return null;
+            const n = Number(m[2]), total = totalOf(soloEntry(a?.id)?.anime || a);
+            if (n < 1 || n > (total ? total + 1 : 3000)) return null;
+            if (/(season|part|cour|vol|volume|s)[-_ ]?$/i.test(body.slice(0, m.index))) return null;
+            return body.slice(0, m.index) + m[1] + '{ep}' + m[3] + tail;
+        };
         const startWatchLink = (a) => { wlEdit.id = a.id; wlEdit.text = watchLinkOf(a.id); };
         const saveWatchLink = async (a, clear = false) => {
             if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
@@ -5845,7 +5858,8 @@ createApp({
             try {
                 await upsertSolo(entry);
                 if (!cur) logActivity(entry.anime, null, entry);
-                showToast(!link ? 'Watch link removed' : cur ? 'Watch link saved' : `Watch link saved · ${titleOf(a)} → ${statusLabelFor(a.type, 'PLANNING')}`);
+                const epHint = link && (link.includes('{ep}') || epSlotOf(link, a)) ? ` · Watch opens episode ${nextEpOf(a.id)}` : '';
+                showToast(!link ? 'Watch link removed' : (cur ? 'Watch link saved' : `Watch link saved · ${titleOf(a)} → ${statusLabelFor(a.type, 'PLANNING')}`) + epHint);
             } catch (err) { if (cur) setSoloLocal(cur); else fetchSolo(); showToast('Could not save: ' + (err.message || err), 'error'); }
         };
         // the next episode to watch (a rewatch counts on its own counter)
@@ -5871,7 +5885,7 @@ createApp({
         const linkInfo = (a) => {
             if (!a?.id || !hasWatchLink(a)) return null;
             const own = watchLinkOf(a.id), auto = own ? null : autoLinkOf(a);
-            const raw = own || auto?.url; if (!raw) return null;
+            const raw = own ? (epSlotOf(own, a) || own) : auto?.url; if (!raw) return null;
             const url = fillEp(raw, nextEpOf(a.id));
             let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
             return { url, host, auto: !!auto, site: auto?.site || host, perEp: url !== raw };
@@ -6082,7 +6096,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             { icon: 'fa-plus', title: 'Add in one tap', body: 'Use the + on a poster to put it on a list: Planning, Watching, Completed and more. Tap the poster itself to open its page.', go: () => openTracker('browse'), sel: ['main .poster'] },
             { icon: 'fa-dice', title: 'Can’t decide? Random pick', body: 'Random pick chooses from your Plan to watch list (1 to 4 at a time). Don’t like it? Roll again. Like it? Add it as Watching in one tap.', go: () => openTracker('browse'), sel: ['button[title="Random pick"]'] },
             { icon: 'fa-list-check', title: 'Your list, on every title', body: 'On a title’s page: set the status, episodes and your score, then Save. Add it to a squad to share it with friends.', go: async () => { const a = tourPick(); if (a) await fetchAnimeDetails(a); }, sel: ['.det-left > .panel'], skipIfMissing: true },
-            { icon: 'fa-link', title: 'Save where you watch it', body: 'Tap “Add where you watch it”, paste the show’s page (Crunchyroll, Netflix, any site) and Save. It stays on your account, on every device. Many anime fill this in by themselves (they show AUTO). If a site’s episode links end in the number, write it in curly brackets, like …/episode-{12}, and Watch always opens your next one.', sel: ['.wl-box'], skipIfMissing: true },
+            { icon: 'fa-link', title: 'Save where you watch it', body: 'Tap “Add where you watch it”, paste the show’s page (Crunchyroll, Netflix, any site) and Save. It stays on your account, on every device. Many anime fill this in by themselves (they show AUTO). If you paste an episode’s link that ends in its number (like …/episode-7), Watch always opens your next episode.', sel: ['.wl-box'], skipIfMissing: true },
             { icon: 'fa-circle-play', title: 'Watch, then count', body: 'Watch opens your next episode in a pop-up window. When you’re back, anicoop asks how many episodes you watched: pick the number and Save. Your list, AniList and MyAnimeList all update.', sel: ['.wl-go', '.banner-play-inline', '.play-cta'], skipIfMissing: true, demo: 'ask' },
             { icon: 'fa-list-ul', title: 'All your lists', body: 'Filter by status or genre, change the order, and switch between Solo and Squads. “Select” edits many titles at once.', go: () => openTracker('solo'), sel: ['.list-aside'] },
             { icon: 'fa-bolt', title: 'The Feed', body: 'What your friends watch and rate. Post your own thoughts, polls and tier lists; the filters on top pick the section.', go: () => openTracker('feed'), sel: ['.feed-types'] },
