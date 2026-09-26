@@ -828,3 +828,5 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
   …/episode-{12}), **Watch, then count** (with a picture of the question), and three manga steps (**Reading manga**,
   **First time: add sources** with a Copy link button for https://github.com/keiyoushi/extensions, **Read & keep your
   place**). Songs aren't mentioned any more (only admins see them).
+- **v1.0.2:** the tour's step 9 → 10 (a title's page → Lists) no longer stutters: while the tour runs, pages and
+  posters appear without their fade-in, and the spotlight waits until the page has finished building.
