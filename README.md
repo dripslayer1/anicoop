@@ -807,3 +807,5 @@ change.** Also in this update: the Extensions window only shows manga (anime / T
 - **v1.2:** the pop-up always opens in the middle of your screen (a window left open from last time is closed and
   reopened there) and first shows a short anicoop-style screen (cover, title, "Episode 5 · opening crunchyroll.com…")
   before the site loads. The site itself and the browser's window bar can't be restyled by another website.
+- **v1.3:** the pop-up checks where it really opened and moves itself to the middle of the screen (Brave with anicoop
+  installed as an app put it in the bottom-right corner on a 2560×1440 screen).
