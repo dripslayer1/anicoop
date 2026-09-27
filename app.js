@@ -770,12 +770,23 @@ const mihonCfg = reactive({ url: '', user: '', pass: '', ...(readJSON(MIHON_KEY)
 const saveMihonCfg = () => { try { localStorage.setItem(MIHON_KEY, JSON.stringify({ url: mihonCfg.url, user: mihonCfg.user, pass: mihonCfg.pass })); } catch {} };
 const mihonBase = () => String(mihonCfg.url || '').trim().replace(/\/+$/, '');
 const mihonAuth = () => mihonCfg.user ? { Authorization: 'Basic ' + btoa(unescape(encodeURIComponent(`${mihonCfg.user}:${mihonCfg.pass}`))) } : {};
+const lnaState = async () => {
+    for (const name of ['local-network-access', 'loopback-network', 'local-network']) {
+        try { return (await navigator.permissions.query({ name })).state; } catch {}
+    }
+    return null;
+};
 const mihonApi = {
     async gql(query, variables = {}) {
         if (!mihonBase()) throw new Error('Connect your Mihon server first (Extensions → Mihon server).');
         let r;
         try { r = await fetch(mihonBase() + '/api/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json', ...mihonAuth() }, body: JSON.stringify({ query, variables }) }); }
-        catch { throw new Error(`Can’t reach your Mihon server at ${mihonBase()}. Is it running, and did the browser ask to allow access to it?`); }
+        catch {
+            // v1.8 Chrome / Edge / Brave ask before a website may reach programs on your computer ("local network access").
+            // Once that's blocked (or its pop-up was closed a few times) they stop asking and just fail — say so plainly.
+            if ((await lnaState()) === 'denied') throw new Error('Your browser is blocking anicoop from reaching your Mihon server. Click the icon left of the address bar → Site settings → “Local network access” (or “Apps on device”) → Allow, then reload the page.');
+            throw new Error(`Can’t reach your Mihon server at ${mihonBase()}. Is it running, and did the browser ask to allow access to it?`);
+        }
         if (r.status === 401) throw new Error('Your Mihon server wants a username and password (Extensions → Mihon server).');
         const j = await r.json().catch(() => null);
         if (!j) throw new Error(`Your Mihon server answered ${r.status}.`);
@@ -6639,8 +6650,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.8';
+        const APP_VERSION = '1.8.1';
         const WHATS_NEW = {
+            '1.8.1': [
+                { icon: 'fa-plug', t: 'Clearer Mihon server message', d: 'If your browser is blocking anicoop from reaching your Mihon server, it now tells you where to allow it.' },
+            ],
             '1.8': [
                 { icon: 'fa-book-open', t: 'The real latest chapter', d: 'Ongoing manga & manhwa now show the latest chapter that’s actually out (from MangaUpdates too), not just what MangaDex still has.' },
             ],

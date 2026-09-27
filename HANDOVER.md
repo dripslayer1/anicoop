@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.8'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.8.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.8'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.8.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -446,6 +446,7 @@ These are cumulative; the README has one section per version.
   `mu`, `muLast` (`latest_chapter`), `muDone`, `mdLast`; `last` = the higher of MangaDex and MU. Any MU failure just
   leaves the MangaDex answer. The app sends `titles` (english, romaji, native) + `country`; the browser cache key went to
   `anicoop_mangadex_v2` (v1 removed once). Checked against the live APIs: 33 popular ongoing titles, all matched.
+- **v1.8.1:** `mihonApi.gql` failing to fetch checks `lnaState()` (permission names local-network-access / loopback-network / local-network); "denied" → a message saying where to allow it. Chrome 142+ blocks https → localhost without that permission, and stops prompting once blocked or dismissed.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
