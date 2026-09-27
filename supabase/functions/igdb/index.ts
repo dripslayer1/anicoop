@@ -105,27 +105,59 @@ const mdGet = async (path: string) => {
     const r = await fetch(MD + path, { headers: { 'User-Agent': 'anicoop/1.0 (+https://anicoop.studio)', Accept: 'application/json' } });
     return r.ok ? r.json() : null;
 };
+// v1.8 MangaUpdates: the latest chapter out. MangaDex loses a series' chapters once it's licensed (Webtoon, Tapas…),
+// so its count can be far behind (Return of the Blossoming Blade: 42 on MangaDex, 181 out). Found through the link
+// MangaDex keeps (links.mu, a base-36 id), else by an exact title of the right kind (KR manhwa, CN/TW manhua, JP manga).
+const MU = 'https://api.mangaupdates.com/v1';
+const muFetch = async (path: string, init: RequestInit = {}) => {
+    const r = await fetch(MU + path, { ...init, headers: { 'User-Agent': 'anicoop/1.0 (+https://anicoop.studio)', Accept: 'application/json', 'Content-Type': 'application/json' } });
+    return r.ok ? r.json() : null;
+};
+const muNorm = (s: string) => String(s || '').replace(/\s*\((\d{4}|novel|manhwa|manhua|webtoon|official)\)\s*$/i, '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+const MU_KIND: Record<string, string[]> = { KR: ['Manhwa'], CN: ['Manhua'], TW: ['Manhua'], JP: ['Manga'] };
+const muLatest = async (link: unknown, titles: string[], country: string) => {
+    let id = typeof link === 'string' && /^[0-9a-z]{1,12}$/i.test(link) ? parseInt(link, 36) : 0;
+    const kinds = MU_KIND[country] || ['Manga', 'Manhwa', 'Manhua'];
+    if (!id) {
+        for (const t of titles) {
+            const d = await muFetch('/series/search', { method: 'POST', body: JSON.stringify({ search: t, perpage: 10 }) });
+            const want = muNorm(t);
+            const same = (d?.results || []).filter((r: any) => kinds.includes(r.record?.type) && [r.record?.title, r.hit_title].some((x: string) => muNorm(x) === want));
+            const ids = [...new Set(same.map((r: any) => r.record.series_id))];
+            if (ids.length === 1) { id = Number(ids[0]); break; }   // two series with that exact name: can't tell which, so none
+        }
+    }
+    if (!id) return null;
+    const s = await muFetch(`/series/${id}`);
+    if (!s || !['Manga', 'Manhwa', 'Manhua', 'OEL'].includes(s.type)) return null;   // a novel linked by mistake
+    const last = Number(s.latest_chapter) || 0;
+    return { mu: String(id), muLast: last > 0 && last < 100000 ? last : null, muDone: !!s.completed };
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const RATINGS = '&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica';
 const mangaDex = async (body: Record<string, unknown>) => {
     if (body.kind === 'find') {
         // find the MangaDex entry linked to this AniList id (MangaDex stores the AniList id in links.al)
         const alId = String(Number(body.alId) || '');
-        const titles = (Array.isArray(body.titles) ? body.titles : []).map(String).filter(t => t && t.length <= 200).slice(0, 2);
+        const titles = (Array.isArray(body.titles) ? body.titles : []).map(String).filter(t => t && t.length <= 200).slice(0, 3);
+        const country = /^[A-Z]{2}$/.test(String(body.country || '')) ? String(body.country) : '';
         if (!alId || !titles.length) return null;
+        // (v1.8 MangaUpdates doesn't stop the MangaDex answer: if it fails, you just get MangaDex's count)
+        const muSafe = (link: unknown) => muLatest(link, titles, country).catch(() => null);
         let hit: any = null;
-        for (const t of titles) {
+        for (const t of titles.slice(0, 2)) {
             const d = await mdGet(`/manga?limit=10&title=${encodeURIComponent(t)}${RATINGS}`);
             hit = (d?.data || []).find((m: any) => m.attributes?.links?.al === alId) || null;
             if (hit) break;
         }
-        if (!hit) return { md: null };
-        // highest chapter number in any language = the latest chapter out
-        const agg = await mdGet(`/manga/${hit.id}/aggregate`);
+        if (!hit) { const mu = await muSafe(null); return { md: null, ...(mu || {}), last: mu?.muLast || null }; }
+        // highest chapter number in any language = the latest chapter out (v1.8 or MangaUpdates' latest, whichever is higher)
+        const [agg, mu] = await Promise.all([mdGet(`/manga/${hit.id}/aggregate`), muSafe(hit.attributes?.links?.mu)]);
         let last = 0;
         for (const v of Object.values(agg?.volumes || {}) as any[]) for (const c of Object.keys(v?.chapters || {})) { const n = parseFloat(c); if (n > last) last = n; }
         const a = hit.attributes || {};
-        return { md: hit.id, status: a.status || null, last: last || (a.lastChapter ? parseFloat(a.lastChapter) : null), final: a.lastChapter || null,
+        const mdLast = last || (a.lastChapter ? parseFloat(a.lastChapter) : null);
+        return { md: hit.id, status: a.status || null, last: Math.max(mdLast || 0, mu?.muLast || 0) || null, mdLast, ...(mu || {}), final: a.lastChapter || null,
             links: a.links || {}, langs: a.availableTranslatedLanguages || [] };
     }
     if (body.kind === 'pages') {

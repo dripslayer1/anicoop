@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.7'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.8'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.7'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.8'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -440,6 +440,12 @@ These are cumulative; the README has one section per version.
   `compareFor` resets Compare only for a different person; navState carries `compare`. `.list-aside` (xl) and
   `.their-aside` (lg) scroll on their own (max-height 100dvh − 7rem). The list-steps reset watcher sits after the Compare
   refs (TDZ).
+- **v1.8** (Edge Function only): **MangaUpdates** in `mangaDex` `kind: 'find'` (`muLatest` in `igdb/index.ts`): the
+  MU series comes from MangaDex's `links.mu` (base-36 → `parseInt(x, 36)` = MU `series_id`), else an exact-title search
+  (`muNorm`) of the right type (`country` KR → Manhwa, CN/TW → Manhua, JP → Manga; two exact hits = no match). Returns
+  `mu`, `muLast` (`latest_chapter`), `muDone`, `mdLast`; `last` = the higher of MangaDex and MU. Any MU failure just
+  leaves the MangaDex answer. The app sends `titles` (english, romaji, native) + `country`; the browser cache key went to
+  `anicoop_mangadex_v2` (v1 removed once). Checked against the live APIs: 33 popular ongoing titles, all matched.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
@@ -484,7 +490,7 @@ These are cumulative; the README has one section per version.
   - **TMDB:** movies & TV.
   - **Songs:** Apple iTunes Search/Lookup and charts, plus Spotify through the Edge Function, Deezer for artist photos, and Wikipedia for bios. Full audio comes from the YouTube IFrame API; the video id is found through the Edge Function's `ytm` and `yt` searches.
 - **Synthetic numeric ids:** `GAME_BASE=1e9`, `MOVIE_BASE=1.2e9`, `SHOW_BASE=1.3e9`, `PERSON_BASE=1.4e9`, `SONG_BASE=1.5e9`. `typeOfId(id)` maps an id back to its type.
-- **The Edge Function `igdb`** handles these `kind`s: igdb, tmdb, spotify, steam, mangadex, fetch (a CORS proxy for sources), yt, ytm, emoji, gif. Its secrets: Twitch, TMDB, Spotify, `EMOJI_API_KEY`, `GIPHY_API_KEY` or `TENOR_API_KEY`.
+- **The Edge Function `igdb`** handles these `kind`s: igdb, tmdb, spotify, steam, mangadex (+ MangaUpdates for the latest chapter), fetch (a CORS proxy for sources), yt, ytm, emoji, gif. Its secrets: Twitch, TMDB, Spotify, `EMOJI_API_KEY`, `GIPHY_API_KEY` or `TENOR_API_KEY`.
 - **User preferences:**
   - `PREFS` (reactive; defaults in `defaultPrefs()` near the top of `app.js`) is saved to localStorage **and synced to Supabase `user_settings`**. New synced settings go there, as `savedGifs` did.
   - Anything sensitive or device-specific must NOT go in `PREFS`. For example, the Mihon server login lives in localStorage key `anicoop_mihon_v1`.
