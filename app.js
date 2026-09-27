@@ -101,7 +101,7 @@ const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
 const PREFS_KEY = 'anicoop_prefs';
 const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
-    scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true,
+    scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
     hiddenGenres: { ANIME: [], MANGA: [], GAME: [], TV: [], SONG: [] },   // genres you never want to see (Browse, Top 100, trending, random)
     extensions: [],                                         // manga reading extensions you installed (Mihon-style)
@@ -292,11 +292,19 @@ const anilistOnce = async (rawQuery, variables) => {
     } else data = await anilistRaw(known ? query.replace(sortOf, known) : query, variables);
     return noAdult ? dropAdult(data) : data;
 };
+let aniPausedUntil = 0;
+const aniBusyError = () => { const e = new Error(`AniList rate limit (30 requests a minute) – try again in ${Math.ceil((aniPausedUntil - Date.now()) / 1000)} s.`); e.busy = true; return e; };
 const anilistRaw = async (query, variables) => {
     let res;
     try { res = await fetch(ANILIST, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ query, variables }) }); }
     catch { throw new Error('Could not reach AniList — check your connection and try again.'); }
-    if (res.status === 429) throw new Error('AniList rate limit hit – wait a minute and try again.');
+    if (res.status === 429) {
+        // v1.9 AniList allows 30 requests a minute right now. It says when the minute is up (X-RateLimit-Reset):
+        // everything waits until then instead of asking again and again (each ask while blocked counts too)
+        const reset = Number(res.headers.get('X-RateLimit-Reset')) * 1000;
+        aniPausedUntil = Math.min(Date.now() + 65000, Math.max(Date.now() + 5000, reset || 0));
+        const e = new Error(`AniList rate limit hit – try again in ${Math.ceil((aniPausedUntil - Date.now()) / 1000)} s.`); e.busy = true; throw e;
+    }
     if (!res.ok) throw new Error(`AniList error (${res.status}) – try again.`);
     let json;
     try { json = await res.json(); } catch { throw new Error('AniList sent back something unreadable — try again.'); }
@@ -325,9 +333,12 @@ const aniLane = makeLane({ concurrent: 2, gap: 120 });
 const anilistLow = (query, variables) => anilist(query, variables, { low: true });   // background jobs
 const anilist = (query, variables, { low = false } = {}) => aniLane(async () => {
     for (let attempt = 0; ; attempt++) {
+        // v1.9 while AniList is blocking us: a short wait is waited out, a long one says how long
+        const wait = aniPausedUntil - Date.now();
+        if (wait > 0) { if (wait > 12000) throw aniBusyError(); await sleep(wait + 200); }
         try { return await anilistOnce(query, variables); }
         catch (err) {
-            if (attempt < 2 && /rate limit/i.test(err.message || '')) { await sleep(1500 * (attempt + 1)); continue; }
+            if (attempt < 2 && /rate limit/i.test(err.message || '')) { if (!err.busy) await sleep(1500 * (attempt + 1)); continue; }
             throw err;
         }
     }
@@ -5642,11 +5653,21 @@ createApp({
         watch(() => [adultAllowed.value, Object.keys(adultIds).length], () => { const v = viewedUser.value; if (v?.all) v.entries = v.all.filter(adultOkItem); });
         watch(viewUserId, (id) => { if (id) { loadViewedUser(id); fetchRankOrders(id, viewedRankOrders); Object.keys(rankShown).filter(k => k.startsWith('them:')).forEach(k => delete rankShown[k]); } else viewedUser.value = null; });
         // friend stats come from the server so each stat can be hidden per person (Settings → Privacy)
+        const STAT_FROM_SERVER = { days: 'days', ANIME: 'anime', MANGA: 'manga', eps: 'eps', chapters: 'chapters', completed: 'completed', mean: 'mean' };
+        const STAT_LIST_TYPE = { ANIME: 'ANIME', eps: 'ANIME', MANGA: 'MANGA', chapters: 'MANGA', TV: 'TV', tv_done: 'TV', GAME: 'GAME', hours: 'GAME', SONG: 'SONG', plays: 'SONG' };
         const viewedStats = computed(() => {
             const v = viewedUser.value; if (!v) return [];
-            const st = statsFor(v.entries), cards = statCards(st, v.days);
+            const st = statsFor(v.entries);
+            // v1.9.1 a stat counted from their list (Movies & TV, Games, Songs — and all of them if the server's numbers
+            // didn't come) is locked when you can't see that list, instead of showing 0
+            const seesList = (t) => viewUserId.value === uid() || (viewedIsFriend.value && !v.hidden.includes(t));
+            const cards = statCards(st, v.days).map(c => {
+                if (v.stats && STAT_FROM_SERVER[c.key]) return c;
+                const t = STAT_LIST_TYPE[c.key];
+                return (t ? seesList(t) : viewedIsFriend.value || viewUserId.value === uid()) ? c : { ...c, value: '', hidden: true, done: undefined, alt: undefined, why: viewedIsFriend.value ? 'list' : 'friends' };
+            });
             if (!v.stats) return cards;
-            const map = { days: 'days', ANIME: 'anime', MANGA: 'manga', eps: 'eps', chapters: 'chapters', completed: 'completed', mean: 'mean' };
+            const map = STAT_FROM_SERVER;
             // the server's numbers include their 18+ titles: when some are hidden from you, the numbers are counted here
             // from what you can see (a stat they hide stays hidden)
             const trimmed = (v.all || []).length !== v.entries.length;
@@ -5701,7 +5722,7 @@ createApp({
         const setViewedSection = (sec) => navigate(() => { viewedSection.value = sec; });
         const openFriendStat = (card) => {
             if (card.soon) { showToast(`${card.label} is coming soon`); return; }
-            if (card.hidden) { showToast(`${viewedUser.value?.profile?.username || 'They'} keeps this stat private`, 'error'); return; }
+            if (card.hidden) { const who = viewedUser.value?.profile?.username || 'They'; showToast(card.why === 'friends' ? `Only ${who}'s friends can see this` : card.why === 'list' ? `${who} keeps this list private` : `${who} keeps this stat private`, 'error'); return; }
             if (card.key === 'ANIME' || card.key === 'eps') return openTheirList('ANIME');
             if (card.key === 'GAME' || card.key === 'hours') return openTheirList('GAME');
             if (card.key === 'TV') return openTheirList('TV');
@@ -6650,8 +6671,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.8.1';
+        const APP_VERSION = '1.9';
         const WHATS_NEW = {
+            '1.9': [
+                { icon: 'fa-dice', t: 'Random keeps rolling', d: 'Random asks AniList far less often, so rolling again and again no longer stops working after a while. If AniList does need a break, it says how many seconds.' },
+                { icon: 'fa-lock', t: 'Locked stats stay locked', d: 'On someone’s profile, a stat you’re not allowed to see shows a lock instead of 0 (Movies & TV, Games and Songs included).' },
+                { icon: 'fa-gift', t: 'What’s new, your way', d: '“Don’t show again” stops this list popping up after updates. Settings → Account → What’s new still has it, with every older update too.' },
+            ],
             '1.8.1': [
                 { icon: 'fa-plug', t: 'Clearer Mihon server message', d: 'If your browser is blocking anicoop from reaching your Mihon server, it now tells you where to allow it.' },
             ],
@@ -6684,23 +6710,30 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             ],
         };
         const WHATS_NEW_KEY = 'anicoop_seen_version';
-        const whatsNew = reactive({ open: false });
-        const whatsNewItems = computed(() => WHATS_NEW[APP_VERSION] || []);
+        // v1.9.1 auto = it popped up after an update (it offers "Don't show again"); v = the version you're reading
+        // (from Settings you can go back through older versions too)
+        const whatsNew = reactive({ open: false, auto: false, v: APP_VERSION });
+        const whatsNewVersions = Object.keys(WHATS_NEW);   // newest first
+        const whatsNewItems = computed(() => WHATS_NEW[whatsNew.v] || []);
+        const whatsNewStep = (d) => { const k = whatsNewVersions.indexOf(whatsNew.v) + d; if (k >= 0 && k < whatsNewVersions.length) whatsNew.v = whatsNewVersions[k]; };
+        const whatsNewNever = () => { PREFS.whatsNewOff = true; whatsNew.open = false; showToast('Won’t pop up again — Settings → Account → What’s new has every update'); };
         const markWhatsNewSeen = () => { try { localStorage.setItem(WHATS_NEW_KEY, APP_VERSION); } catch {} };
         const maybeWhatsNew = () => {
             let seen = null; try { seen = localStorage.getItem(WHATS_NEW_KEY); } catch {}
-            if (seen === APP_VERSION || !whatsNewItems.value.length) return;
+            if (seen === APP_VERSION || !WHATS_NEW[APP_VERSION]?.length) return;
             const t0 = Date.now();
             const tryShow = () => {
                 if (!currentUser.value) return;
                 let toured = false; try { toured = localStorage.getItem(TOUR_KEY + ':' + uid()) === '1'; } catch {}
                 if (tour.on || !(PREFS.tourDone || toured)) { markWhatsNewSeen(); return; }   // someone new: the tour shows everything
                 if (introMode.value !== 'done' && Date.now() - t0 < 10000) { setTimeout(tryShow, 400); return; }
-                markWhatsNewSeen(); whatsNew.open = true;
+                markWhatsNewSeen();
+                if (PREFS.whatsNewOff) return;
+                whatsNew.v = APP_VERSION; whatsNew.auto = true; whatsNew.open = true;
             };
             setTimeout(tryShow, 2500);
         };
-        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.open = true; };
+        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.v = APP_VERSION; whatsNew.auto = false; whatsNew.open = true; };
         // ---------- v1.5 download your lists: a backup file (everything) or a spreadsheet (one row per title) ----------
         const downloadFile = (name, text, type) => {
             const url = URL.createObjectURL(new Blob([text], { type }));
@@ -6861,14 +6894,25 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (type === 'GAME') return gameApi.random(gameOpts(false));
             if (type === 'TV') return tvApi.random();
             if (type === 'SONG') return songApi.random();
-            const query = `query ($page: Int, $type: MediaType, $no: [String]) { Page(page: $page, perPage: 1) { media(type: $type, isAdult: false, genre_not_in: $no, sort: POPULARITY_DESC) { ${MEDIA_FIELDS} } } }`;
-            for (const page of [Math.floor(Math.random() * 4000) + 1, Math.floor(Math.random() * 250) + 1]) {
-                const data = await anilist(query, { page, type, no: hiddenOf(type).length ? hiddenOf(type) : null });
-                const media = data?.Page?.media?.[0];
-                if (media) return media;
+            // v1.9 25 random titles per request, rolled from one by one (it was 1 request per title: rolling a few
+            // times used up AniList's 30 requests a minute and Random stopped working)
+            const no = hiddenOf(type), key = type + '|' + no.join(',');
+            if (widePool.key !== key) { widePool.key = key; widePool.items = []; }
+            if (!widePool.items.length) {
+                widePool.loading = widePool.loading || (async () => {
+                    const query = `query ($page: Int, $type: MediaType, $no: [String]) { Page(page: $page, perPage: 25) { media(type: $type, isAdult: false, genre_not_in: $no, sort: POPULARITY_DESC) { ${MEDIA_FIELDS} } } }`;
+                    try {
+                        for (const page of [Math.floor(Math.random() * 200) + 1, Math.floor(Math.random() * 10) + 1]) {   // AniList goes 5000 titles deep
+                            const media = (await anilist(query, { page, type, no: no.length ? no : null }))?.Page?.media || [];
+                            if (media.length) { if (widePool.key === key) widePool.items = media.sort(() => Math.random() - 0.5); return; }
+                        }
+                    } finally { widePool.loading = null; }
+                })();
+                await widePool.loading;
             }
-            return null;
+            return widePool.items.pop() || null;
         };
+        const widePool = { key: '', items: [], loading: null };
         watch(randomFilter, () => { randomPick.value = null; randomMore.value = []; }, { deep: true });
         const openRandom = () => {
             const inList = randomScope.value !== 'all';
@@ -6885,7 +6929,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 randomRolling.value = true;
                 randomPick.value = null; randomMore.value = [];
                 try {
-                    const one = () => (randomWideFiltered.value ? rollWideFiltered() : fetchRandomWide()).catch(() => null);
+                    let lastErr = null;
+                    const one = () => (randomWideFiltered.value ? rollWideFiltered() : fetchRandomWide()).catch((e) => { lastErr = e; return null; });
                     const got = [], seen = new Set();
                     // a few extra tries, since two rolls can land on the same title
                     for (let round = 0; round < 3 && got.length < want; round++) {
@@ -6896,7 +6941,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                             got.push({ anime: m, status: cur?.status, progress: cur?.progress, group: cur?.group });
                         });
                     }
-                    if (!got.length) { showToast(randomWideFiltered.value ? 'Nothing found with those filters' : 'Could not fetch a random pick — try again', 'error'); return; }
+                    if (!got.length) { showToast(lastErr?.busy ? lastErr.message : randomWideFiltered.value ? 'Nothing found with those filters' : 'Could not fetch a random pick — try again', 'error'); return; }
                     randomPick.value = got[0]; randomMore.value = got.slice(1);
                     randomSpinKey.value++;
                 } catch (err) { showToast(err.message || 'Could not fetch a random pick', 'error'); }
@@ -10638,7 +10683,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,

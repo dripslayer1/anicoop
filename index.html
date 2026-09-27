@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.8.1">
+    <link rel="stylesheet" href="app.css?v=1.9">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.8.1" defer></script>
+    <script src="app.js?v=1.9" defer></script>
 </head>
 <body>
 
@@ -3691,9 +3691,13 @@
                                 </div>
                                 <!-- v1.5 what changed in this version -->
                                 <div class="set-block tour-set">
-                                    <div class="min-w-0"><p class="set-title">What’s new in v{{ APP_VERSION }}</p><p class="set-hint">The newest changes, in a short list.</p></div>
+                                    <div class="min-w-0"><p class="set-title">What’s new in v{{ APP_VERSION }}</p><p class="set-hint">The newest changes, in a short list (and every update before it).</p></div>
                                     <button @click="openWhatsNew" class="btn-ghost !px-5 shrink-0"><i class="fa-solid fa-gift"></i> See what’s new</button>
                                 </div>
+                                <label class="set-block flex items-center justify-between gap-4 cursor-pointer">
+                                    <span><span class="set-title block">Show what’s new after updates</span><span class="set-hint block">Off = the list doesn’t pop up; it’s still here in Settings.</span></span>
+                                    <button @click.prevent="PREFS.whatsNewOff = !PREFS.whatsNewOff" class="switch shrink-0" :class="{ on: !PREFS.whatsNewOff }"></button>
+                                </label>
                                 <div class="set-block">
                                     <p class="set-title">Username</p>
                                     <p class="set-hint">3–20 letters, numbers, _ or . — friends find and @mention you by this.</p>
@@ -5214,7 +5218,7 @@
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <p class="kicker">// what’s new</p>
-                            <h3 class="mt-1 font-display font-bold text-ink text-2xl">anicoop v{{ APP_VERSION }}</h3>
+                            <h3 class="mt-1 font-display font-bold text-ink text-2xl">anicoop v{{ whatsNew.v }}</h3>
                         </div>
                         <button @click="whatsNew.open = false" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
                     </div>
@@ -5224,7 +5228,14 @@
                             <span class="min-w-0"><b class="block text-ink text-sm">{{ it.t }}</b><span class="block text-[13px] text-sub mt-0.5 leading-snug">{{ it.d }}</span></span>
                         </li>
                     </ul>
+                    <!-- v1.9.1 older updates (opened from Settings) -->
+                    <div v-if="!whatsNew.auto && whatsNewVersions.length > 1" class="flex items-center justify-between gap-3 mt-5">
+                        <button @click="whatsNewStep(1)" :disabled="whatsNew.v === whatsNewVersions[whatsNewVersions.length - 1]" class="btn-ghost !py-2 !px-4 !text-xs disabled:opacity-40"><i class="fa-solid fa-chevron-left"></i> Older</button>
+                        <span class="text-[11px] text-mute font-mono">{{ whatsNewVersions.indexOf(whatsNew.v) + 1 }} / {{ whatsNewVersions.length }}</span>
+                        <button @click="whatsNewStep(-1)" :disabled="whatsNew.v === whatsNewVersions[0]" class="btn-ghost !py-2 !px-4 !text-xs disabled:opacity-40">Newer <i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
                     <button @click="whatsNew.open = false" class="btn-primary w-full mt-6">Got it</button>
+                    <button v-if="whatsNew.auto" @click="whatsNewNever" class="block mx-auto mt-3 text-xs text-mute hover:text-ink underline">Don’t show again after updates</button>
                 </div>
             </transition>
         </div>
