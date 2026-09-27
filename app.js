@@ -102,6 +102,7 @@ const PREFS_KEY = 'anicoop_prefs';
 const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
+    alPull: null,   // v2.0 { id: your AniList id, at: the newest AniList change already brought in (AniList's updatedAt) }
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
     hiddenGenres: { ANIME: [], MANGA: [], GAME: [], TV: [], SONG: [] },   // genres you never want to see (Browse, Top 100, trending, random)
     extensions: [],                                         // manga reading extensions you installed (Mihon-style)
@@ -408,6 +409,36 @@ const GAME_DETAIL_FIELDS = [GAME_FIELDS, 'summary,storyline,themes.name,platform
     ...['similar_games', 'dlcs', 'expansions', 'standalone_expansions', 'remakes', 'remasters', 'parent_game'].map(GAME_REL_FIELDS)].join(',');
 const igdbStr = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+// v2.0 descriptions shown as HTML (AniList, TMDB, IGDB, Wikipedia — or a title someone saved with their own text) keep
+// only plain formatting: no scripts, no event handlers, no styles, links only to http(s) pages. (A friend could save a
+// title whose "description" ran code in your browser when you opened it from their list.)
+const SAFE_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'BR', 'P', 'SPAN', 'SMALL', 'SUP', 'SUB', 'A', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'HR']);
+const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'LINK', 'META', 'BASE', 'IMG', 'VIDEO', 'AUDIO', 'SOURCE', 'PICTURE']);
+const safeHtmlCache = new Map();
+const safeHtml = (html) => {
+    if (!html) return '';
+    html = String(html);
+    if (safeHtmlCache.has(html)) return safeHtmlCache.get(html);
+    const root = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html').body.firstElementChild;   // (nothing in it runs or loads)
+    const walk = (node) => [...node.childNodes].forEach(ch => {
+        if (ch.nodeType === 3) return;
+        if (ch.nodeType !== 1) { ch.remove(); return; }
+        if (DROP_TAGS.has(ch.tagName)) { ch.remove(); return; }
+        walk(ch);
+        if (!SAFE_TAGS.has(ch.tagName)) { ch.replaceWith(...ch.childNodes); return; }
+        [...ch.attributes].forEach(at => {
+            const keep = (ch.tagName === 'A' && at.name === 'href' && /^https?:\/\//i.test(at.value.trim()))
+                || (ch.tagName === 'SPAN' && at.name === 'class' && at.value.trim() === 'markdown_spoiler');
+            if (!keep) ch.removeAttribute(at.name);
+        });
+        if (ch.tagName === 'A') { ch.setAttribute('target', '_blank'); ch.setAttribute('rel', 'noopener noreferrer nofollow'); }
+    });
+    walk(root);
+    const out = root.innerHTML;
+    if (safeHtmlCache.size > 300) safeHtmlCache.clear();
+    safeHtmlCache.set(html, out);
+    return out;
+};
 const steamIdOf = (g) => {
     const w = (g.websites || []).find(x => x.type === 13 && /\/app\/(\d+)/.test(x.url || ''));
     if (w) return Number(/\/app\/(\d+)/.exec(w.url)[1]);
@@ -2527,7 +2558,11 @@ createApp({
                 if (isSignUp.value) {
                     const username = authForm.value.username.trim();
                     if (!/^[A-Za-z0-9_.]{3,20}$/.test(username)) { showToast('Username: 3–20 letters, numbers, _ or .', 'error'); return; }
-                    const { data: taken } = await sb.from('profiles').select('id').ilike('username', escapeLike(username)).maybeSingle();
+                    // (v2.0 through username_taken(): profiles aren't readable before you sign in any more)
+                    let taken = null;
+                    const chk = await sb.rpc('username_taken', { name: username });
+                    if (!chk.error) taken = chk.data;
+                    else taken = (await sb.from('profiles').select('id').ilike('username', escapeLike(username)).maybeSingle()).data;   // the v2.0 SQL isn't run yet
                     if (taken) { showToast('That username is already taken', 'error'); return; }
                     const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username } } });
                     if (error) { showToast(/database error/i.test(error.message) ? 'That username is already taken' : error.message, 'error'); return; }
@@ -3828,6 +3863,7 @@ createApp({
         };
         watch(() => currentAppView.value === 'tracker' && activeTab.value === 'feed' && !selectedAnime.value && !viewUserId.value, (on) => { if (on) fetchFeed(false); });
         const activityVerb = (a) => {
+            if (a.extra?.batch) return `Updated ${a.extra.batch.n} titles from ${a.extra.batch.from || 'another site'}, including`;   // v2.0
             const m = a.media_type === 'MANGA';
             const from = a.progress_from, to = a.progress_to;
             if (a.media_type === 'SONG') switch (a.status) {
@@ -6671,8 +6707,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.9';
+        const APP_VERSION = '2.0';
         const WHATS_NEW = {
+            '2.0': [
+                { icon: 'fa-arrows-rotate', t: 'AniList syncs both ways', d: 'Connected AniList? What you change there now comes here too (checked every 10 minutes while anicoop is open). Removing a title on AniList doesn’t remove it here.' },
+                { icon: 'fa-layer-group', t: 'One update, not twenty', d: 'Several changes from AniList at once show as one “Updated 20 titles from AniList” for your friends.' },
+                { icon: 'fa-bolt', t: 'Auto-tracking with MAL-Sync', d: 'Use the MAL-Sync browser extension with AniList: episodes you watch on streaming sites reach anicoop by themselves.' },
+                { icon: 'fa-shield-halved', t: 'Security fixes', d: 'Closed holes that could let someone make themselves your friend or watch buddy without your yes, or copy a private Plan to watch. Profiles are only visible to signed-in people.' },
+            ],
             '1.9': [
                 { icon: 'fa-dice', t: 'Random keeps rolling', d: 'Random asks AniList far less often, so rolling again and again no longer stops working after a while. If AniList does need a break, it says how many seconds.' },
                 { icon: 'fa-lock', t: 'Locked stats stay locked', d: 'On someone’s profile, a stat you’re not allowed to see shows a lock instead of 0 (Movies & TV, Games and Songs included).' },
@@ -10157,7 +10199,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     const { error } = await sb.from('account_links').upsert(row, { onConflict: 'user_id,provider' });
                     if (error) throw error;
                     alLink.value = row;
-                    showToast(`AniList connected as ${d.Viewer.name} — your changes will sync there`);
+                    showToast(`AniList connected as ${d.Viewer.name} — changes sync both ways`);
                     openSettings('import');
                 } catch (err) { showToast('Could not connect AniList: ' + (err.message || err) + (/account_links/.test(err.message || '') ? ' — run the v7.2 SQL in Supabase' : ''), 'error'); }
             }
@@ -10181,7 +10223,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const alQueue = new Map();
         let alRunning = false;
         // (v1.5 only anime and manga: games, movies & TV and songs were sent to AniList too, which refused them and showed a sync error)
-        const alEnqueue = (id, op) => { if (!alLink.value || alSuppress || !id || id >= GAME_BASE) return; alQueue.delete(id); alQueue.set(id, op); alSync.pending = alQueue.size; runAlQueue(); };
+        const alEnqueue = (id, op) => { if (!alLink.value || alSuppress || alPulling || !id || id >= GAME_BASE) return; alQueue.delete(id); alQueue.set(id, op); alSync.pending = alQueue.size; runAlQueue(); };
         const runAlQueue = async () => {
             if (alRunning) return; alRunning = true;
             try {
@@ -10210,6 +10252,103 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             soloList.value.forEach(e => alEnqueue(e.anime.id, alSaveOp(e)));
             showToast('Syncing to AniList in the background…');
         };
+
+        // ---------- v2.0 AniList → anicoop: what you change on AniList comes here too ----------
+        // AniList can't tell other apps about a change, so while anicoop is open it asks every 10 minutes (and when you
+        // come back to the tab) for your entries changed since last time, newest first — usually one request. Only
+        // changes: removing a title on AniList doesn't remove it here. If a title was changed here after the AniList
+        // change, this one wins. The newest change brought in is kept with your settings (PREFS.alPull), so each change
+        // comes in once whichever device asks. The first time, it starts from now (older changes: Import).
+        const alPull = reactive({ busy: false, at: 0, error: '', got: 0 });
+        let alPulling = false;   // what comes from AniList isn't sent back to AniList (MyAnimeList still gets it)
+        const AL_PULL_Q = `query ($u: Int, $p: Int, $n: Int) { Page(page: $p, perPage: $n) { pageInfo { hasNextPage } mediaList(userId: $u, sort: UPDATED_TIME_DESC) {
+            status progress repeat score(format: POINT_10_DECIMAL) updatedAt media { ${MEDIA_FIELDS} } } } }`;
+        // an AniList entry as ours (the same rules as the AniList import: rewatches become our repeat counters)
+        const alEntryOf = (en, cur) => {
+            const anime = normMedia(en.media);
+            const e = { anime, status: ANILIST_STATUS[en.status] || 'PLANNING', score: clamp(Number(en.score) || 0, 0, 10), progress: en.progress || 0 };
+            if (!REPEAT_TYPES.includes(anime.type) && e.status === 'REPEATING') e.status = 'WATCHING';
+            if (anime.type === 'ANIME') {
+                const full = anime.episodes || e.progress || 0, done = Math.min(en.repeat || 0, MAX_REPEATS);
+                const old = (cur?.repeats || []).filter(n => full && n >= full);
+                const reps = old.length === done ? old : Array.from({ length: done }, () => full);
+                if (e.status === 'REPEATING') { if (reps.length < MAX_REPEATS) { reps.push(Math.min(e.progress, full || 99999)); e.progress = full; } else { e.status = 'COMPLETED'; e.progress = full; } }
+                e.repeats = reps;
+            }
+            return e;
+        };
+        const sameOnAniList = (a, b) => a.status === b.status && (a.progress || 0) === (b.progress || 0) && Math.round((a.score || 0) * 10) === Math.round((b.score || 0) * 10) && (a.repeat || 0) === (b.repeat || 0);
+        // your friends see one "Updated 20 titles from AniList" instead of 20 updates
+        const logPulled = async (list, befores) => {
+            if (!PREFS.activity.enabled || !list.length) return;
+            if (list.length === 1) { logActivity(list[0].anime, befores.get(list[0].anime.id), list[0]); return; }
+            const top = list.find(e => !isAdultMedia(e.anime)) || list[0], a = top.anime;
+            try {
+                const { data, error } = await sb.from('activities').insert({
+                    user_id: uid(), kind: 'list', media_id: a.id, media_type: a.type || 'ANIME', status: top.status, progress_from: null, progress_to: null,
+                    media_title: a.title?.romaji || a.title?.english || a.title?.native || 'Untitled', media_cover: a.coverImage?.large || null,
+                    extra: { batch: { n: list.length, from: 'AniList' }, ...(isAdultMedia(a) ? { adult: true } : {}) },
+                }).select().single();
+                if (error) throw error;
+                myRecent.value = [data, ...myRecent.value.filter(x => x.id !== data.id)].slice(0, 12);
+            } catch (err) { console.warn('activity not saved', err.message || err); }
+        };
+        const pullAniList = async ({ manual = false } = {}) => {
+            const link = alLink.value;
+            if (!link?.remote_id || alPull.busy || importState.busy || !uid()) return;
+            alPull.busy = true; alPull.error = '';
+            try {
+                const mark = PREFS.alPull?.id === link.remote_id ? Number(PREFS.alPull.at) || 0 : 0;
+                if (!mark) {   // first time: from now on
+                    const d = await anilistAuth(AL_PULL_Q, { u: link.remote_id, p: 1, n: 1 });
+                    PREFS.alPull = { id: link.remote_id, at: d?.Page?.mediaList?.[0]?.updatedAt || Math.floor(Date.now() / 1000) };
+                    alPull.at = Date.now();
+                    if (manual) showToast('Checked — changes you make on AniList from now on will come here');
+                    return;
+                }
+                const changed = []; let newest = mark, older = false;
+                for (let p = 1; p <= 10 && !older; p++) {   // 50 a page, newest first, until one we already have
+                    const d = await anilistAuth(AL_PULL_Q, { u: link.remote_id, p, n: 50 });
+                    for (const en of d?.Page?.mediaList || []) {
+                        if (!(en.updatedAt > mark)) { older = true; break; }
+                        newest = Math.max(newest, en.updatedAt);
+                        if (en.media?.id && ['ANIME', 'MANGA'].includes(en.media.type)) changed.push(en);
+                    }
+                    if (!d?.Page?.pageInfo?.hasNextPage) break;
+                    if (!older) await sleep(700);
+                }
+                const apply = [], befores = new Map();
+                for (const en of changed) {
+                    const cur = soloEntry(en.media.id);
+                    if (cur?.updatedAt && Date.parse(cur.updatedAt) > en.updatedAt * 1000) continue;   // changed here since: ours wins
+                    const e = alEntryOf(en, cur);
+                    if (cur && sameOnAniList(alSaveOp(cur), alSaveOp(e))) continue;   // the same (e.g. our own change, back from AniList)
+                    befores.set(e.anime.id, cur); apply.push(e);
+                }
+                if (apply.length) {
+                    alPulling = true;
+                    try { for (let i = 0; i < apply.length; i += 200) await upsertSolo(apply.slice(i, i + 200)); }
+                    finally { alPulling = false; }
+                    logPulled(apply, befores);
+                    alPull.got = apply.length;
+                    showToast(apply.length === 1 ? `Updated from AniList: ${titleOf(apply[0].anime)}` : `Updated ${apply.length} titles from AniList`);
+                } else if (manual) showToast('Nothing new on AniList');
+                PREFS.alPull = { id: link.remote_id, at: newest };
+                alPull.at = Date.now();
+            } catch (err) {
+                alPull.error = err.message || String(err);
+                if (err.auth) alLink.value = null;
+                if (manual) showToast('Could not check AniList: ' + alPull.error, 'error');
+            } finally { alPull.busy = false; }
+        };
+        let alPullTimer = null;
+        watch(() => alLink.value?.remote_id || null, (id) => {
+            clearInterval(alPullTimer); alPullTimer = null;
+            if (!id) return;
+            setTimeout(() => pullAniList(), 4000);
+            alPullTimer = setInterval(() => { if (document.visibilityState === 'visible') pullAniList(); }, 10 * 60 * 1000);
+        });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && alLink.value && Date.now() - alPull.at > 5 * 60 * 1000) pullAniList(); });
 
         // ---------- v10 MyAnimeList account link: the same changes are copied to your MyAnimeList list ----------
         // MAL can't be reached from a browser, so everything goes through the Edge Function (`mal`), which also keeps the
@@ -10683,7 +10822,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,

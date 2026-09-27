@@ -1061,3 +1061,54 @@ Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old
 - **MyAnimeList:** myanimelist.net/apiconfig → your app → **App Redirect URL**.
 - **Supabase:** Authentication → URL Configuration → **Site URL**, and the same address under **Redirect URLs** (email
   links: confirming a new account or a changed email).
+
+## v2.0 — AniList syncs both ways + security fixes
+
+**Update (please do all three):**
+1. Supabase → SQL Editor → New query → paste **`supabase/v2.0-security.sql`** → Run. (It's also inside
+   `supabase_setup.sql` now, so running that whole file later keeps the fixes.)
+2. Redeploy the **igdb** Edge Function (Supabase → Edge Functions → igdb → paste `supabase/functions/igdb/index.ts`
+   → Deploy).
+3. Hard-refresh: the footer says **v2.0**.
+
+**Security fixes** (found by testing the database's rules one by one; all of these were tested before and after):
+- **Someone could make themselves your friend without you accepting.** When you got a friend request, the database
+  let the person asked rewrite who it was *from*. So with two accounts (one sends a request to the other), anyone could
+  turn that request into "friends with <anyone>" and see that person's friends-only lists, stats and favorites, and
+  message them. Now only the request's status (accepted) can change.
+- **The same for watch buddies,** which was worse: a fake watch-buddy link copies the other person's Plan to watch
+  (even a private one) and keeps both lists in sync, so titles could be added to or removed from their list.
+- **Anyone, even without an account, could copy one person's Plan to watch into another person's list** by calling
+  a database function directly with the site's public key. Signed-out visitors now can't call any database function
+  (except "is this username taken?" for sign-up), and the internal ones can't be called from outside at all.
+- **Every profile (username, bio, picture, last seen) could be read by anyone on the internet** without signing in
+  (checked on the live site: 21 profiles). Now only signed-in people can see profiles.
+- **The Edge Function answered anyone** who had the site's public key (it's in app.js, so: anyone). Its website fetcher
+  could be used by strangers to fetch pages through your server. Now it only answers people signed in to anicoop,
+  and the fetcher also refuses redirects or names that lead to private network addresses.
+- **Descriptions** (titles, characters, people) are cleaned before they're shown: a friend could save a title with a
+  "description" containing code that would run in your browser when you opened it from their list.
+- **Uploads** are limited to pictures and videos (any file could be uploaded to the public storage before).
+
+What wasn't changed (small, by design, or needs your dashboard):
+- Signed-in people can still ask "are these two people friends?" for any two people through a database function (it
+  doesn't show anyone's list). Tightening it would touch a lot of rules, so I left it.
+- Supabase dashboard settings I can't see from here: in **Authentication → Providers → Email**, keep "Confirm email"
+  on; in **Authentication → Attack Protection** turn on leaked-password protection; and open **Advisors → Security
+  Advisor** once to see if it flags anything else on the live database.
+
+**AniList**
+
+- **What you change on AniList now comes to anicoop too** (for people who connected AniList in Settings → Import &
+  sync). AniList can't tell other apps about a change, so anicoop asks: a few seconds after you open it, every 10 minutes
+  while it's open, and when you come back to the tab. It asks only for what changed since last time (usually one
+  request). "Check AniList now" in Settings asks right away.
+- **Only changes:** removing a title on AniList doesn't remove it here.
+- **If a title was changed in both places,** the newest change wins. What comes from AniList isn't sent back to AniList,
+  but it does go on to MyAnimeList if that's connected, and to the friends you watch it with.
+- **It starts from the moment it's first turned on:** older AniList changes can still be brought in with the AniList
+  import in the same Settings page.
+- **Your friends see one update** ("Updated 20 titles from AniList, including …") when several titles change at once.
+  A single change shows as usual.
+- **Auto-tracking:** with the **MAL-Sync** browser extension set to AniList, episodes you watch on streaming sites go
+  to AniList and from there to anicoop. (It only works while anicoop is open somewhere, and within 10 minutes.)

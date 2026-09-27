@@ -24,6 +24,30 @@ const cors = {
 const json = (body: unknown, status = 200) =>
     new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
+// v2.0 only people signed in to anicoop can use this function. The site's public key is in app.js for anyone to read,
+// and it used to be enough to call everything here (the website fetcher, IGDB, TMDB, Spotify…) from anywhere.
+// A signed-in person's token is checked with Supabase once, then remembered for 5 minutes.
+const SB_URL = clean(Deno.env.get('SUPABASE_URL'));
+const SB_KEY = clean(Deno.env.get('SUPABASE_ANON_KEY'));
+const tokenOk = new Map<string, number>();
+const signedIn = async (req: Request) => {
+    const tok = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    if (!tok || tok.split('.').length !== 3) return false;   // the public key isn't a person
+    const seen = tokenOk.get(tok);
+    if (seen && Date.now() - seen < 5 * 60 * 1000) return true;
+    try {
+        const part = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const claims = JSON.parse(atob(part + '='.repeat((4 - part.length % 4) % 4)));
+        if (claims.role !== 'authenticated' || !claims.sub || (claims.exp && claims.exp * 1000 < Date.now())) return false;
+    } catch { return false; }
+    if (!SB_URL) return false;
+    const r = await fetch(SB_URL + '/auth/v1/user', { headers: { Authorization: 'Bearer ' + tok, apikey: req.headers.get('apikey') || SB_KEY } }).catch(() => null);
+    if (!r?.ok) return false;
+    if (tokenOk.size > 5000) tokenOk.clear();
+    tokenOk.set(tok, Date.now());
+    return true;
+};
+
 let token = '';
 let tokenExpires = 0;
 const getToken = async (force = false) => {
@@ -307,6 +331,14 @@ const spotify = async (body: Record<string, any>) => {
 // Only signed-in users can call this function; local / private network addresses are refused.
 // (v1.5 also IPv4 addresses written as IPv6, link-local IPv6 and local-only names like printer.local)
 const PRIVATE_HOST = /^(localhost|127\.|10\.|0\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:|\[?::ffff:|\[?fe80:)|\.(localhost|local|internal|lan|home\.arpa)$/i;
+const PRIVATE_IP = /^(127\.|10\.|0\.|192\.168\.|169\.254\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|172\.(1[6-9]|2\d|3[01])\.|::1$|f[cd][0-9a-f]{2}:|fe80:|::ffff:)/i;
+const privateByDns = async (host: string) => {
+    if (/^[\d.]+$/.test(host) || host.includes(':')) return false;   // an address, already checked by PRIVATE_HOST
+    try {
+        const ips = [...await Deno.resolveDns(host, 'A').catch(() => []), ...await Deno.resolveDns(host, 'AAAA').catch(() => [])];
+        return ips.some((ip) => PRIVATE_IP.test(String(ip)));
+    } catch { return false; }
+};
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 const siteFetch = async (body: Record<string, any>) => {
     let u: URL;
@@ -324,9 +356,22 @@ const siteFetch = async (body: Record<string, any>) => {
         'Accept-Language': 'en-US,en;q=0.9',
     };
     if (method === 'POST') { headers['X-Requested-With'] = 'XMLHttpRequest'; headers['Content-Type'] = 'application/x-www-form-urlencoded'; }
-    let r: Response;
-    try { r = await fetch(u.href, { method, headers, body: method === 'POST' ? String(body.form || '') : undefined, redirect: 'follow' }); }
-    catch (err) { return json({ error: 'Could not reach ' + u.hostname + ': ' + ((err as Error).message || 'network error') }, 502); }
+    // (v2.0 redirects are followed here, one at a time, so a public site can't send the fetch on to a private address;
+    // a name that points at a private address is refused too)
+    let r: Response | null = null;
+    let target = u;
+    try {
+        for (let hop = 0; hop < 6; hop++) {
+            if (!/^https?:$/.test(target.protocol) || PRIVATE_HOST.test(target.hostname) || target.username || target.password || await privateByDns(target.hostname)) return json({ error: 'Not allowed' }, 400);
+            r = await fetch(target.href, { method: hop ? 'GET' : method, headers, body: !hop && method === 'POST' ? String(body.form || '') : undefined, redirect: 'manual' });
+            const next = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
+            if (!next) break;
+            await r.body?.cancel();
+            target = new URL(next, target);
+            if (hop === 5) return json({ error: 'Too many redirects' }, 502);
+        }
+    } catch (err) { return json({ error: 'Could not reach ' + target.hostname + ': ' + ((err as Error).message || 'network error') }, 502); }
+    if (!r) return json({ error: 'Could not reach ' + u.hostname }, 502);
     if (asImage) {
         // raw bytes (application/octet-stream so the app receives a Blob)
         const buf = await r.arrayBuffer();
@@ -334,7 +379,7 @@ const siteFetch = async (body: Record<string, any>) => {
         return new Response(buf, { headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'private, max-age=3600' } });
     }
     const text = (await r.text()).slice(0, 4 * 1024 * 1024);
-    const out = JSON.stringify({ status: r.status, url: r.url, body: text });
+    const out = JSON.stringify({ status: r.status, url: target.href, body: text });
     if (r.ok && method === 'GET') cachePut(key, out);
     return json(out);
 };
@@ -623,6 +668,7 @@ const gifSearch = async (body: Record<string, any>) => {
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
     if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+    if (!(await signedIn(req))) return json({ error: 'Sign in to anicoop first' }, 401);   // v2.0
 
     let body: Record<string, any> = {};
     try { body = await req.json(); } catch { return json({ error: 'Bad request' }, 400); }

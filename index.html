@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.9">
+    <link rel="stylesheet" href="app.css?v=2.0">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.9" defer></script>
+    <script src="app.js?v=2.0" defer></script>
 </head>
 <body>
 
@@ -357,7 +357,7 @@
                                 <p class="kicker">// {{ entity.type === 'character' ? 'character' : entity.type === 'artist' ? 'artist' + (entityData.genre ? ' · ' + entityData.genre.toLowerCase() : '') : entityIsActor ? (entityData.primaryOccupations?.[0] || 'actor').toLowerCase() : entityIsVA ? 'voice actor' : 'staff' }}</p>
                                 <h1 class="mt-3 font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ entityData.name?.full }}</h1>
                                 <p v-if="entityData.name?.native" class="mt-2 text-sub">{{ entityData.name.native }}</p>
-                                <div v-if="entityData.description" class="anime-desc entity-desc mt-6 max-w-3xl" v-html="entityData.description"></div>
+                                <div v-if="entityData.description" class="anime-desc entity-desc mt-6 max-w-3xl" v-html="safeHtml(entityData.description)"></div>
                                 <div v-else-if="entityData.extrasPending" class="mt-6 max-w-3xl space-y-2.5"><div class="h-3 rounded-full skeleton"></div><div class="h-3 rounded-full skeleton" style="width: 92%"></div><div class="h-3 rounded-full skeleton" style="width: 78%"></div></div>
                                 <p v-else-if="entityIsActor" class="mt-6 text-sm text-mute">No biography on TMDB yet.</p>
 
@@ -679,7 +679,7 @@
                                     <i class="fa-solid" :class="r.st === 'yes' ? 'fa-check' : r.st === 'checking' ? 'fa-circle-notch fa-spin' : r.st === 'error' ? 'fa-triangle-exclamation' : 'fa-minus'"></i>{{ r.name }}
                                 </button>
                             </div>
-                            <div v-if="selectedAnime.type !== 'SONG' || selectedAnime.description" class="anime-desc mt-8 max-w-3xl" v-html="selectedAnime.description || 'No description available.'"></div>
+                            <div v-if="selectedAnime.type !== 'SONG' || selectedAnime.description" class="anime-desc mt-8 max-w-3xl" v-html="safeHtml(selectedAnime.description || 'No description available.')"></div>
 
                             <!-- movies & TV: where to watch (TMDB + JustWatch), IMDb / official site -->
                             <template v-if="selectedAnime.type === 'TV'">
@@ -4257,7 +4257,7 @@
                                         <span class="w-9 h-9 rounded-xl bg-[#02A9FF] text-white font-bold text-xs flex items-center justify-center">AL</span>
                                         <div class="flex-grow min-w-0">
                                             <p class="set-title">AniList</p>
-                                            <p class="set-hint">{{ alLink ? 'Linked as ' + alLink.remote_name + ' · syncing your changes' : (alClientId ? 'Not linked' : 'Not available yet — the app owner needs to finish the AniList setup (Settings → Owner)') }}</p>
+                                            <p class="set-hint">{{ alLink ? 'Linked as ' + alLink.remote_name + ' · syncing both ways' : (alClientId ? 'Not linked' : 'Not available yet — the app owner needs to finish the AniList setup (Settings → Owner)') }}</p>
                                         </div>
                                         <button v-if="!alLink" @click="connectAniList" :disabled="!alClientId" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid fa-link"></i> Connect AniList</button>
                                         <button v-else @click="disconnectAniList" class="btn-ghost !py-2 !px-4 !text-xs">Disconnect</button>
@@ -4266,7 +4266,13 @@
                                         <p v-if="alSync.pending" class="text-xs text-sub mt-3"><i class="fa-solid fa-circle-notch fa-spin text-volt mr-1.5"></i>Syncing {{ alSync.pending }} change{{ alSync.pending === 1 ? '' : 's' }} to AniList…</p>
                                         <p v-else-if="alSync.error" class="text-xs text-rose-400 mt-3"><i class="fa-solid fa-circle-exclamation mr-1.5"></i>Last sync problem: {{ alSync.error }}</p>
                                         <p v-else class="text-xs text-[#22c55e] mt-3"><i class="fa-solid fa-check mr-1.5"></i>Up to date</p>
-                                        <button @click="pushAllToAniList" :disabled="alSync.pending > 0" class="btn-ghost !py-2 !px-4 !text-xs mt-3"><i class="fa-solid fa-cloud-arrow-up"></i> Copy my whole list to AniList</button>
+                                        <!-- v2.0 AniList → anicoop -->
+                                        <p class="text-xs text-sub mt-2"><i class="fa-solid fa-cloud-arrow-down mr-1.5 text-mute"></i>Changes you make on AniList come here too (checked every 10 minutes while anicoop is open). Removing a title on AniList doesn’t remove it here.<span v-if="alPull.at" class="text-mute"> Last checked {{ timeAgo(new Date(alPull.at).toISOString()) }}.</span></p>
+                                        <p v-if="alPull.error" class="text-xs text-rose-400 mt-1"><i class="fa-solid fa-circle-exclamation mr-1.5"></i>Last check: {{ alPull.error }}</p>
+                                        <div class="flex flex-wrap gap-2 mt-3">
+                                            <button @click="pullAniList({ manual: true })" :disabled="alPull.busy" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid fa-rotate" :class="{ 'fa-spin': alPull.busy }"></i> Check AniList now</button>
+                                            <button @click="pushAllToAniList" :disabled="alSync.pending > 0" class="btn-ghost !py-2 !px-4 !text-xs"><i class="fa-solid fa-cloud-arrow-up"></i> Copy my whole list to AniList</button>
+                                        </div>
                                     </template>
                                 </div>
                                 <div class="set-block">
