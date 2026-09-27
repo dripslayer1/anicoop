@@ -357,7 +357,7 @@
                                 <p class="kicker">// {{ entity.type === 'character' ? 'character' : entity.type === 'artist' ? 'artist' + (entityData.genre ? ' · ' + entityData.genre.toLowerCase() : '') : entityIsActor ? (entityData.primaryOccupations?.[0] || 'actor').toLowerCase() : entityIsVA ? 'voice actor' : 'staff' }}</p>
                                 <h1 class="mt-3 font-display font-bold text-ink text-3xl md:text-5xl leading-[1.05] tracking-tight">{{ entityData.name?.full }}</h1>
                                 <p v-if="entityData.name?.native" class="mt-2 text-sub">{{ entityData.name.native }}</p>
-                                <div v-if="entityData.description" class="anime-desc entity-desc mt-6 max-w-3xl" v-html="entityData.description"></div>
+                                <div v-if="entityData.description" class="anime-desc entity-desc mt-6 max-w-3xl" v-html="safeHtml(entityData.description)"></div>
                                 <div v-else-if="entityData.extrasPending" class="mt-6 max-w-3xl space-y-2.5"><div class="h-3 rounded-full skeleton"></div><div class="h-3 rounded-full skeleton" style="width: 92%"></div><div class="h-3 rounded-full skeleton" style="width: 78%"></div></div>
                                 <p v-else-if="entityIsActor" class="mt-6 text-sm text-mute">No biography on TMDB yet.</p>
 
@@ -679,7 +679,7 @@
                                     <i class="fa-solid" :class="r.st === 'yes' ? 'fa-check' : r.st === 'checking' ? 'fa-circle-notch fa-spin' : r.st === 'error' ? 'fa-triangle-exclamation' : 'fa-minus'"></i>{{ r.name }}
                                 </button>
                             </div>
-                            <div v-if="selectedAnime.type !== 'SONG' || selectedAnime.description" class="anime-desc mt-8 max-w-3xl" v-html="selectedAnime.description || 'No description available.'"></div>
+                            <div v-if="selectedAnime.type !== 'SONG' || selectedAnime.description" class="anime-desc mt-8 max-w-3xl" v-html="safeHtml(selectedAnime.description || 'No description available.')"></div>
 
                             <!-- movies & TV: where to watch (TMDB + JustWatch), IMDb / official site -->
                             <template v-if="selectedAnime.type === 'TV'">

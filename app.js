@@ -409,6 +409,36 @@ const GAME_DETAIL_FIELDS = [GAME_FIELDS, 'summary,storyline,themes.name,platform
     ...['similar_games', 'dlcs', 'expansions', 'standalone_expansions', 'remakes', 'remasters', 'parent_game'].map(GAME_REL_FIELDS)].join(',');
 const igdbStr = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+// v2.0 descriptions shown as HTML (AniList, TMDB, IGDB, Wikipedia — or a title someone saved with their own text) keep
+// only plain formatting: no scripts, no event handlers, no styles, links only to http(s) pages. (A friend could save a
+// title whose "description" ran code in your browser when you opened it from their list.)
+const SAFE_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'BR', 'P', 'SPAN', 'SMALL', 'SUP', 'SUB', 'A', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'HR']);
+const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'LINK', 'META', 'BASE', 'IMG', 'VIDEO', 'AUDIO', 'SOURCE', 'PICTURE']);
+const safeHtmlCache = new Map();
+const safeHtml = (html) => {
+    if (!html) return '';
+    html = String(html);
+    if (safeHtmlCache.has(html)) return safeHtmlCache.get(html);
+    const root = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html').body.firstElementChild;   // (nothing in it runs or loads)
+    const walk = (node) => [...node.childNodes].forEach(ch => {
+        if (ch.nodeType === 3) return;
+        if (ch.nodeType !== 1) { ch.remove(); return; }
+        if (DROP_TAGS.has(ch.tagName)) { ch.remove(); return; }
+        walk(ch);
+        if (!SAFE_TAGS.has(ch.tagName)) { ch.replaceWith(...ch.childNodes); return; }
+        [...ch.attributes].forEach(at => {
+            const keep = (ch.tagName === 'A' && at.name === 'href' && /^https?:\/\//i.test(at.value.trim()))
+                || (ch.tagName === 'SPAN' && at.name === 'class' && at.value.trim() === 'markdown_spoiler');
+            if (!keep) ch.removeAttribute(at.name);
+        });
+        if (ch.tagName === 'A') { ch.setAttribute('target', '_blank'); ch.setAttribute('rel', 'noopener noreferrer nofollow'); }
+    });
+    walk(root);
+    const out = root.innerHTML;
+    if (safeHtmlCache.size > 300) safeHtmlCache.clear();
+    safeHtmlCache.set(html, out);
+    return out;
+};
 const steamIdOf = (g) => {
     const w = (g.websites || []).find(x => x.type === 13 && /\/app\/(\d+)/.test(x.url || ''));
     if (w) return Number(/\/app\/(\d+)/.exec(w.url)[1]);
@@ -2528,7 +2558,11 @@ createApp({
                 if (isSignUp.value) {
                     const username = authForm.value.username.trim();
                     if (!/^[A-Za-z0-9_.]{3,20}$/.test(username)) { showToast('Username: 3–20 letters, numbers, _ or .', 'error'); return; }
-                    const { data: taken } = await sb.from('profiles').select('id').ilike('username', escapeLike(username)).maybeSingle();
+                    // (v2.0 through username_taken(): profiles aren't readable before you sign in any more)
+                    let taken = null;
+                    const chk = await sb.rpc('username_taken', { name: username });
+                    if (!chk.error) taken = chk.data;
+                    else taken = (await sb.from('profiles').select('id').ilike('username', escapeLike(username)).maybeSingle()).data;   // the v2.0 SQL isn't run yet
                     if (taken) { showToast('That username is already taken', 'error'); return; }
                     const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username } } });
                     if (error) { showToast(/database error/i.test(error.message) ? 'That username is already taken' : error.message, 'error'); return; }
@@ -6679,6 +6713,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 { icon: 'fa-arrows-rotate', t: 'AniList syncs both ways', d: 'Connected AniList? What you change there now comes here too (checked every 10 minutes while anicoop is open). Removing a title on AniList doesn’t remove it here.' },
                 { icon: 'fa-layer-group', t: 'One update, not twenty', d: 'Several changes from AniList at once show as one “Updated 20 titles from AniList” for your friends.' },
                 { icon: 'fa-bolt', t: 'Auto-tracking with MAL-Sync', d: 'Use the MAL-Sync browser extension with AniList: episodes you watch on streaming sites reach anicoop by themselves.' },
+                { icon: 'fa-shield-halved', t: 'Security fixes', d: 'Closed holes that could let someone make themselves your friend or watch buddy without your yes, or copy a private Plan to watch. Profiles are only visible to signed-in people.' },
             ],
             '1.9': [
                 { icon: 'fa-dice', t: 'Random keeps rolling', d: 'Random asks AniList far less often, so rolling again and again no longer stops working after a while. If AniList does need a break, it says how many seconds.' },
@@ -10787,7 +10822,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, alPull, pullAniList, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
