@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.8.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.9'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.8.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.9'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -447,6 +447,7 @@ These are cumulative; the README has one section per version.
   leaves the MangaDex answer. The app sends `titles` (english, romaji, native) + `country`; the browser cache key went to
   `anicoop_mangadex_v2` (v1 removed once). Checked against the live APIs: 33 popular ongoing titles, all matched.
 - **v1.8.1:** `mihonApi.gql` failing to fetch checks `lnaState()` (permission names local-network-access / loopback-network / local-network); "denied" → a message saying where to allow it. Chrome 142+ blocks https → localhost without that permission, and stops prompting once blocked or dismissed.
+- **v1.9:** AniList is at **30 requests/min** (X-RateLimit-Limit: 30). A 429 sets `aniPausedUntil` from `X-RateLimit-Reset` (exposed to browsers; Retry-After is not); `anilist()` waits out a pause of 12 s or less, otherwise throws `aniBusyError()` (`.busy`, message contains "rate limit" so older retry checks still match). Random from all of AniList: `widePool` (25 per request, pages 1-200: AniList stops at 5000 entries deep) instead of 1 request per title. **Site moved Netlify → GitHub Pages:** AniList client Redirect URL, MAL App Redirect URL and Supabase Site URL must point to https://dripslayer1.github.io/anicoop/ (AniList implicit grant has no redirect_uri parameter; it always uses the registered one).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

@@ -1037,3 +1037,20 @@ Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old
 - Chrome, Edge and Brave now ask before a website may reach programs on your computer ("local network access"). Once
   that is blocked, or its pop-up was closed, they stop asking and anicoop couldn't reach the Mihon server. The message now
   says so and where to allow it: the icon left of the address bar → Site settings → Local network access → Allow.
+
+## v1.9 — Random keeps working
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.9**.
+
+- **Random stopped working after a while:** AniList now allows only 30 requests a minute, and Random (from all of
+  AniList) asked once per title, so a few rolls of 4 used it all up. It now gets 25 random titles in one request and
+  rolls from those: 12 rolls of 4 took 3 requests instead of about 48.
+- **When AniList does need a break,** anicoop stops asking until AniList says the minute is over (asking again while
+  blocked made it longer), waits by itself when it's only a few seconds, and otherwise says how many seconds to wait.
+
+**Moved from Netlify to GitHub Pages? Update these addresses** to `https://dripslayer1.github.io/anicoop/` (with the
+`/` at the end), or linking accounts sends people to the old Netlify page:
+- **AniList:** anilist.co/settings/developer → your anicoop client → **Redirect URL**.
+- **MyAnimeList:** myanimelist.net/apiconfig → your app → **App Redirect URL**.
+- **Supabase:** Authentication → URL Configuration → **Site URL**, and the same address under **Redirect URLs** (email
+  links: confirming a new account or a changed email).
