@@ -1029,3 +1029,11 @@ Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old
   popular ongoing manhwa, 20 showed a lower number before.
 - This also fixes **Completed** on those titles (it sets your chapters to the latest chapter out).
 - Until the Edge Function is redeployed, you get the MangaDex number like before.
+
+## v1.8.1 — Mihon server: say when the browser is blocking it
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.8.1**.
+
+- Chrome, Edge and Brave now ask before a website may reach programs on your computer ("local network access"). Once
+  that is blocked, or its pop-up was closed, they stop asking and anicoop couldn't reach the Mihon server. The message now
+  says so and where to allow it: the icon left of the address bar → Site settings → Local network access → Allow.
