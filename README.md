@@ -1061,3 +1061,21 @@ Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old
 - **MyAnimeList:** myanimelist.net/apiconfig → your app → **App Redirect URL**.
 - **Supabase:** Authentication → URL Configuration → **Site URL**, and the same address under **Redirect URLs** (email
   links: confirming a new account or a changed email).
+
+## v2.0 — AniList syncs both ways
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.0**.
+
+- **What you change on AniList now comes to anicoop too** (for people who connected AniList in Settings → Import &
+  sync). AniList can't tell other apps about a change, so anicoop asks: a few seconds after you open it, every 10 minutes
+  while it's open, and when you come back to the tab. It asks only for what changed since last time (usually one
+  request). "Check AniList now" in Settings asks right away.
+- **Only changes:** removing a title on AniList doesn't remove it here.
+- **If a title was changed in both places,** the newest change wins. What comes from AniList isn't sent back to AniList,
+  but it does go on to MyAnimeList if that's connected, and to the friends you watch it with.
+- **It starts from the moment it's first turned on:** older AniList changes can still be brought in with the AniList
+  import in the same Settings page.
+- **Your friends see one update** ("Updated 20 titles from AniList, including …") when several titles change at once.
+  A single change shows as usual.
+- **Auto-tracking:** with the **MAL-Sync** browser extension set to AniList, episodes you watch on streaming sites go
+  to AniList and from there to anicoop. (It only works while anicoop is open somewhere, and within 10 minutes.)
