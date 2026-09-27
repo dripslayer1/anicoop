@@ -1016,3 +1016,16 @@ Then hard-refresh: the footer says **v1.6**. Until the SQL runs, titles from old
   profile isn't loaded again for 10 minutes).
 - **Lists sidebar:** on big screens it was pinned and taller than the screen, so the bottom ("Watching with") couldn't be
   reached. It now scrolls on its own.
+
+## v1.8 — the real latest chapter for manhwa
+
+**Update:** redeploy the **igdb** Edge Function (Supabase → Edge Functions → igdb → paste the new
+`supabase/functions/igdb/index.ts` → Deploy). No SQL, no new secret. Hard-refresh: the footer says **v1.8**.
+
+- **Latest chapter fixed:** for a series that's still coming out, AniList has no chapter count, so anicoop took the
+  latest chapter from MangaDex. MangaDex loses most chapters of a series once it's officially licensed (Webtoon, Tapas…),
+  so many manhwa showed far too few (Return of the Blossoming Blade: 42 instead of 181). anicoop now also asks
+  **MangaUpdates** (a site that tracks every chapter release) and shows whichever number is higher. Of the 25 most
+  popular ongoing manhwa, 20 showed a lower number before.
+- This also fixes **Completed** on those titles (it sets your chapters to the latest chapter out).
+- Until the Edge Function is redeployed, you get the MangaDex number like before.

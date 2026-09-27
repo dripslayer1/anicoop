@@ -505,7 +505,8 @@ const steam = async (kind, appids, cc = steamCountry()) => {
    MangaDex (through the same proxy): latest chapter + publishing status for manga & manhwa,
    and the chapter list / reading sources on a manga page. Results are kept for a day in this browser.
    ------------------------------------------------------------------ */
-const MD_KEY = 'anicoop_mangadex_v1';
+const MD_KEY = 'anicoop_mangadex_v2';   // v1.8 v2: the latest chapter also asks MangaUpdates (the v1 answers are dropped once)
+try { localStorage.removeItem('anicoop_mangadex_v1'); } catch {}
 const MD_TTL = 20 * 3600 * 1000;
 const mangaInfo = reactive(readJSON(MD_KEY) || {});   // AniList id → { md, status, last, final, links, langs, at }
 const mdQueue = []; const mdPending = new Set(); let mdBusy = false, mdOff = false;
@@ -521,7 +522,7 @@ const runMangaQueue = async () => {
     if (mdBusy) return; mdBusy = true;
     while (mdQueue.length && !mdOff) {
         const m = mdQueue.shift();
-        try { mangaInfo[m.id] = { ...(await mangaDex({ kind: 'find', alId: m.id, titles: [m.title?.english, m.title?.romaji].filter(Boolean) })), at: Date.now() }; saveMangaInfo(); }
+        try { mangaInfo[m.id] = { ...(await mangaDex({ kind: 'find', alId: m.id, titles: [m.title?.english, m.title?.romaji, m.title?.native].filter(Boolean), country: m.countryOfOrigin || '' })), at: Date.now() }; saveMangaInfo(); }
         catch (err) { if (err.status === 400 || err.status === 404 || err.status === 401) mdOff = true; }   // proxy not updated / not signed in: stop for this visit
         mdPending.delete(m.id);
         await sleep(700);   // each lookup is ~3 MangaDex requests; stays under their ~5 req/s limit
@@ -6638,8 +6639,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.7';
+        const APP_VERSION = '1.8';
         const WHATS_NEW = {
+            '1.8': [
+                { icon: 'fa-book-open', t: 'The real latest chapter', d: 'Ongoing manga & manhwa now show the latest chapter that’s actually out (from MangaUpdates too), not just what MangaDex still has.' },
+            ],
             '1.7': [
                 { icon: 'fa-layer-group', t: 'Seasons together', d: 'Turn on “Group seasons” in Lists (anime, movies & TV): every season, movie and OVA of a show sits in one row, in release order.' },
                 { icon: 'fa-code-compare', t: 'Compare: Series', d: 'The new Series group in Compare shows each show’s seasons with your status next to your friend’s.' },
