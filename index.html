@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.0">
+    <link rel="stylesheet" href="app.css?v=2.1">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.0" defer></script>
+    <script src="app.js?v=2.1" defer></script>
 </head>
 <body>
 
@@ -530,12 +530,13 @@
                                 </button>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div v-if="inlineForm.status === 'REPEATING'">
-                                        <label class="label block mb-2 rep-label">Rewatch #{{ inlineForm.repeats.length || 1 }} <span class="normal-case tracking-normal">/ {{ selectedAnime.episodes || '?' }}</span></label>
+                                        <label class="label block mb-2 rep-label">{{ selectedAnime.episodes && (inlineForm.progress || 0) < selectedAnime.episodes ? 'Started over' : 'Rewatch #' + (inlineForm.repeats.length || 1) }} <span class="normal-case tracking-normal">/ {{ selectedAnime.episodes || '?' }}</span></label>
                                         <div class="flex items-center bg-base border rounded-xl overflow-hidden rep-box">
                                             <button @click="stepProgress(inlineForm, -1)" class="px-2.5 py-2.5 text-sub hover:text-ink"><i class="fa-solid fa-minus text-[10px]"></i></button>
                                             <input v-model.number="inlineForm.repProgress" type="number" min="0" :max="selectedAnime.episodes || 99999" class="w-full min-w-0 bg-transparent text-center text-sm text-ink focus:outline-none">
                                             <button @click="stepProgress(inlineForm, 1)" class="px-2.5 py-2.5 text-sub hover:text-ink"><i class="fa-solid fa-plus text-[10px]"></i></button>
                                         </div>
+                                        <p v-if="selectedAnime.episodes && (inlineForm.progress || 0) < selectedAnime.episodes" class="text-[11px] text-mute mt-1.5">First watch: {{ inlineForm.progress || 0 }}/{{ selectedAnime.episodes }} (not finished)</p>
                                     </div>
                                     <div v-else>
                                         <label class="label block mb-2">{{ UNIT.ep }}s <span v-if="selectedAnime.type !== 'GAME' && selectedAnime.type !== 'SONG'" class="normal-case tracking-normal">/ {{ selectedAnime.type === 'MANGA' ? fmtChapter(lastChapterOf(selectedAnime)) : (selectedAnime.episodes || '?') }}</span><span v-else class="normal-case tracking-normal">{{ selectedAnime.type === 'SONG' ? 'so far' : 'played' }}</span></label>
@@ -1637,14 +1638,14 @@
                             <span v-if="selectMode && mediaType !== 'SONG'" class="rank-check" :class="{ on: isSelected(a.id) }" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
                             <span class="font-display font-black w-12 text-center shrink-0" :class="[idx < 3 ? 'text-volt text-xl' : 'text-mute text-lg', idx >= 99 ? '!text-[16px]' : '']">#{{ idx + 1 }}</span>
                             <span v-if="mediaType === 'SONG'" class="top-cover">
-                                <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-12 h-12 object-cover rounded-lg" loading="lazy" decoding="async" alt="">
-                                <span v-else class="block w-12 h-12 rounded-lg skeleton"></span>
+                                <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-full h-full object-cover rounded-lg" loading="lazy" decoding="async" alt="">
+                                <span v-else class="block w-full h-full rounded-lg skeleton"></span>
                                 <!-- play the preview without leaving the list -->
                                 <button @click.stop="playPreview(a, topItems)" class="top-play" :class="{ on: player.song?.id === a.id || (a.wiki && player.song?.title?.romaji === a.title?.romaji) }" :title="isPlaying(a) ? 'Pause' : 'Play preview'" :aria-label="isPlaying(a) ? 'Pause' : 'Play preview'"><i class="fa-solid" :class="player.loading && player.song?.id === a.id ? 'fa-circle-notch fa-spin' : isPlaying(a) ? 'fa-pause' : 'fa-play'"></i></button>
                             </span>
                             <template v-else>
-                                <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="w-10 h-14 object-cover rounded-lg shrink-0" loading="lazy" decoding="async" alt="">
-                                <span v-else class="w-10 h-14 rounded-lg shrink-0 skeleton"></span>
+                                <img v-if="a.coverImage?.large" :src="a.coverImage.large" class="top-poster object-cover rounded-lg shrink-0" loading="lazy" decoding="async" alt="">
+                                <span v-else class="top-poster rounded-lg shrink-0 skeleton"></span>
                             </template>
                             <span class="flex-grow min-w-0">
                                 <span class="block text-ink font-semibold text-sm truncate">{{ titleOf(a) }}</span>
@@ -1802,13 +1803,15 @@
                         <div class="flex items-center gap-3 mb-4">
                             <h2 class="font-display font-semibold text-ink text-xl md:text-2xl">{{ section === 'manga' ? 'Continue reading' : section === 'games' ? 'Continue playing' : section === 'songs' ? 'On repeat' : 'Continue watching' }}</h2>
                             <span class="px-2 py-0.5 rounded-md bg-[#3b82f6]/15 text-[#3b82f6] font-mono text-xs font-bold">{{ continueWatching.length }}</span>
+                            <span v-if="continueWatching.length > 1" class="hidden md:inline text-[11px] text-mute">drag to reorder</span>
+                            <button v-if="(PREFS.contOrder?.[section] || []).length" @click="cwReset" class="ml-auto text-[11px] font-semibold text-sub hover:text-ink" title="Back to the most recently updated first"><i class="fa-solid fa-rotate-left mr-1"></i>Reset order</button>
                         </div>
                         <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1 snap-x">
-                            <div v-for="item in continueWatching" :key="item.key" class="relative w-[320px] md:w-[380px] h-[124px] shrink-0 rounded-2xl overflow-hidden ring-1 ring-line cursor-pointer snap-start group" @click="continueItem(item)" :title="section === 'manga' ? 'Continue reading' : section === 'anime' || section === 'movies' ? 'Continue watching' : ''">
+                            <div v-for="(item, idx) in continueWatching" :key="item.key" class="cw-card relative w-[320px] md:w-[380px] h-[124px] shrink-0 rounded-2xl overflow-hidden ring-1 ring-line cursor-pointer snap-start group" :class="{ 'is-dragging': cw.key === item.key }" :style="cwStyle(idx)" @click="cwClick(item)" @pointerdown="cwDown($event, idx, item)" @pointermove="cwMove" @pointerup="cwEnd()" @pointercancel="cwEnd(true)" @contextmenu="cw.key && $event.preventDefault()" :title="section === 'manga' ? 'Continue reading' : section === 'anime' || section === 'movies' ? 'Continue watching' : ''">
                                 <img :src="item.anime.bannerImage || item.anime.coverImage?.large" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-expo group-hover:scale-105" loading="lazy" decoding="async" alt="">
                                 <div class="absolute inset-0 bg-gradient-to-r from-base via-base/85 to-base/30"></div>
                                 <div class="relative h-full p-4 flex flex-col">
-                                    <p class="label !text-sub truncate pr-24">{{ item.withNames ? 'with ' + item.withNames + (item.repeatNo ? ' · rewatch #' + item.repeatNo : '') : item.repeatNo ? 'solo · rewatch #' + item.repeatNo : 'solo' }}<template v-if="hasWatchLink(item.anime)"><span v-if="linkInfo(item.anime)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkInfo(item.anime).site }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
+                                    <p class="label !text-sub truncate pr-24">{{ (item.withNames ? 'with ' + item.withNames : 'solo') + (item.restart ? ' · started over' : item.repeatNo ? ' · rewatch #' + item.repeatNo : '') }}<template v-if="hasWatchLink(item.anime)"><span v-if="linkInfo(item.anime)" class="normal-case tracking-normal text-[#3b82f6]"> · <i class="fa-solid fa-play text-[8px]"></i> {{ linkInfo(item.anime).site }}</span><span v-else class="normal-case tracking-normal text-mute"> · no link saved</span></template></p>
                                     <p class="mt-1 truncate pr-24"><!-- v1.1 the name opens the title's page (the card itself opens your watch link) --><button @click.stop="fetchAnimeDetails(item.anime)" class="cw-name" title="Open its page">{{ titleOf(item.anime) }}</button></p>
                                     <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}<span v-if="newEps(item)" class="cw-new" :title="newEps(item) + ' episode' + (newEps(item) === 1 ? '' : 's') + ' out that you haven’t counted yet'">{{ newEps(item) }} new</span></template></p>
                                     <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
@@ -3305,6 +3308,7 @@
                     <img v-if="n.media_cover" :src="n.media_cover" class="w-8 h-11 rounded-md object-cover shrink-0" alt="">
                     <span v-if="!n.read" class="w-2 h-2 rounded-full bg-pink shrink-0 mt-1.5"></span>
                 </div>
+
                 <p v-if="!notifications.length" class="text-center text-sm text-mute py-10">Nothing yet — when friends comment or invite you to watch something together, it shows up here.</p>
             </div>
         </div>
@@ -3491,14 +3495,15 @@
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div v-if="editForm.status === 'REPEATING'">
-                                <p class="label mb-2.5 rep-label"><i class="fa-solid fa-rotate-right mr-1"></i>Rewatch #{{ editForm.repeats.length || 1 }} of {{ MAX_REPEATS }}</p>
+                                <p class="label mb-2.5 rep-label"><i class="fa-solid fa-rotate-right mr-1"></i>{{ editForm.anime.episodes && (editForm.progress || 0) < editForm.anime.episodes ? 'Started over' : 'Rewatch #' + (editForm.repeats.length || 1) + ' of ' + MAX_REPEATS }}</p>
                                 <div class="flex items-center bg-base border rounded-2xl overflow-hidden rep-box">
                                     <button @click="stepProgress(editForm, -1)" class="px-4 py-3.5 text-sub hover:text-ink"><i class="fa-solid fa-minus text-xs"></i></button>
                                     <input v-model.number="editForm.repProgress" type="number" min="0" :max="editForm.anime.episodes || 99999" class="w-full min-w-0 bg-transparent text-ink text-center focus:outline-none">
                                     <button @click="stepProgress(editForm, 1)" class="px-4 py-3.5 text-sub hover:text-ink"><i class="fa-solid fa-plus text-xs"></i></button>
                                     <span v-if="editForm.anime.type !== 'SONG' && editForm.anime.type !== 'GAME'" class="px-4 text-mute font-mono text-sm border-l border-line self-stretch flex items-center">/ {{ editForm.anime.episodes || '?' }}</span>
                                 </div>
-                                <p class="text-[11px] text-mute mt-2">Counts separately from your first watch. Reaching the last episode finishes this rewatch.</p>
+                                <p v-if="editForm.anime.episodes && (editForm.progress || 0) < editForm.anime.episodes" class="text-[11px] text-mute mt-2">Counts separately from your first watch ({{ editForm.progress || 0 }}/{{ editForm.anime.episodes }}, not finished). Reaching the last episode marks it Completed.</p>
+                                <p v-else class="text-[11px] text-mute mt-2">Counts separately from your first watch. Reaching the last episode finishes this rewatch.</p>
                             </div>
                             <div v-else>
                                 <p class="label mb-2.5">{{ UNIT.ep }} progress</p>
@@ -4064,6 +4069,13 @@
                                     <button v-if="!systemNotifOn" @click="enableSystemNotifs" class="btn-primary !py-2.5 !text-xs"><i class="fa-solid fa-bell"></i> Turn on</button>
                                     <span v-else class="text-xs font-semibold text-[#22c55e]"><i class="fa-solid fa-circle-check mr-1"></i>On</span>
                                 </div>
+                                <label class="set-block flex items-center justify-between gap-4 cursor-pointer">
+                                    <span><span class="set-title block">Sound for new messages</span><span class="set-hint block">A short chime with the message pop-up in the corner.</span></span>
+                                    <span class="flex items-center gap-2 shrink-0">
+                                        <button @click.prevent="pingSound()" class="btn-ghost !py-1.5 !px-3 !text-[11px]" title="Play it"><i class="fa-solid fa-volume-high"></i> Test</button>
+                                        <button @click.prevent="PREFS.msgSound = !PREFS.msgSound" class="switch shrink-0" :class="{ on: PREFS.msgSound !== false }"></button>
+                                    </span>
+                                </label>
                                 <div v-for="g in NOTIF_GROUPS" :key="g.title" class="set-block">
                                     <p class="set-title">{{ g.title }}</p>
                                     <p v-if="g.note" class="set-hint">{{ g.note }}</p>
@@ -5292,6 +5304,19 @@
     </transition>
 
     <!-- ============ TOAST ============ -->
+    <!-- v2.1 new messages: bottom-right cards (click = open the chat) -->
+    <div class="msg-pops" aria-live="polite">
+        <transition-group name="toast">
+            <div v-for="p in msgPops" :key="p.key" @click="openMsgPop(p)" @keydown.enter="openMsgPop(p)" class="msg-pop" role="button" tabindex="0">
+                <user-avatar :user="personOf(p.actor)" :size="40"></user-avatar>
+                <span class="min-w-0 flex-grow">
+                    <span class="block text-sm font-semibold text-ink truncate"><i v-if="p.group" class="fa-solid fa-user-group text-[11px] text-lilac mr-1"></i>{{ p.group ? p.group.name + ' · ' + personOf(p.actor).username : personOf(p.actor).username }}<span v-if="p.request" class="font-normal text-mute"> · message request</span></span>
+                    <span class="block text-[13px] text-sub leading-snug line-clamp-2">{{ p.text }}</span>
+                </span>
+                <button @click.stop="closeMsgPop(p)" class="msg-pop-x" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </transition-group>
+    </div>
     <transition name="toast">
         <div v-if="toast.message" :class="toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-ink text-inv'" class="lift-pbar fixed z-[125] bottom-24 md:bottom-8 left-0 right-0 mx-auto md:left-auto md:right-8 md:mx-0 w-max max-w-[calc(100vw-2rem)] px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3">
             <i :class="toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-check'" class="fa-solid"></i>

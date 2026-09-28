@@ -1112,3 +1112,25 @@ What wasn't changed (small, by design, or needs your dashboard):
   A single change shows as usual.
 - **Auto-tracking:** with the **MAL-Sync** browser extension set to AniList, episodes you watch on streaming sites go
   to AniList and from there to anicoop. (It only works while anicoop is open somewhere, and within 10 minutes.)
+
+## v2.1 — start over, message pop-ups, your own Continue order, reader fix
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.1**.
+
+- **Start over (rewatch something you never finished):** on a show you're Watching, Paused or Dropped part-way, the
+  quick menu (and the status buttons on its page) now offer **Start over**. Your first watch keeps its count (say 7 of
+  24) and the new watch counts from episode 1 on its own counter, like a rewatch. It isn't counted as Completed until
+  the new watch reaches the last episode; then it's Completed (your first time finishing it, so it doesn't count as a
+  rewatch). On AniList / MyAnimeList it shows as Watching at the new watch's episode. Before, picking Rewatch on an
+  unfinished show set all episodes as watched.
+- **Message pop-ups:** a new message (or a group message) shows as a card in the bottom-right corner with the person's
+  picture and the message, plus a short chime. Click it to open the chat; a newer message in the same chat updates the
+  card. The chime can be switched off in Settings → Notifications ("Sound for new messages", with a Test button).
+  Browsers only play sound after you've clicked somewhere on the page once.
+- **Drag to reorder Continue watching / reading:** drag a card sideways (on a phone: hold it for a moment, then drag).
+  The order is saved with your settings, per section; titles you start later appear first. "Reset order" goes back to
+  most-recently-updated first.
+- **Reader fix:** in webtoon (scrolling) mode, after 4 chapters in a row the oldest one is let go to save memory. The
+  scroll position was then corrected twice (Chrome / Firefox already do it themselves), which threw you back a chapter
+  or more: the "teleport" when a chapter ended. Now the page you're looking at stays exactly where it was.
+- **Bigger posters in the leaderboard** (Top 100): 64×96 (56×84 on phones), were 40×56.

@@ -51,6 +51,9 @@ const UNIT = reactive({ ep: 'Episode', short: 'EP', unit: 'EPS', type: 'ANIME' }
 // statuses you can pick: songs are just In Love / Liked / Disliked, and "Repeating" (rewatch) is for anime and
 // (v1.6) movies & TV
 const REPEAT_TYPES = ['ANIME', 'TV'];
+// v2.1 "started over": a rewatch of something you never finished (watched 7 of 24, dropped it, now from episode 1 again).
+// The first watch keeps its own count in progress (7); the new watch counts in repeats like any rewatch.
+const isRestart = (e) => e?.status === 'REPEATING' && !!e.anime?.episodes && (e.progress || 0) < e.anime.episodes;
 // v1.6 watching together (friend tags on titles) is for anime, manga and movies & TV
 const PARTY_TYPES = ['ANIME', 'MANGA', 'TV'];
 const statusPick = () => STATUS_ORDER.filter(s => !(UNIT.type === 'SONG' && (s === 'PAUSED' || s === 'PLANNING')) && !(s === 'REPEATING' && !REPEAT_TYPES.includes(UNIT.type)));
@@ -102,6 +105,8 @@ const PREFS_KEY = 'anicoop_prefs';
 const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
+    msgSound: true,   // v2.1 a short chime with the message pop-up
+    contOrder: {},   // v2.1 your own order of Continue watching / reading, per section: { anime: [media ids] }
     alPull: null,   // v2.0 { id: your AniList id, at: the newest AniList change already brought in (AniList's updatedAt) }
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
     hiddenGenres: { ANIME: [], MANGA: [], GAME: [], TV: [], SONG: [] },   // genres you never want to see (Browse, Top 100, trending, random)
@@ -1947,7 +1952,7 @@ const QuickAdd = {
         const labelOf = (s) => (LABEL_SETS[props.anime?.type] || LABEL_SETS.ANIME).labels[s] || s;
         const marks = computed(() => { const t = props.anime?.type || 'ANIME'; return [...(REWISH_TYPES.includes(t) ? ['REWISH'] : []), ...(ROTATION_TYPES.includes(t) ? ['ROTATION'] : [])]; });
         const MARK_ICONS = { REWISH: 'fa-rotate-right', ROTATION: 'fa-arrows-spin' };
-        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, FLAG_OF, MARK_ICONS, REPEAT_TYPES, PARTY_TYPES, btn, menu, pos, enter, leave, shut, isSong, songItems, pick, labelOf, marks };
+        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, FLAG_OF, MARK_ICONS, REPEAT_TYPES, PARTY_TYPES, isRestart, btn, menu, pos, enter, leave, shut, isSong, songItems, pick, labelOf, marks };
     },
     unmounted() { this.shut(); },
     template: `
@@ -1980,8 +1985,8 @@ const QuickAdd = {
                         <i class="fa-solid text-[10px] w-2.5" :class="MARK_ICONS[k]" :style="{ color: STATUS_COLORS[k] }"></i> {{ labelOf(k) }}
                         <i class="fa-solid ml-auto text-[10px]" :class="entry?.[FLAG_OF[k]] ? 'fa-check' : 'fa-plus text-mute'"></i>
                     </button>
-                    <button v-if="REPEAT_TYPES.includes(anime.type || 'ANIME') && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING')" @click="pick('REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
-                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS.REPEATING }"></span> Rewatch
+                    <button v-if="REPEAT_TYPES.includes(anime.type || 'ANIME') && (entry?.status === 'COMPLETED' || entry?.status === 'REPEATING' || (entry?.progress > 0 && ['WATCHING', 'PAUSED', 'DROPPED'].includes(entry?.status)))" @click="pick('REPEATING')" class="qa-row" :class="entry?.status === 'REPEATING' ? 'bg-overlay' : ''">
+                        <span class="qa-dot" :style="{ '--dot': STATUS_COLORS.REPEATING }"></span> {{ entry?.status === 'COMPLETED' || (entry?.status === 'REPEATING' && !isRestart(entry)) ? 'Rewatch' : 'Start over' }}
                         <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
                     </button>
                     <div class="h-px bg-line my-1 mx-1"></div>
@@ -2670,6 +2675,8 @@ createApp({
         // AniList counts a rewatch's episodes in "progress" and the finished rewatches in "repeat"
         const alSaveOp = (e) => {
             const reps = e.repeats || [], full = e.anime?.episodes || 0;
+            // (v2.1 started over: on AniList it's simply Watching, at the new watch's episode)
+            if (isRestart(e)) return { kind: 'save', status: 'WATCHING', progress: reps[reps.length - 1] || 0, score: e.score, repeat: reps.filter(n => n >= full).length };
             return { kind: 'save', status: e.status, progress: e.status === 'REPEATING' ? (reps[reps.length - 1] || 0) : e.progress, score: e.score, repeat: full ? reps.filter(n => n >= full).length : 0 };
         };
         const deleteSolo = async (ids) => {
@@ -3622,6 +3629,36 @@ createApp({
         const notifQuote = (n) => n.text && NOTIF_QUOTE.includes(n.kind) ? `“${n.text}”` : ((n.kind?.startsWith('media_') || n.kind === 'poll_ended') ? n.text : '');
         const notifIcon = (n) => ({ media_related: 'fa-diagram-project', media_changed: 'fa-rotate', media_removed: 'fa-triangle-exclamation', poll_ended: 'fa-square-poll-horizontal', media_episode: 'fa-tv' })[n.kind] || 'fa-bell';
         const systemNotifOn = ref(typeof Notification !== 'undefined' && Notification.permission === 'granted');
+        // ---------- v2.1 new messages: a card in the bottom-right corner (click it to open the chat) + a short chime ----------
+        const msgPops = ref([]);   // newest first, at most 3; one card per chat (a new message in it updates the card)
+        const popTimers = {};
+        const closeMsgPop = (p) => { clearTimeout(popTimers[p.key]); delete popTimers[p.key]; msgPops.value = msgPops.value.filter(x => x.key !== p.key); };
+        const showMsgPop = (n) => {
+            const key = n.group_id ? 'g:' + n.group_id : 'u:' + n.actor_id;
+            const group = n.group_id ? groups.value.find(g => g.id === n.group_id) || { id: n.group_id, name: 'Group chat' } : null;
+            const pop = { key, n, actor: n.actor_id, group, request: n.kind === 'message_request', text: n.text || 'sent you a message' };
+            msgPops.value = [pop, ...msgPops.value.filter(x => x.key !== key)].slice(0, 3);
+            clearTimeout(popTimers[key]);
+            popTimers[key] = setTimeout(() => closeMsgPop(pop), 8000);
+        };
+        const openMsgPop = (p) => { closeMsgPop(p); openNotification(p.n); };
+        // the chime is made here (two soft notes), no sound file. Browsers only allow sound after you've clicked the page once.
+        let chimeCtx = null;
+        const pingSound = () => {
+            if (PREFS.msgSound === false) return;
+            try {
+                chimeCtx = chimeCtx || new (window.AudioContext || window.webkitAudioContext)();
+                if (chimeCtx.state === 'suspended') chimeCtx.resume().catch(() => {});
+                const t = chimeCtx.currentTime + 0.02;
+                [[784, 0], [1175, 0.12]].forEach(([f, d]) => {
+                    const o = chimeCtx.createOscillator(), g = chimeCtx.createGain();
+                    o.type = 'sine'; o.frequency.value = f;
+                    g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.16, t + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.45);
+                    o.connect(g); g.connect(chimeCtx.destination); o.start(t + d); o.stop(t + d + 0.5);
+                });
+            } catch {}
+        };
+        document.addEventListener('pointerdown', () => { try { if (!chimeCtx) chimeCtx = new (window.AudioContext || window.webkitAudioContext)(); else if (chimeCtx.state === 'suspended') chimeCtx.resume().catch(() => {}); } catch {} }, { passive: true });
         const enableSystemNotifs = async () => {
             if (typeof Notification === 'undefined') { showToast('This browser does not support notifications', 'error'); return; }
             const p = await Notification.requestPermission();
@@ -3636,7 +3673,8 @@ createApp({
             const chatting = ((n.kind === 'message' || n.kind === 'message_request') && activeTab.value === 'chat' && chatWith.value === n.actor_id)
                 || (n.kind === 'group_message' && activeTab.value === 'chat' && groupWith.value === n.group_id);
             if (chatting) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); return; }
-            showToast(text);
+            if (['message', 'message_request', 'group_message'].includes(n.kind)) { showMsgPop(n); pingSound(); }   // v2.1
+            else showToast(text);
             if (n.kind.startsWith('comment') && selectedAnime.value?.id === n.media_id) fetchComments();
             if (n.kind.startsWith('party_')) refreshPartiesSoon();
             if (n.kind === 'playlist_added') fetchPlaylists();
@@ -4486,10 +4524,13 @@ createApp({
             if (s === form.status) return;
             if (s === 'REPEATING') {
                 const eps = form.anime?.episodes || null;
+                // v2.1 not finished (Watching / Paused / Dropped part-way): start over, the first watch keeps its count
+                const restart = form.status !== 'COMPLETED' && !!eps && (Number(form.progress) || 0) < eps;
+                if (restart && !(Number(form.progress) > 0)) { showToast(`You haven't watched any of it yet: set it to ${STATUS_LABELS.WATCHING}`, 'error'); return; }
                 const r = startRepeat(form.savedRepeats, eps);
                 if (!r) { triggerLilBro(form.anime); return; }
                 form.repeats = r; form.repProgress = r[r.length - 1] || 0;
-                if (eps) form.progress = eps;                  // rewatching means the first watch is done
+                if (eps && !restart) form.progress = eps;      // rewatching a finished one: the first watch is done
             } else if (form.status === 'REPEATING') {
                 form.repeats = [...form.savedRepeats];         // changed your mind: no new rewatch
             }
@@ -4503,17 +4544,23 @@ createApp({
             let progress = clamp(Math.floor(Number(form.progress) || 0), 0, episodes || 99999);
             if (form.status === 'COMPLETED' && episodes) progress = episodes;
             const fields = { status: form.status, score: clamp(Number(form.score) || 0, 0, 10), progress, repeats: [...(form.repeats || [])] };
-            let finishedRepeat = 0;
+            let finishedRepeat = 0, finishedFirst = false;
             if (form.status === 'REPEATING') {
                 const r = fields.repeats.length ? fields.repeats : [0];
                 const cur = clamp(Math.floor(Number(form.repProgress) || 0), 0, episodes || 99999);
                 r[r.length - 1] = cur; fields.repeats = r;
-                if (episodes) fields.progress = episodes;
-                if (episodes && cur >= episodes) { fields.status = 'COMPLETED'; finishedRepeat = r.length; }   // rewatch done → back to Completed
+                const restart = !!episodes && progress < episodes;   // v2.1 started over (the first watch keeps its count)
+                if (episodes && !restart) fields.progress = episodes;
+                if (episodes && cur >= episodes) {   // done → Completed
+                    fields.status = 'COMPLETED';
+                    if (restart) { fields.progress = episodes; r.pop(); finishedFirst = true; }   // the first time you finished it: not a rewatch
+                    else finishedRepeat = r.length;
+                }
             }
             const prev = myEntry(anime.id);
             const before = prev ? { status: prev.status, progress: prev.progress, repeats: prev.repeats } : null;
             if (finishedRepeat) setTimeout(() => showToast(`Finished rewatch #${finishedRepeat} of ${titleOf(anime)}!`), 900);
+            if (finishedFirst) setTimeout(() => showToast(`Finished ${titleOf(anime)}! Marked as Completed`), 900);
             isSaving.value = true;
             try {
                 await upsertSolo({ anime, ...fields });   // (v1.5 the entry on screen is updated from what was saved)
@@ -5397,12 +5444,12 @@ createApp({
             let epsWatched = 0, chaptersRead = 0, hoursPlayed = 0, tvEps = 0, plays = 0, scored = 0, scoreSum = 0, repeatEps = 0;
             items.forEach(i => {
                 const t = typeOf(i);
-                const n = t === 'GAME' ? (i.progress || 0) : (i.status === 'COMPLETED' || i.status === 'REPEATING') ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0);
+                const n = t === 'GAME' ? (i.progress || 0) : (i.status === 'COMPLETED' || (i.status === 'REPEATING' && !isRestart(i))) ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0);
                 if (t === 'ANIME') (i.repeats || []).forEach(x => { repeatEps += x || 0; });   // rewatched episodes: only in the "with rewatches" total
                 if (t === 'MANGA') chaptersRead += n; else if (t === 'GAME') hoursPlayed += n; else if (t === 'ANIME') epsWatched += n; else if (t === 'TV') tvEps += n; else if (t === 'SONG') plays += (i.progress || 0);
                 if (i.score > 0) { scored++; scoreSum += i.score; }
             });
-            const count = (t, done) => items.filter(i => typeOf(i) === t && (!done || i.status === 'COMPLETED' || i.status === 'REPEATING')).length;
+            const count = (t, done) => items.filter(i => typeOf(i) === t && (!done || i.status === 'COMPLETED' || (i.status === 'REPEATING' && !isRestart(i)))).length;
             return {
                 anime: count('ANIME'), manga: count('MANGA'), games: count('GAME'), tv: count('TV'), songs: count('SONG'),
                 epsWatched, epsWithRepeats: epsWatched + repeatEps, repeatEps, chaptersRead, hoursPlayed, tvEps, plays, completed: items.filter(i => i.status === 'COMPLETED').length,
@@ -5576,10 +5623,68 @@ createApp({
             const out = [];
             secSolo.value.forEach(i => {
                 if (i.status === 'WATCHING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo' });
-                else if (i.status === 'REPEATING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo', progress: repeatNow(i), repeatNo: (i.repeats || []).length || 1 });   // rewatches show their own counter
+                else if (i.status === 'REPEATING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo', progress: repeatNow(i), repeatNo: (i.repeats || []).length || 1, restart: isRestart(i) });   // rewatches show their own counter
             });
+            // v2.1 in the order you dragged them into (titles you started since then come first)
+            const ord = PREFS.contOrder?.[section.value] || [];
+            if (ord.length) { const pos = new Map(ord.map((id, k) => [id, k])); out.sort((a, b) => (pos.has(a.anime.id) ? pos.get(a.anime.id) : -1) - (pos.has(b.anime.id) ? pos.get(b.anime.id) : -1)); }
             return out.slice(0, 16);
         });
+        // v2.1 drag the Continue cards sideways to reorder them (on a phone: hold a card for a moment, then drag)
+        const cw = reactive({ key: null, from: -1, over: -1, dx: 0, w: 0 });
+        let cwPend = null, cwMids = [], cwTimer = null, cwDragged = false, cwRow = null;
+        const cwStart = () => {
+            const p = cwPend; if (!p) return;
+            cwRow = p.el.parentElement;
+            const cards = [...cwRow.querySelectorAll(':scope > .cw-card')];
+            cwMids = cards.map(c => { const b = c.getBoundingClientRect(); return b.left + b.width / 2 + cwRow.scrollLeft; });
+            const b = cards[p.idx]?.getBoundingClientRect();
+            Object.assign(cw, { key: p.key, from: p.idx, over: p.idx, dx: 0, w: (b?.width || 380) + 16 });
+            p.startX = p.x + cwRow.scrollLeft;
+            try { p.el.setPointerCapture(p.id); } catch {}
+            if (p.touch) navigator.vibrate?.(15);
+        };
+        const cwDown = (e, idx, item) => {
+            if ((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button, a, input')) return;
+            cwDragged = false;
+            cwPend = { idx, key: item.key, x: e.clientX, y: e.clientY, id: e.pointerId, el: e.currentTarget, touch: e.pointerType !== 'mouse' };
+            clearTimeout(cwTimer);
+            if (cwPend.touch) cwTimer = setTimeout(cwStart, 380);
+        };
+        const cwMove = (e) => {
+            if (!cwPend) return;
+            if (!cw.key) {
+                const far = Math.abs(e.clientX - cwPend.x) > 6 || Math.abs(e.clientY - cwPend.y) > 6;
+                if (cwPend.touch) { if (far) { clearTimeout(cwTimer); cwPend = null; } return; }   // a swipe before the hold: normal scrolling
+                if (Math.abs(e.clientX - cwPend.x) > 6) cwStart(); else return;
+            }
+            cwDragged = true;
+            if (e.clientX < 60) cwRow.scrollLeft -= 14; else if (e.clientX > window.innerWidth - 60) cwRow.scrollLeft += 14;
+            cw.dx = e.clientX + cwRow.scrollLeft - cwPend.startX;
+            const at = cwMids[cw.from] + cw.dx;
+            cw.over = cwMids.reduce((n, m, k) => n + (k !== cw.from && at > m ? 1 : 0), 0);
+        };
+        const cwEnd = (cancel = false) => {
+            clearTimeout(cwTimer);
+            const { key, from, over } = cw;
+            cwPend = null; Object.assign(cw, { key: null, from: -1, over: -1, dx: 0 });
+            if (!key || cancel || over === from) return;
+            const ids = continueWatching.value.map(i => i.anime.id);
+            const [moved] = ids.splice(from, 1); ids.splice(over, 0, moved);
+            PREFS.contOrder = { ...(PREFS.contOrder || {}), [section.value]: ids };
+        };
+        const cwStyle = (idx) => {
+            if (!cw.key) return null;
+            if (idx === cw.from) return { transform: `translateX(${cw.dx}px) scale(1.03)`, zIndex: 5, boxShadow: '0 18px 40px -14px rgb(0 0 0 / .7)', transition: 'box-shadow .15s' };
+            let shift = 0;
+            if (cw.from < cw.over && idx > cw.from && idx <= cw.over) shift = -cw.w;
+            if (cw.from > cw.over && idx >= cw.over && idx < cw.from) shift = cw.w;
+            return { transform: `translateX(${shift}px)`, transition: 'transform .18s cubic-bezier(.16,1,.3,1)' };
+        };
+        const cwClick = (item) => { if (cwDragged) { cwDragged = false; return; } continueItem(item); };   // (the click after a drag isn't a tap)
+        const cwReset = () => { const o = { ...(PREFS.contOrder || {}) }; delete o[section.value]; PREFS.contOrder = o; };
+        // (a held card on a phone mustn't scroll the row while it's dragged)
+        document.addEventListener('touchmove', (e) => { if (cw.key) e.preventDefault(); }, { passive: false });
         const progressPct = (item) => item.anime?.episodes ? Math.min(100, (item.progress || 0) / item.anime.episodes * 100) : 0;
         // v1.5 "2 new": episodes of an airing anime that are out and that you haven't counted yet (not on a rewatch)
         const newEps = (item) => {
@@ -6165,9 +6270,13 @@ createApp({
             if (eps && action === 'COMPLETED' && entry.anime && !entry.anime.episodes && entry.anime.type === 'TV') entry.anime = { ...entry.anime, episodes: eps };
             entry.repeats = [...(entry.repeats || [])];
             if (action === 'EP' && entry.status === 'REPEATING') {   // +1 on a rewatch counts on that rewatch's counter
+                const restart = !!eps && (entry.progress || 0) < eps;   // v2.1 started over
                 const n = entry.repeats.length ? entry.repeats.length - 1 : (entry.repeats.push(0), 0);
                 entry.repeats[n] = Math.min((entry.repeats[n] || 0) + 1, eps || 99999);
-                if (eps && entry.repeats[n] >= eps) { entry.status = 'COMPLETED'; entry.finishedRepeat = n + 1; }
+                if (eps && entry.repeats[n] >= eps) {
+                    entry.status = 'COMPLETED';
+                    if (restart) { entry.progress = eps; entry.repeats.pop(); entry.finishedFirst = true; } else entry.finishedRepeat = n + 1;
+                }
             } else if (action === 'EP' && (anime.type || entry.anime?.type) === 'SONG') {   // songs: +1 play, the status stays (a new song becomes Liked)
                 entry.progress = (entry.progress || 0) + 1;
                 if (idx === -1 || entry.status === 'PLANNING') entry.status = 'COMPLETED';
@@ -6177,10 +6286,13 @@ createApp({
                 entry.status = eps && entry.progress >= eps ? 'COMPLETED' : 'WATCHING';
             } else if (action === 'REPEATING') {
                 if (entry.status === 'REPEATING') return { error: `Already rewatching ${titleOf(anime)}` };
+                // v2.1 not finished: start over from episode 1, the first watch keeps its count
+                const restart = entry.status !== 'COMPLETED' && !!eps && (entry.progress || 0) < eps;
+                if (restart && !(entry.progress > 0)) return { error: `You haven't watched any of ${titleOf(anime)} yet` };
                 const r = startRepeat(entry.repeats, eps);
                 if (!r) return { error: LILBRO };
                 entry.repeats = r; entry.status = 'REPEATING'; entry.rewish = false;   // you're rewatching it now: off "Wanna rewatch"
-                if (eps) entry.progress = eps;
+                if (eps && !restart) entry.progress = eps;
             } else {
                 entry.status = action;
                 if (action === 'COMPLETED' && eps) entry.progress = eps;
@@ -6251,13 +6363,14 @@ createApp({
             if (error === LILBRO) { triggerLilBro(anime); return; }
             if (error) { showToast(error, 'error'); return; }
             const before = soloEntry(anime.id);
-            const { finishedRepeat } = entry; delete entry.finishedRepeat;
+            const { finishedRepeat, finishedFirst } = entry; delete entry.finishedRepeat; delete entry.finishedFirst;
             setSoloLocal(entry);                                 // instant feedback
             const title = titleOf(anime);
             const eps = anime.episodes || entry.anime?.episodes;
             showToast(finishedRepeat ? `Finished rewatch #${finishedRepeat} of ${title}!`
-                : action === 'EP' && entry.status === 'REPEATING' ? `Rewatch #${entry.repeats.length} · ${UNIT.ep} ${repeatNow(entry)}${eps ? '/' + eps : ''} · ${title}`
-                : action === 'REPEATING' ? `${title} → Rewatch #${entry.repeats.length} of ${MAX_REPEATS}`
+                : finishedFirst ? `Finished ${title}! Marked as Completed`
+                : action === 'EP' && entry.status === 'REPEATING' ? `${isRestart(entry) ? 'Started over' : 'Rewatch #' + entry.repeats.length} · ${UNIT.ep} ${repeatNow(entry)}${eps ? '/' + eps : ''} · ${title}`
+                : action === 'REPEATING' ? (isRestart(entry) ? `${title} → started over from ${UNIT.ep.toLowerCase()} 1 (your first watch stays at ${entry.progress})` : `${title} → Rewatch #${entry.repeats.length} of ${MAX_REPEATS}`)
                 : action === 'EP' && anime.type === 'SONG' ? `Play ${entry.progress} · ${title}`
                 : action === 'EP'
                 ? (entry.status === 'COMPLETED' ? `Finished ${title}! Marked as Completed` : `${UNIT.ep} ${entry.progress}${anime.episodes ? '/' + anime.episodes : ''} · ${title}`)
@@ -6707,8 +6820,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.0';
+        const APP_VERSION = '2.1';
         const WHATS_NEW = {
+            '2.1': [
+                { icon: 'fa-rotate-left', t: 'Start over', d: 'Dropped something at episode 7 and starting again from episode 1? “Start over” keeps your first watch at 7 and counts the new watch on its own.' },
+                { icon: 'fa-comment-dots', t: 'Message pop-ups', d: 'New messages show up in the bottom-right corner with a short chime. Click one to open the chat (the sound can be turned off in Settings → Notifications).' },
+                { icon: 'fa-grip-lines-vertical', t: 'Your own Continue order', d: 'Drag the Continue watching / reading cards into the order you like (on a phone: hold a card, then drag).' },
+                { icon: 'fa-book-open-reader', t: 'Reader fix', d: 'Scrolling from one chapter into the next no longer sometimes throws you into a different chapter.' },
+                { icon: 'fa-trophy', t: 'Bigger leaderboard posters', d: 'The Top 100 shows bigger covers.' },
+            ],
             '2.0': [
                 { icon: 'fa-arrows-rotate', t: 'AniList syncs both ways', d: 'Connected AniList? What you change there now comes here too (checked every 10 minutes while anicoop is open). Removing a title on AniList doesn’t remove it here.' },
                 { icon: 'fa-layer-group', t: 'One update, not twenty', d: 'Several changes from AniList at once show as one “Updated 20 titles from AniList” for your friends.' },
@@ -8652,12 +8772,17 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const el = document.querySelector('.reader-strip'); const segs = rd.segs || [];
             if (!el || segs.length <= STRIP_MAX || rdSegOf(rd.i) === segs[0]) return;
             const drop = segs[0], next = segs[1];
-            const anchor = el.querySelectorAll('img.rd-img')[next.start]; if (!anchor) return;
-            const before = anchor.offsetTop;
+            if (!el.querySelectorAll('img.rd-img')[next.start]) return;
+            // v2.1 the page you're looking at is put back at the same spot. (It used to move the strip up by the height
+            // that was removed, but Chrome and Firefox already do that themselves, so it moved twice and threw you back
+            // a chapter or more: the "teleport" when a chapter ended. Near the end of the strip it also landed wrong.)
+            const vis = [...el.querySelectorAll('img.rd-img')].slice(next.start).find(im => im.offsetTop + im.offsetHeight > el.scrollTop);   // (a page that stays)
+            if (!vis) return;
+            const off = el.scrollTop - vis.offsetTop;
             const gone = rd.pages.splice(0, drop.count);
             segs.shift(); segs.forEach(s => { s.start -= drop.count; }); rd.i = Math.max(0, rd.i - drop.count);
             await nextTick();
-            el.scrollTop -= before - anchor.offsetTop;
+            if (vis.isConnected) el.scrollTop = vis.offsetTop + off;
             gone.forEach(u => { if (u.startsWith('blob:')) { URL.revokeObjectURL(u); blobUrls = blobUrls.filter(x => x !== u); } });
         };
         const onVerticalScroll = (e) => {
@@ -9654,7 +9779,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const ownerId = ref(null);
         const badgeFacts = (entries, created, userId) => {
             const anime = entries.filter(i => typeOf(i) === 'ANIME');
-            const done = anime.filter(i => i.status === 'COMPLETED' || i.status === 'REPEATING');
+            const done = anime.filter(i => i.status === 'COMPLETED' || (i.status === 'REPEATING' && !isRestart(i)));
             const st = statsFor(entries);
             return {
                 created, owner: !!userId && userId === ownerId.value, done: done.length, eps: st.epsWatched, ch: st.chaptersRead,
@@ -10268,6 +10393,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const anime = normMedia(en.media);
             const e = { anime, status: ANILIST_STATUS[en.status] || 'PLANNING', score: clamp(Number(en.score) || 0, 0, 10), progress: en.progress || 0 };
             if (!REPEAT_TYPES.includes(anime.type) && e.status === 'REPEATING') e.status = 'WATCHING';
+            // v2.1 you started over here: AniList's "Watching, episode N" is the new watch's counter
+            if (cur && isRestart(cur) && e.status === 'WATCHING' && anime.type === 'ANIME') { const reps = [...(cur.repeats || [0])]; reps[reps.length - 1] = e.progress; return { ...e, status: 'REPEATING', progress: cur.progress, repeats: reps }; }
             if (anime.type === 'ANIME') {
                 const full = anime.episodes || e.progress || 0, done = Math.min(en.repeat || 0, MAX_REPEATS);
                 const old = (cur?.repeats || []).filter(n => full && n >= full);
@@ -10629,6 +10756,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const malForm = (e, type) => {
             const reps = e.repeats || [], full = e.anime?.episodes || 0;
             const done = full ? reps.filter(n => n >= full).length : 0, now = e.status === 'REPEATING';
+            if (isRestart(e)) { const p = reps[reps.length - 1] || 0, score = clamp(Math.round(Number(e.score) || 0), 0, 10); return { status: 'watching', score, num_watched_episodes: p, is_rewatching: false, num_times_rewatched: done }; }   // v2.1 started over: Watching on MAL
             const progress = now ? (reps[reps.length - 1] || 0) : (e.progress || 0);
             const score = clamp(Math.round(Number(e.score) || 0), 0, 10);
             return type === 'MANGA'
@@ -10822,7 +10950,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
