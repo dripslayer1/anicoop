@@ -1205,7 +1205,10 @@ select.chip.dd-open { border-color: rgb(var(--c-volt)); box-shadow: 0 0 0 3px rg
 .ext-installed { max-height: 264px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
 
 /* v8.6 songs: play a preview straight from the most streamed list; artist / album rows that open their pages */
-.top-cover { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
+/* v2.1 bigger leaderboard posters (were 40×56 / 48×48) */
+.top-cover { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
+.top-poster { width: 64px; height: 96px; }
+@media (max-width: 639px) { .top-cover { width: 56px; height: 56px; } .top-poster { width: 56px; height: 84px; } }
 .top-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: rgb(0 0 0 / .55); color: #fff; font-size: 14px; opacity: 0; transition: opacity .15s, background-color .15s; }
 .top-play:hover { background: rgb(var(--c-volt) / .9); color: rgb(var(--c-onvolt)); }
 .rank-row:hover .top-play, .rank-row:focus-within .top-play, .top-play.on { opacity: 1; }
@@ -2170,3 +2173,18 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .series-cmp-row:last-child { border-bottom: 0; }
 @media (min-width: 640px) { .series-cmp-row { grid-template-columns: 26px 1fr 140px 140px 40px; } }
 @media (hover: hover) { .series-cmp-row:hover { background: rgb(var(--c-raised)); } }
+
+/* v2.1 new-message cards (bottom-right, above the toast) */
+.msg-pops { position: fixed; z-index: 126; right: 12px; bottom: 168px; display: flex; flex-direction: column-reverse; gap: 8px; width: min(360px, calc(100vw - 24px)); pointer-events: none; }
+@media (min-width: 768px) { .msg-pops { right: 32px; bottom: 96px; } }
+.msg-pop { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: 18px; cursor: pointer; text-align: left;
+  background: rgb(var(--c-surface)); border: 1px solid rgb(var(--c-line)); box-shadow: 0 18px 40px -16px rgb(0 0 0 / .6); transition: transform .15s var(--ease), border-color .15s; }
+.msg-pop:hover { border-color: rgb(var(--c-lilac) / .6); transform: translateY(-2px); }
+.msg-pop:focus-visible { outline: 2px solid rgb(var(--c-lilac)); outline-offset: 2px; }
+.msg-pop-x { width: 28px; height: 28px; flex-shrink: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: rgb(var(--c-mute)); font-size: 12px; }
+.msg-pop-x:hover { background: rgb(var(--c-raised)); color: rgb(var(--c-ink)); }
+
+/* v2.1 Continue cards can be dragged into your own order */
+.cw-card { touch-action: pan-x; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.cw-card img { -webkit-user-drag: none; pointer-events: none; }
+.cw-card.is-dragging { cursor: grabbing; }
