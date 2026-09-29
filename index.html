@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.1">
+    <link rel="stylesheet" href="app.css?v=2.2">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.1" defer></script>
+    <script src="app.js?v=2.2" defer></script>
 </head>
 <body>
 
@@ -565,13 +565,13 @@
 
                             <!-- v1.6 watching together: who you watch it with (their own status each), invites, the shared count -->
                             <div v-if="currentUser && partyType(selectedAnime)" class="panel p-5 flex flex-col gap-3 party-box">
-                                <p class="label flex items-center gap-1.5"><i class="fa-solid fa-user-group text-lilac"></i>Watching together<span v-if="detailParty && detailParty.progress != null" class="ml-auto normal-case tracking-normal font-mono text-[11px] text-sub" title="The count you share">together · {{ UNIT.short }} {{ detailParty.progress }}</span></p>
+                                <p class="label flex items-center gap-1.5"><i class="fa-solid fa-user-group text-lilac"></i>{{ selectedAnime.type === 'GAME' ? 'Playing together' : 'Watching together' }}<span v-if="detailParty && detailParty.progress != null && PARTY_SYNC(selectedAnime)" class="ml-auto normal-case tracking-normal font-mono text-[11px] text-sub" title="The count you share">together · {{ UNIT.short }} {{ detailParty.progress }}</span></p>
                                 <div v-if="inviteFor(selectedAnime.id)" class="party-invite">
                                     <div class="flex items-center gap-2.5">
                                         <user-avatar :user="inviteFrom(inviteFor(selectedAnime.id))" :size="32"></user-avatar>
-                                        <p class="text-[13px] text-ink leading-snug min-w-0"><b>{{ inviteFrom(inviteFor(selectedAnime.id)).username }}</b> wants to watch this with you<span v-if="invitePeople(inviteFor(selectedAnime.id)).length > 1" class="text-sub"> ({{ invitePeople(inviteFor(selectedAnime.id)).length }} people are in)</span>.</p>
+                                        <p class="text-[13px] text-ink leading-snug min-w-0"><b>{{ inviteFrom(inviteFor(selectedAnime.id)).username }}</b> wants to {{ selectedAnime.type === 'GAME' ? 'play' : 'watch' }} this with you<span v-if="invitePeople(inviteFor(selectedAnime.id)).length > 1" class="text-sub"> ({{ invitePeople(inviteFor(selectedAnime.id)).length }} people are in)</span>.</p>
                                     </div>
-                                    <p v-if="myEntry(selectedAnime.id)?.status === 'COMPLETED'" class="text-[11px] text-sub mt-2"><i class="fa-solid fa-rotate-right text-[#14b8a6] mr-1"></i>You finished it, so it counts as a rewatch for you.</p>
+                                    <p v-if="myEntry(selectedAnime.id)?.status === 'COMPLETED' && selectedAnime.type !== 'GAME'" class="text-[11px] text-sub mt-2"><i class="fa-solid fa-rotate-right text-[#14b8a6] mr-1"></i>You finished it, so it counts as a rewatch for you.</p>
                                     <div class="flex gap-2 mt-3">
                                         <button @click="answerInvite(inviteFor(selectedAnime.id), true)" class="btn-primary flex-1 !py-2 !text-xs"><i class="fa-solid fa-check"></i> Join</button>
                                         <button @click="answerInvite(inviteFor(selectedAnime.id), false)" class="btn-ghost !py-2 !text-xs">No thanks</button>
@@ -581,16 +581,17 @@
                                     <div v-for="p in detailParty.people" :key="p.id" class="party-person" :class="p.state">
                                         <button @click="openUser(p.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left">
                                             <user-avatar :user="p.user" :size="30"></user-avatar>
-                                            <span class="min-w-0"><span class="block text-sm font-semibold text-ink truncate">{{ p.user.username }}</span><span class="block text-[11px] text-mute truncate">{{ PARTY_STATE_LABEL[p.state] }}<template v-if="p.st && p.state === 'joined'"> · {{ p.st === 'REPEATING' ? 'rewatching' : statusLabelFor(selectedAnime.type, p.st).toLowerCase() }}</template></span></span>
+                                            <span class="min-w-0"><span class="block text-sm font-semibold text-ink truncate">{{ p.user.username }}</span><span class="block text-[11px] text-mute truncate">{{ p.state === 'joined' && selectedAnime.type === 'GAME' ? 'Playing with you' : PARTY_STATE_LABEL[p.state] }}<template v-if="p.st && p.state === 'joined'"> · {{ p.st === 'REPEATING' ? 'rewatching' : statusLabelFor(selectedAnime.type, p.st).toLowerCase() }}</template></span></span>
                                         </button>
                                         <button v-if="p.state === 'invited'" @click="cancelInvite(p.party, p.id)" class="role-act" title="Take back the invite"><i class="fa-solid fa-xmark"></i></button>
                                     </div>
                                     <p v-if="detailParty.me === 'dropped'" class="text-[11px] text-mute">You dropped it: pick it up again (Watching) to carry on with them.</p>
                                 </div>
+                                <p v-else-if="!inviteFor(selectedAnime.id) && selectedAnime.type === 'GAME'" class="text-xs text-sub leading-relaxed">Invite friends to play it with you. Their pictures show on the poster, and everyone keeps their own status and hours played.</p>
                                 <p v-else-if="!inviteFor(selectedAnime.id)" class="text-xs text-sub leading-relaxed">Invite friends to watch it with you. Their pictures show on the poster, everyone keeps their own status, and when anyone counts an episode, everyone moves along.</p>
                                 <div class="flex gap-2">
                                     <button @click="openPartyDraft(selectedAnime)" :disabled="!friendsList.length" class="btn-ghost flex-1 !py-2 !text-xs" :title="friendsList.length ? '' : 'Add friends first (Profile → Friends)'"><i class="fa-solid fa-user-plus"></i> Invite friends</button>
-                                    <button v-if="detailParty" @click="leaveParty(selectedAnime)" class="btn-ghost !py-2 !text-xs !px-3" title="Stop watching together (it stays on your list)"><i class="fa-solid fa-right-from-bracket"></i></button>
+                                    <button v-if="detailParty" @click="leaveParty(selectedAnime)" class="btn-ghost !py-2 !text-xs !px-3" :title="selectedAnime.type === 'GAME' ? 'Stop playing together (it stays on your list)' : 'Stop watching together (it stays on your list)'"><i class="fa-solid fa-right-from-bracket"></i></button>
                                 </div>
                             </div>
 
@@ -2666,7 +2667,7 @@
                             </div>
                             <!-- v1.6 watching with: pick friends, see only what you watch with all of them -->
                             <div v-if="listWithFriends.length && !strictSolo" class="la-with">
-                                <p class="label mb-2 px-1">Watching with</p>
+                                <p class="label mb-2 px-1">{{ currentSection.type === 'GAME' ? 'Playing with' : 'Watching with' }}</p>
                                 <div class="flex xl:flex-col flex-wrap gap-1 la-chips">
                                     <button v-for="f in listWithFriends" :key="f.id" @click="toggleListWith(f.id)" :class="listWith.includes(f.id) ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors">
                                         <span class="flex items-center gap-2.5 min-w-0"><user-avatar :user="f.user" :size="22"></user-avatar><span class="truncate">{{ f.user.username }}</span></span>
@@ -3529,7 +3530,7 @@
                         </div>
                         <!-- v1.6 watch it with friends (their pictures show on the poster) -->
                         <div v-if="partyType(editForm.anime)">
-                            <p class="label mb-2.5">Watching together</p>
+                            <p class="label mb-2.5">{{ editForm.anime.type === 'GAME' ? 'Playing together' : 'Watching together' }}</p>
                             <div class="flex flex-wrap items-center gap-2">
                                 <span v-if="posterTags(editForm.anime.id).length" class="flex -space-x-1.5 mr-1"><span v-for="t in posterTags(editForm.anime.id).slice(0, 6)" :key="t.id" class="pt" :class="t.state" :title="t.user.username"><user-avatar :user="t.user" :size="26"></user-avatar></span></span>
                                 <button @click="openPartyDraft(editForm.anime)" :disabled="!friendsList.length" class="squad-chip !border-dashed !text-sm !py-2"><i class="fa-solid fa-user-plus"></i>Invite friends</button>
@@ -3595,7 +3596,7 @@
                 <div class="modal-card max-w-md w-full p-6 max-h-[88dvh] flex flex-col">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="kicker">// watch together</p>
+                            <p class="kicker">// {{ partyDraftGames ? 'play together' : 'watch together' }}</p>
                             <h3 class="mt-1 font-display font-bold text-ink text-xl truncate">{{ partyDraft.items.length === 1 ? titleOf(partyDraft.items[0]) : partyDraft.items.length + ' titles' }}</h3>
                         </div>
                         <button @click="partyDraft.open = false" class="icon-btn !w-9 !h-9 shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>

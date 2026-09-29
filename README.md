@@ -1134,3 +1134,15 @@ What wasn't changed (small, by design, or needs your dashboard):
   scroll position was then corrected twice (Chrome / Firefox already do it themselves), which threw you back a chapter
   or more: the "teleport" when a chapter ended. Now the page you're looking at stays exactly where it was.
 - **Bigger posters in the leaderboard** (Top 100): 64×96 (56×84 on phones), were 40×56.
+
+## v2.2 — play together (games)
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.2**.
+
+- **Games work like anime for friends now:** "Play with friends…" in a game's quick menu, "Invite friends" on its page,
+  and several games at once with Select → Invite. Friends' pictures show on the poster (faded while invited), the
+  Games list has the same "Playing with" filter and "Strictly solo" switch, and invites show on the Lists page and in
+  notifications ("wants to play … with you").
+- **Hours played stay your own:** unlike episodes / chapters, nobody's hours move anyone else's. Joining a game adds
+  it to your list as Plan to play (or keeps your status if it's already there). A finished game doesn't turn into a
+  "rewatch" when you invite someone.

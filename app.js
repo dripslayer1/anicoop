@@ -55,7 +55,9 @@ const REPEAT_TYPES = ['ANIME', 'TV'];
 // The first watch keeps its own count in progress (7); the new watch counts in repeats like any rewatch.
 const isRestart = (e) => e?.status === 'REPEATING' && !!e.anime?.episodes && (e.progress || 0) < e.anime.episodes;
 // v1.6 watching together (friend tags on titles) is for anime, manga and movies & TV
-const PARTY_TYPES = ['ANIME', 'MANGA', 'TV'];
+const PARTY_TYPES = ['ANIME', 'MANGA', 'TV', 'GAME'];   // v2.2 games too ("play together")
+// v2.2 the types whose count moves everyone along (episodes / chapters). Games don't: hours played are your own.
+const PARTY_SYNC = (a) => (a?.type || 'ANIME') !== 'GAME';
 const statusPick = () => STATUS_ORDER.filter(s => !(UNIT.type === 'SONG' && (s === 'PAUSED' || s === 'PLANNING')) && !(s === 'REPEATING' && !REPEAT_TYPES.includes(UNIT.type)));
 const applyLabels = (type) => {
     const set = LABEL_SETS[type] || LABEL_SETS.ANIME;
@@ -1990,7 +1992,7 @@ const QuickAdd = {
                         <span class="ml-auto font-mono text-[10px] text-mute">{{ (entry.repeats || []).length }}/{{ MAX_REPEATS }}</span>
                     </button>
                     <div class="h-px bg-line my-1 mx-1"></div>
-                    <button v-if="PARTY_TYPES.includes(anime.type || 'ANIME')" @click="pick('PARTY')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-plus text-[11px] w-2.5"></i> Watch with friends…</button>
+                    <button v-if="PARTY_TYPES.includes(anime.type || 'ANIME')" @click="pick('PARTY')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-plus text-[11px] w-2.5"></i> {{ anime.type === 'GAME' ? 'Play with friends…' : 'Watch with friends…' }}</button>
                     <button @click="pick('EDIT')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-pen text-[11px] w-2.5"></i> Edit & more…</button>
                     <button v-if="onList" @click="pick('REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
                 </div>
@@ -3343,7 +3345,7 @@ createApp({
                     const st = myState(p);
                     if (e.status === 'DROPPED' && st === 'joined') { partyRespond(p, 'dropped', true); return; }
                     if (st === 'dropped' && [...PARTY_ACTIVE, 'PLANNING', 'COMPLETED'].includes(e.status)) partyRespond(p, 'joined', true);
-                    const moved = prev && eff !== prev.eff && [...PARTY_ACTIVE, 'PLANNING'].includes(prev.status) && [...PARTY_ACTIVE, 'COMPLETED'].includes(e.status);
+                    const moved = PARTY_SYNC(e.anime) && prev && eff !== prev.eff && [...PARTY_ACTIVE, 'PLANNING'].includes(prev.status) && [...PARTY_ACTIVE, 'COMPLETED'].includes(e.status);
                     if (moved && eff !== p.progress) { p.progress = eff; sb.rpc('party_progress', { pid: p.id, n: eff }).then(() => {}, () => {}); }
                 });
             });
@@ -3381,7 +3383,7 @@ createApp({
                 const moved = [];
                 partiesByMedia.value.forEach((ps, id) => {
                     const e = soloEntry(id), n = pullTarget(id);
-                    if (!e || n == null || !['WATCHING', 'REPEATING', 'PLANNING'].includes(e.status) || n <= effProgress(e)) return;
+                    if (!e || n == null || !PARTY_SYNC(e.anime) || !['WATCHING', 'REPEATING', 'PLANNING'].includes(e.status) || n <= effProgress(e)) return;
                     moved.push(movedTo(e, n));
                 });
                 if (!moved.length) return;
@@ -3405,7 +3407,7 @@ createApp({
             if (!currentUser.value) { showToast('Sign in first', 'error'); return; }
             if (partyMissing.value) { partyNeedsSql(); return; }
             const items = (Array.isArray(animes) ? animes : [animes]).filter(a => a?.id && partyType(a));
-            if (!items.length) { showToast('Watching together is for anime, manga and movies & TV', 'error'); return; }
+            if (!items.length) { showToast('Watching together is for anime, manga, movies & TV and games', 'error'); return; }
             quickMenuFor.value = null; sheetAnime.value = null;
             Object.assign(partyDraft, { open: true, items: items.map(normMedia), picked: [], q: '', busy: false, rewatch: true });
         };
@@ -3416,7 +3418,8 @@ createApp({
         const togglePartyPick = (id) => { const i = partyDraft.picked.indexOf(id); if (i === -1) partyDraft.picked.push(id); else partyDraft.picked.splice(i, 1); };
         // already in it (joined / invited) for the one title in the window
         const partyHas = (id) => partyDraft.items.length === 1 && (tagsOf(partyDraft.items[0].id) || []).some(t => t.id === id && t.state !== 'dropped');
-        const partyDraftCompleted = computed(() => partyDraft.items.some(a => soloEntry(a.id)?.status === 'COMPLETED'));
+        const partyDraftCompleted = computed(() => partyDraft.items.some(a => soloEntry(a.id)?.status === 'COMPLETED' && REPEAT_TYPES.includes(a.type || 'ANIME')));
+        const partyDraftGames = computed(() => partyDraft.items.length > 0 && partyDraft.items.every(a => a.type === 'GAME'));   // v2.2 "play together"
         // "recent squads": the friend groups you watch with most (then most lately), one tap invites all of them
         const recentSquads = computed(() => {
             const friends = new Set(friendsList.value.map(f => f.id)), combos = new Map(), me = uid();
@@ -3441,14 +3444,14 @@ createApp({
                 for (const a of partyDraft.items) {
                     const cur = soloEntry(a.id);
                     if (!cur) put.push({ anime: normMedia(a), status: 'PLANNING', score: 0, progress: 0 });
-                    else if (cur.status === 'COMPLETED' && partyDraft.rewatch) {
+                    else if (cur.status === 'COMPLETED' && partyDraft.rewatch && REPEAT_TYPES.includes(cur.anime?.type || 'ANIME')) {   // (v2.2 not games: no rewatch there)
                         await fillTotal(cur.anime);
                         const r = startRepeat(cur.repeats, totalOf(cur.anime));
                         if (r) { r[r.length - 1] = 0; put.push({ ...cur, status: 'REPEATING', repeats: r, rewish: false }); }
                     } else if (cur.status === 'NONE' || cur.status === 'DROPPED') put.push({ ...cur, status: 'PLANNING' });
                 }
                 if (put.length) { put.forEach(setSoloLocal); await upsertSolo(put); }
-                const items = partyDraft.items.map(a => { const e = soloEntry(a.id); return { media_id: a.id, media_type: a.type || 'ANIME', media_data: slimAnime(e?.anime || a), progress: e && PARTY_ACTIVE.includes(e.status) ? effProgress(e) : 0 }; });
+                const items = partyDraft.items.map(a => { const e = soloEntry(a.id); return { media_id: a.id, media_type: a.type || 'ANIME', media_data: slimAnime(e?.anime || a), progress: e && PARTY_SYNC(a) && PARTY_ACTIVE.includes(e.status) ? effProgress(e) : 0 }; });
                 const { error } = await sb.rpc('party_invite', { p_items: items, p_members: members });
                 if (error) throw error;
                 await fetchParties();
@@ -3468,9 +3471,11 @@ createApp({
             if (!p) return;
             if (!yes) { if (await partyRespond(p, 'declined')) showToast(`Said no to ${titleOf(p.anime)}`); return; }
             if (!(await partyRespond(p, 'joined'))) return;
-            const n = p.progress || 0, cur = soloEntry(p.media_id);
+            const game = !PARTY_SYNC(p.anime);   // v2.2 a game: on your list, your own hours and status
+            const n = game ? 0 : p.progress || 0, cur = soloEntry(p.media_id);
             let e;
-            if (!cur) e = { anime: p.anime, status: n > 0 ? 'WATCHING' : 'PLANNING', score: 0, progress: n, repeats: [] };
+            if (game) e = !cur ? { anime: p.anime, status: 'PLANNING', score: 0, progress: 0, repeats: [] } : ['NONE', 'DROPPED'].includes(cur.status) ? { ...cur, status: 'PLANNING' } : null;
+            else if (!cur) e = { anime: p.anime, status: n > 0 ? 'WATCHING' : 'PLANNING', score: 0, progress: n, repeats: [] };
             else if (cur.status === 'COMPLETED') {
                 await fillTotal(cur.anime);
                 const r = startRepeat(cur.repeats, totalOf(cur.anime));
@@ -3480,10 +3485,10 @@ createApp({
             try {
                 if (e) { setSoloLocal(e); await upsertSolo(e); if (!cur) logActivity(e.anime, null, e); }
                 const mine = soloEntry(p.media_id);
-                if (mine && PARTY_ACTIVE.includes(mine.status) && effProgress(mine) > n) { p.progress = effProgress(mine); sb.rpc('party_progress', { pid: p.id, n: p.progress }).then(() => {}, () => {}); }
+                if (!game && mine && PARTY_ACTIVE.includes(mine.status) && effProgress(mine) > n) { p.progress = effProgress(mine); sb.rpc('party_progress', { pid: p.id, n: p.progress }).then(() => {}, () => {}); }
                 if (selectedAnime.value?.id === p.media_id) inlineForm.value = buildForm(selectedAnime.value);
                 const who = p.members.filter(m => m.user_id !== uid() && m.state === 'joined').map(m => personOf(m.user_id).username);
-                showToast(`You're watching ${titleOf(p.anime)}${who.length ? ' with ' + joinNames(who) : ''}${e?.status === 'REPEATING' ? ' (a rewatch for you)' : ''}`);
+                showToast(`You're ${game ? 'playing' : 'watching'} ${titleOf(p.anime)}${who.length ? ' with ' + joinNames(who) : ''}${e?.status === 'REPEATING' ? ' (a rewatch for you)' : ''}`);
             } catch (err) { showToast('Could not add it to your list: ' + (err.message || err), 'error'); }
         };
         const inviteFor = (mediaId) => partyInvites.value.find(p => p.media_id === mediaId) || null;
@@ -3602,8 +3607,8 @@ createApp({
                 case 'friend_accept': return `${who} accepted your friend request`;
                 case 'squad_added': return `${who} added you to the squad “${n.text}”`;
                 case 'squad_entry': return `${who} added ${title} to “${n.text}”`;
-                case 'party_invite': return `${who} wants to watch ${title} with you`;
-                case 'party_joined': return `${who} is watching ${title} with you now`;
+                case 'party_invite': return `${who} wants to ${n.media_type === 'GAME' ? 'play' : 'watch'} ${title} with you`;
+                case 'party_joined': return `${who} is ${n.media_type === 'GAME' ? 'playing' : 'watching'} ${title} with you now`;
                 case 'party_dropped': return `${who} dropped ${title} (you can carry on)`;
                 case 'playlist_added': return `${who} added you to the playlist “${n.text}”: you can add songs too`;
                 case 'media_related': return `${title} has a new related entry`;
@@ -6820,8 +6825,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.1';
+        const APP_VERSION = '2.2';
         const WHATS_NEW = {
+            '2.2': [
+                { icon: 'fa-gamepad', t: 'Play together', d: 'Invite friends to games like you do for anime: their pictures show on the poster, and “Playing with” filters your Games list. Everyone keeps their own status and hours played.' },
+            ],
             '2.1': [
                 { icon: 'fa-rotate-left', t: 'Start over', d: 'Dropped something at episode 7 and starting again from episode 1? “Start over” keeps your first watch at 7 and counts the new watch on its own.' },
                 { icon: 'fa-comment-dots', t: 'Message pop-ups', d: 'New messages show up in the bottom-right corner with a short chime. Click one to open the chat (the sound can be turned off in Settings → Notifications).' },
@@ -10950,7 +10958,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
