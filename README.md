@@ -1160,3 +1160,16 @@ What wasn't changed (small, by design, or needs your dashboard):
 - **Buddies you had before** keep syncing every section: they show as **All sections**. To switch to specific
   sections, stop that one (×) and ask again for the sections you want.
 - Requests and notifications say which section ("wants to be your Anime watch buddy").
+
+## v2.4 — shared songs open, the right chat button, tap a status again for All
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.4**.
+
+- **"Couldn't find that song on Spotify" fixed:** a song has a short number id made from its Apple Music / Spotify id,
+  and the way back from the number to the song was only kept in the browser that found the song. A friend opening it
+  (from a chat, a post, their activity, a notification) had nothing to look it up with. Now anicoop finds it: the
+  real id travels with new recommendations and posts; otherwise it's looked up on the friend's list; otherwise by the
+  song's name, where only the exact track counts. Old recommendations in your chats work too.
+- **The add button on a recommendation matches the section:** Plan to watch (anime, movies & TV), Plan to read
+  (manga), Plan to play (games), and **Like** for a song (it's added with everything the player needs).
+- **Lists → Status:** clicking the status you already picked again goes back to **All**.
