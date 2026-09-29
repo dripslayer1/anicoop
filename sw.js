@@ -1,7 +1,7 @@
 /* anicoop service worker — makes the app installable, fast to open and usable offline.
    When you change app files, bump REL here AND the ?v= of app.css / app.js in index.html (the same value), so everyone
    gets the update automatically. */
-const REL = '2.1';
+const REL = '2.2';
 const VERSION = 'anicoop-v' + REL;
 const SHELL = ['./', 'index.html', `app.css?v=${REL}`, `app.js?v=${REL}`, 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon.svg'];
 const CDN = /^(https:\/\/(unpkg\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com))/;
