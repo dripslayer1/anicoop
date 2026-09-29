@@ -1592,6 +1592,27 @@ const wikiArtist = async (name) => {
 // songs saved before v8 have a Spotify id as extId; newer ones an Apple key ("am:…") plus the Spotify id once it's known
 const songPlayerId = (a) => a?.spotifyId || (a?.extId && !String(a.extId).startsWith('am:') ? a.extId : null);
 const songSpotifyUrl = (a) => a?.spotifyUrl || (songPlayerId(a) ? `https://open.spotify.com/track/${songPlayerId(a)}` : `https://open.spotify.com/search/${encodeURIComponent(`${a?.title?.romaji || ''} ${(a?.artists || [])[0] || ''}`.trim())}`);
+// v2.4 a song known only by its number (a chat recommendation, a friend's update, a post): which song is it? The number
+// is made from the Apple / Spotify id, and the way back was only kept in the browser that found the song — so a
+// friend opening it got "Couldn't find that song". Asked in order: the id sent along, anyone's list you can see (a
+// friend's, usually), then a search by name where only the exact track (the same number) counts.
+const findSongExt = async (id, hint = {}) => {
+    if (songIds[id]) return songIds[id];
+    const keep = (ext) => { if (ext && songNum(ext) === id) { songIds[id] = ext; saveSongIds(); return ext; } return null; };
+    if (keep(hint.ext || hint.extId)) return songIds[id];
+    try {
+        const { data } = await sb.from('list_entries').select('media_data').eq('media_id', id).limit(5);
+        for (const r of data || []) if (keep(r.media_data?.extId)) return songIds[id];
+    } catch { /* not signed in / offline */ }
+    const title = typeof hint.title === 'string' ? hint.title : hint.title?.romaji || hint.title?.english || '';
+    if (title) {
+        try {
+            const d = await itunes('search', { term: [title, (hint.artists || [])[0]].filter(Boolean).join(' '), media: 'music', entity: 'song', limit: 50 });
+            for (const x of d.results || []) if (keep(APPLE_KEY(String(x.trackId)))) return songIds[id];
+        } catch { /* Apple busy */ }
+    }
+    return null;
+};
 const songApi = {
     async browse(f, page = 1) {
         const q = (f.search || '').trim(); const genres = splitMulti(f.genre);
@@ -3728,7 +3749,7 @@ createApp({
             }
             if (n.media_id) {
                 pendingCommentFocus = n.kind.startsWith('comment') ? (n.episode ?? 'GEN') : null;
-                await fetchAnimeDetails(n.media_id);
+                await fetchAnimeDetails(mediaNode(n.media_id, n.media_type, n.media_title));
             } else if (n.squad_id) openTracker('solo');   // (old squad alerts: squads became friend tags on your list)
         };
 
@@ -4082,7 +4103,7 @@ createApp({
         const choosePick = (item) => {
             if (picker.target === 'chat') { recommendToChat(item); picker.target = null; picker.q = ''; picker.results = []; return; }
             if (picker.target === 'attach') {
-                composer.media = { id: item.id, type: item.type, title: titleOf(item), cover: item.coverImage?.large || null, country: item.countryOfOrigin || null };
+                composer.media = { id: item.id, type: item.type, title: titleOf(item), cover: item.coverImage?.large || null, country: item.countryOfOrigin || null, ext: item.type === 'SONG' ? (item.extId || songIds[item.id] || null) : null };
                 composer.type = item.type === 'MANGA' && item.countryOfOrigin === 'KR' ? 'MANHWA' : item.type || composer.type;   // the post goes where its title belongs
             }
             else if (typeof picker.target === 'number' && composer.options[picker.target]) {
@@ -4118,6 +4139,7 @@ createApp({
             };
             // v9.9 manhwa: a manga post marked as Korean, so the feed's Manhwa filter finds it
             if (row.media_type === 'MANGA' && (composer.media ? composer.media.country === 'KR' : composer.type === 'MANHWA')) row.extra = { ...(row.extra || {}), country: 'KR' };
+            if (row.media_type === 'SONG' && composer.media?.ext) row.extra = { ...(row.extra || {}), ext: composer.media.ext };   // v2.4 which song it is, for your friends
             Object.keys(row).forEach(k => { if (row[k] === null && (k.startsWith('media_') || k === 'extra')) delete row[k]; });
             try {
                 const { data, error } = await sb.from('activities').insert(row).select().single();
@@ -6825,8 +6847,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.3';
+        const APP_VERSION = '2.4';
         const WHATS_NEW = {
+            '2.4': [
+                { icon: 'fa-music', t: 'Shared songs open', d: 'A song a friend sends you (or posts, or likes) opens even if you’ve never seen it: it used to say it couldn’t be found on Spotify.' },
+                { icon: 'fa-comment-dots', t: 'The right button', d: 'A recommendation in a chat offers Plan to watch, Plan to read, Plan to play — or Like for a song — to match what it is.' },
+                { icon: 'fa-filter', t: 'Tap again for All', d: 'In Lists, clicking the status you picked again shows everything.' },
+            ],
             '2.3': [
                 { icon: 'fa-link', t: 'Watch buddies per section', d: 'Be watch buddies for just Anime, Manga, Movies & TV or Games: only that section’s Plan to watch syncs, and you can have a different buddy in each. Pick the sections on a friend’s profile.' },
             ],
@@ -7221,6 +7248,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             detailLoading.value = true;
             if (kind === 'GAME' || kind === 'TV' || kind === 'SONG') {   // IGDB / TMDB / Spotify pages
                 try {
+                    if (kind === 'SONG' && !(typeof animeNode === 'object' && animeNode?.extId)) await findSongExt(id, typeof animeNode === 'object' ? animeNode : {});   // v2.4
                     const media = kind === 'GAME' ? await gameApi.details(id) : kind === 'TV' ? await tvApi.details(id)
                         : await songApi.details(typeof animeNode === 'object' && animeNode?.extId ? animeNode : id);
                     if (requestId !== detailRequestId) return;
@@ -9649,12 +9677,27 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             refreshChats();
         };
         const chatPickerOpen = () => openPicker('chat');
-        const recommendToChat = (a) => sendAny({ kind: 'anime', payload: { media_id: a.id, type: a.type || 'ANIME', title: titleOf(a), cover: a.coverImage?.large || null } });
+        // (v2.4 a song also sends its real id, so your friend's app knows which song it is)
+        const sharePayload = (a) => ({ media_id: a.id, type: a.type || 'ANIME', title: titleOf(a), cover: a.coverImage?.large || null, ...(a.type === 'SONG' ? { ext: a.extId || songIds[a.id] || null, artists: (a.artists || []).slice(0, 2) } : {}) });
+        const recommendToChat = (a) => sendAny({ kind: 'anime', payload: sharePayload(a) });
+        // opening / adding a shared title from a chat
+        // v2.4 a title from the feed / a notification: a song brings its name (and id, when the post has it) to find it by
+        const mediaNode = (id, type, title, ext) => type === 'SONG' || typeOfId(id) === 'SONG' ? { id, type: 'SONG', title: title || '', ext: ext || null } : id;
+        const sharedNode = (p) => p.type === 'SONG' ? { id: p.media_id, type: 'SONG', title: p.title, ext: p.ext || null, artists: p.artists || [] } : p.media_id;
+        const openShared = (p) => { if (p?.media_id) fetchAnimeDetails(sharedNode(p)); };
+        const addShared = async (p) => {
+            if (p.type !== 'SONG') { quickSolo({ id: p.media_id, type: p.type, title: { romaji: p.title }, coverImage: { large: p.cover } }, 'PLANNING'); return; }
+            // a song goes on as Liked, with everything the player needs (found the same way as when it's opened)
+            await findSongExt(p.media_id, sharedNode(p));
+            const s = await songApi.details(p.media_id).catch(() => null);
+            if (!s) { showToast('Couldn’t find that song — open it and try again', 'error'); return; }
+            quickSolo(s, 'COMPLETED');
+        };
 
         // "Send to…" from an anime page or an episode
         const sendSheet = reactive({ open: false, payload: null, kind: 'anime', note: '', q: '', busy: false });
         const openSendSheet = (kind, payload) => { Object.assign(sendSheet, { open: true, kind, payload, note: '', q: '', busy: false }); if (!chats.value.length) fetchChats(); };
-        const sendAnimeTo = (a) => openSendSheet('anime', { media_id: a.id, type: a.type || 'ANIME', title: titleOf(a), cover: a.coverImage?.large || null });
+        const sendAnimeTo = (a) => openSendSheet('anime', sharePayload(a));
         const sendEpisodeTo = (a, ep) => openSendSheet('episode', { media_id: a.id, type: a.type || 'ANIME', title: titleOf(a), cover: a.coverImage?.large || null, episode: ep.n, name: ep.name || ep.title, url: ep.url, site: ep.site, thumbnail: ep.thumbnail || null });
         const sendTargets = computed(() => {
             const seen = new Set(); const out = [];
@@ -10164,7 +10207,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         const activityLine = (a) => a.kind === 'list' ? `${activityVerb(a)} ${a.media_title || ''}`
             : `${({ post: 'Posted', poll: 'Started a poll', question: 'Asked', tierlist: 'Made a tier list', debate: 'Started a debate' })[a.kind] || 'Posted'}${a.body ? ': “' + String(a.body).slice(0, 90) + (String(a.body).length > 90 ? '…”' : '”') : ''}`;
-        const openActivity = (a) => { if (a.media_id) fetchAnimeDetails(a.media_id); else { section.value = SECTION_OF_TYPE[a.media_type] || section.value; openTracker('feed'); } };
+        const openActivity = (a) => { if (a.media_id) fetchAnimeDetails(mediaNode(a.media_id, a.media_type, a.media_title, a.extra?.ext)); else { section.value = SECTION_OF_TYPE[a.media_type] || section.value; openTracker('feed'); } };
 
         // ---------- games on your lists: checked once a day (release date, early access → released, delisted …) ----------
         const checkGames = async ({ force = false } = {}) => {
@@ -10974,7 +11017,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
