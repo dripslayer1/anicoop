@@ -1146,3 +1146,17 @@ What wasn't changed (small, by design, or needs your dashboard):
 - **Hours played stay your own:** unlike episodes / chapters, nobody's hours move anyone else's. Joining a game adds
   it to your list as Plan to play (or keeps your status if it's already there). A finished game doesn't turn into a
   "rewatch" when you invite someone.
+
+## v2.3 — watch buddies per section
+
+**Update:** Supabase → SQL Editor → New query → paste **`supabase/v2.3-buddy-sections.sql`** → Run (it's also in
+`supabase_setup.sql` now). No Edge Function change. Hard-refresh: the footer says **v2.3**.
+
+- **A watch buddy is for one section now:** Anime, Manga, Movies & TV or Games. Only that section's Plan to watch (Plan
+  to read / Plan to play) is copied when you accept and kept in sync after, and you can have a different buddy in each
+  section (or the same friend in several).
+- **On a friend's profile:** "Watch buddies" shows one chip per section: **+ Anime** asks, "Anime · sent" can be
+  cancelled, "Games? Accept" when they asked you, and a filled chip with × when you're buddies (× stops syncing).
+- **Buddies you had before** keep syncing every section: they show as **All sections**. To switch to specific
+  sections, stop that one (×) and ask again for the sections you want.
+- Requests and notifications say which section ("wants to be your Anime watch buddy").

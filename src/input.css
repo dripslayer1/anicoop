@@ -2188,3 +2188,15 @@ html.theme-light { --sb-thumb: rgba(0, 0, 0, .28); --sb-thumb-hover: rgba(0, 0, 
 .cw-card { touch-action: pan-x; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .cw-card img { -webkit-user-drag: none; pointer-events: none; }
 .cw-card.is-dragging { cursor: grabbing; }
+
+/* v2.3 watch buddies per section (a friend's profile) */
+.buddy-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  border: 1px dashed rgb(var(--c-line)); color: rgb(var(--c-sub)); background: transparent; transition: color .15s, border-color .15s, background .15s; }
+button.buddy-chip:hover { color: rgb(var(--c-lilac)); border-color: rgb(var(--c-lilac) / .6); }
+.buddy-chip i { font-size: 10px; }
+.buddy-chip.is-on { border-style: solid; border-color: rgb(var(--c-lilac) / .45); background: rgb(var(--c-lilac) / .14); color: rgb(var(--c-lilac)); padding-right: 4px; }
+.buddy-chip.is-sent { border-style: solid; color: rgb(var(--c-mute)); padding-right: 4px; }
+.buddy-chip.is-in { border-style: solid; border-color: rgb(var(--c-lilac) / .45); color: rgb(var(--c-ink)); padding-right: 4px; }
+.buddy-x { width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: .75; }
+.buddy-x:hover { opacity: 1; background: rgb(var(--c-raised)); }
+.buddy-yes { height: 22px; padding: 0 9px; border-radius: 999px; background: rgb(var(--c-lilac)); color: #fff; font-size: 11px; font-weight: 700; }

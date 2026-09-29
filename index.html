@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.2">
+    <link rel="stylesheet" href="app.css?v=2.3">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.2" defer></script>
+    <script src="app.js?v=2.3" defer></script>
 </head>
 <body>
 
@@ -1245,15 +1245,17 @@
                             <div v-if="viewedBadges.length && viewedSection !== 'list'" class="flex flex-wrap gap-1.5 mt-3">
                                 <span v-for="b in viewedBadges" :key="b.id" class="badge-chip" :class="{ pinned: (decorOf(viewedUser?.profile).pinned || []).includes(b.id) }" :style="{ color: b.c }" :title="b.d"><span class="bi" :style="{ background: b.c + '26' }"><i class="fa-solid" :class="b.icon"></i></span><span class="text-ink">{{ b.l }}</span></span>
                             </div>
-                            <div v-if="viewedIsFriend" class="flex flex-wrap items-center gap-2 mt-4">
-                                <button v-if="buddyState(viewUserId) === 'none'" @click="askBuddy(viewUserId)" class="squad-leave !text-lilac !h-8" title="Your Plan to watch lists would stay in sync"><i class="fa-solid fa-link"></i> Be watch buddies</button>
-                                <span v-else-if="buddyState(viewUserId) === 'sent'" class="flex items-center gap-2 text-xs text-sub"><i class="fa-solid fa-hourglass-half"></i> Watch buddy request sent <button @click="endBuddy(viewUserId)" class="underline hover:text-ink">cancel</button></span>
-                                <template v-else-if="buddyState(viewUserId) === 'incoming'">
-                                    <span class="text-xs text-ink"><i class="fa-solid fa-link text-lilac mr-1"></i>{{ viewedUser?.profile?.username }} wants to be watch buddies</span>
-                                    <button @click="acceptBuddy(viewUserId)" class="btn-primary !py-1.5 !px-3 !text-xs">Accept</button>
-                                    <button @click="endBuddy(viewUserId)" class="btn-ghost !py-1.5 !px-3 !text-xs">Decline</button>
-                                </template>
-                                <span v-else class="flex items-center gap-2 text-xs"><span class="px-2.5 py-1 rounded-full bg-lilac/15 text-lilac font-bold"><i class="fa-solid fa-link mr-1"></i>Watch buddies</span><span class="text-mute">Plan to watch is synced</span><button @click="endBuddy(viewUserId)" class="text-sub underline hover:text-ink">stop</button></span>
+                            <!-- v2.3 watch buddies per section: only that section's Plan to watch syncs -->
+                            <div v-if="viewedIsFriend" class="buddy-box mt-4">
+                                <p class="text-[11px] text-mute mb-1.5"><i class="fa-solid fa-link text-lilac mr-1"></i>Watch buddies · only the sections you pick sync their Plan to watch</p>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <template v-for="s in buddySectionsFor(viewUserId)" :key="s.t || 'all'">
+                                        <button v-if="s.st === 'none'" @click="askBuddy(viewUserId, s.t)" class="buddy-chip" :title="'Ask ' + viewedUser?.profile?.username + ' to sync ' + s.l"><i class="fa-solid fa-plus"></i>{{ s.l }}</button>
+                                        <span v-else-if="s.st === 'sent'" class="buddy-chip is-sent" title="Waiting for them to say yes"><i class="fa-solid fa-hourglass-half"></i>{{ s.l }} · sent<button @click="endBuddy(s.row)" class="buddy-x" title="Cancel the request"><i class="fa-solid fa-xmark"></i></button></span>
+                                        <span v-else-if="s.st === 'incoming'" class="buddy-chip is-in"><i class="fa-solid fa-link"></i>{{ s.l }}?<button @click="acceptBuddy(s.row)" class="buddy-yes">Accept</button><button @click="endBuddy(s.row)" class="buddy-x" title="Decline"><i class="fa-solid fa-xmark"></i></button></span>
+                                        <span v-else class="buddy-chip is-on" :title="s.l + ': Plan to watch is synced'"><i class="fa-solid fa-check"></i>{{ s.l }}<button @click="endBuddy(s.row)" class="buddy-x" title="Stop syncing"><i class="fa-solid fa-xmark"></i></button></span>
+                                    </template>
+                                </div>
                             </div>
                             <div v-if="sharedWith" class="flex flex-wrap gap-1.5 mt-3">
                                 <button @click="openSharedWith(viewUserId)" class="squad-chip on" style="--c:#B490F5" title="Your list, only what you watch with them"><i class="fa-solid fa-user-group"></i>{{ sharedWith }} {{ sharedWith === 1 ? 'title' : 'titles' }} together</button>
@@ -3262,9 +3264,9 @@
                     <p class="label px-2 pt-1 pb-1.5">Watch buddy requests</p>
                     <div v-for="b in buddyRequests" :key="b.id" class="flex items-center gap-2.5 p-2 rounded-xl bg-lilac/[.06] mb-1">
                         <user-avatar :user="personOf(b.requester)" :size="32"></user-avatar>
-                        <span class="flex-grow min-w-0 text-xs text-ink"><b>{{ personOf(b.requester).username }}</b> · sync Plan to watch</span>
-                        <button @click="acceptBuddy(b.requester)" class="px-3 py-1.5 rounded-full bg-[#22c55e] text-onaccent text-[11px] font-bold">Accept</button>
-                        <button @click="endBuddy(b.requester)" class="w-7 h-7 rounded-full bg-overlay text-sub hover:text-ink" title="Decline"><i class="fa-solid fa-xmark text-xs"></i></button>
+                        <span class="flex-grow min-w-0 text-xs text-ink"><b>{{ personOf(b.requester).username }}</b> · sync {{ b.media_type ? buddyLabel(b.media_type) + ' ' : '' }}Plan to watch</span>
+                        <button @click="acceptBuddy(b)" class="px-3 py-1.5 rounded-full bg-[#22c55e] text-onaccent text-[11px] font-bold">Accept</button>
+                        <button @click="endBuddy(b)" class="w-7 h-7 rounded-full bg-overlay text-sub hover:text-ink" title="Decline"><i class="fa-solid fa-xmark text-xs"></i></button>
                     </div>
                 </template>
                 <input v-if="friendsList.length > 6" v-model="friendsQuery" placeholder="Search friends" class="field !py-1.5 !rounded-xl !text-xs mx-1 my-1.5 !w-[calc(100%-.5rem)]">
