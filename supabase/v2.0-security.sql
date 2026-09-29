@@ -32,6 +32,11 @@ grant execute on all functions in schema public to authenticated, service_role;
 revoke execute on function public.merge_buddy_planning(uuid, uuid) from authenticated;
 revoke execute on function public.pref_on(uuid, text) from authenticated;
 revoke execute on function public.mentioned_users(text, uuid) from authenticated;
+do $$ begin   -- (v2.3 the per-section copy for watch buddies: only its trigger uses it)
+  if to_regprocedure('public.merge_buddy_section(uuid,uuid,text)') is not null then
+    execute 'revoke execute on function public.merge_buddy_section(uuid, uuid, text) from authenticated';
+  end if;
+end $$;
 grant execute on function public.username_taken(text) to anon, authenticated;
 -- functions added later start out closed to signed-out visitors too
 alter default privileges in schema public revoke execute on functions from public, anon;

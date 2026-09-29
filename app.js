@@ -3622,8 +3622,8 @@ createApp({
                 case 'friend_question': return `${who} asked a question about ${title}`;
                 case 'poll_ended': return n.actor_id ? `${who}’s poll ended` : 'Your poll ended';
                 case 'best_answer': return `${who} picked your answer as the best one`;
-                case 'buddy_request': return `${who} wants to be your watch buddy (your Plan to watch lists would stay in sync)`;
-                case 'buddy_accept': return `${who} is now your watch buddy — your Plan to watch lists are synced`;
+                case 'buddy_request': return n.media_type ? `${who} wants to be your ${buddyLabel(n.media_type)} watch buddy (only ${buddyLabel(n.media_type)} ${statusLabelFor(n.media_type, 'PLANNING')} would sync)` : `${who} wants to be your watch buddy (your Plan to watch lists would stay in sync)`;
+                case 'buddy_accept': return n.media_type ? `${who} is now your ${buddyLabel(n.media_type)} watch buddy — your ${buddyLabel(n.media_type)} ${statusLabelFor(n.media_type, 'PLANNING')} is synced` : `${who} is now your watch buddy — your Plan to watch lists are synced`;
                 case 'media_episode': return `${title}: ${n.text || 'new episode'}`;
                 case 'friend_tierlist': return `${who} made a tier list`;
                 case 'friend_debate': return `${who} started a debate`;
@@ -6825,8 +6825,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.2';
+        const APP_VERSION = '2.3';
         const WHATS_NEW = {
+            '2.3': [
+                { icon: 'fa-link', t: 'Watch buddies per section', d: 'Be watch buddies for just Anime, Manga, Movies & TV or Games: only that section’s Plan to watch syncs, and you can have a different buddy in each. Pick the sections on a friend’s profile.' },
+            ],
             '2.2': [
                 { icon: 'fa-gamepad', t: 'Play together', d: 'Invite friends to games like you do for anime: their pictures show on the poster, and “Playing with” filters your Games list. Everyone keeps their own status and hours played.' },
             ],
@@ -10269,29 +10272,42 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             buddies.value = data || [];
             ensureProfiles(buddies.value.map(b => b.requester === uid() ? b.addressee : b.requester));
         };
-        const buddyWith = (userId) => buddies.value.find(b => b.requester === userId || b.addressee === userId) || null;
-        const buddyState = (userId) => { const b = buddyWith(userId); if (!b) return 'none'; if (b.status === 'accepted') return 'buddies'; return b.requester === uid() ? 'sent' : 'incoming'; };
+        // v2.3 a watch buddy is for one section: only that section's Plan to watch syncs (a different buddy per section is
+        // fine). Links made before v2.3 have no section: they sync every section ("All sections").
+        const BUDDY_SECTIONS = [{ t: 'ANIME', l: 'Anime' }, { t: 'MANGA', l: 'Manga' }, { t: 'TV', l: 'Movies & TV' }, { t: 'GAME', l: 'Games' }];
+        const buddyLabel = (t) => t ? (BUDDY_SECTIONS.find(s => s.t === t)?.l || t) : 'All sections';
+        const buddyOther = (b) => b.requester === uid() ? b.addressee : b.requester;
+        const buddyStateOf = (b) => !b ? 'none' : b.status === 'accepted' ? 'buddies' : b.requester === uid() ? 'sent' : 'incoming';
+        const buddyRowsWith = (userId) => buddies.value.filter(b => buddyOther(b) === userId);
+        // any section (the friends list shows a link icon for buddies)
+        const buddyState = (userId) => { const st = buddyRowsWith(userId).map(buddyStateOf); return ['buddies', 'incoming', 'sent'].find(s => st.includes(s)) || 'none'; };
+        // one entry per section on a friend's profile (just "All sections" while an old everything-link is there)
+        const buddySectionsFor = (userId) => {
+            const rows = buddyRowsWith(userId), all = rows.find(b => !b.media_type);
+            if (all) return [{ t: null, l: buddyLabel(null), row: all, st: buddyStateOf(all) }];
+            return BUDDY_SECTIONS.map(s => { const row = rows.find(b => b.media_type === s.t) || null; return { ...s, row, st: buddyStateOf(row) }; });
+        };
         const buddyRequests = computed(() => buddies.value.filter(b => b.status === 'pending' && b.addressee === uid()));
-        const askBuddy = async (userId) => {
-            const { error } = await sb.from('watch_buddies').insert({ requester: uid(), addressee: userId });
-            if (error) { showToast('Could not send: ' + error.message + (/watch_buddies/.test(error.message) ? ' — run the v7.2 SQL in Supabase' : ''), 'error'); return; }
-            showToast(`Watch buddy request sent to ${personOf(userId).username}`);
+        const askBuddy = async (userId, t) => {
+            const { error } = await sb.from('watch_buddies').insert({ requester: uid(), addressee: userId, media_type: t || null });
+            if (error) { showToast('Could not send: ' + error.message + (/media_type|schema cache/i.test(error.message) ? ' — run supabase/v2.3-buddy-sections.sql in Supabase' : /duplicate|unique/i.test(error.message) ? ' (you already asked for that section)' : ''), 'error'); return; }
+            showToast(`${buddyLabel(t)} watch buddy request sent to ${personOf(userId).username}`);
             fetchBuddies();
         };
-        const acceptBuddy = async (userId) => {
-            const b = buddyWith(userId); if (!b) return;
+        const acceptBuddy = async (b) => {
+            if (!b) return;
             const { error } = await sb.from('watch_buddies').update({ status: 'accepted' }).eq('id', b.id);
             if (error) { showToast(error.message, 'error'); return; }
-            showToast(`You and ${personOf(userId).username} are watch buddies — your Plan to watch lists are merged`);
+            showToast(`You and ${personOf(buddyOther(b)).username} are ${b.media_type ? buddyLabel(b.media_type) + ' ' : ''}watch buddies — your ${statusLabelFor(b.media_type || 'ANIME', 'PLANNING')} ${b.media_type ? 'is' : 'lists are'} merged`);
             await fetchBuddies(); fetchSolo();
         };
-        const endBuddy = async (userId) => {
-            const b = buddyWith(userId); if (!b) return;
-            const who = personOf(userId).username;
-            if (b.status === 'accepted' && !(await askConfirm({ title: `Stop being watch buddies with ${who}?`, body: 'Your lists stay as they are; they just stop syncing.', ok: 'Stop syncing' }))) return;
+        const endBuddy = async (b) => {
+            if (!b) return;
+            const who = personOf(buddyOther(b)).username, what = b.media_type ? buddyLabel(b.media_type) + ' ' : '';
+            if (b.status === 'accepted' && !(await askConfirm({ title: `Stop being ${what}watch buddies with ${who}?`, body: 'Your lists stay as they are; they just stop syncing.', ok: 'Stop syncing' }))) return;
             const { error } = await sb.from('watch_buddies').delete().eq('id', b.id);
             if (error) { showToast(error.message, 'error'); return; }
-            showToast(b.status === 'accepted' ? `Stopped syncing with ${who}` : 'Request removed');
+            showToast(b.status === 'accepted' ? `Stopped syncing ${what ? what.trim() + ' ' : ''}with ${who}` : 'Request removed');
             fetchBuddies();
         };
 
@@ -11011,7 +11027,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             EFFECTS, NAME_STYLES, effectParticles, heroColors, decorOpen,
             personKind, FAV_PEOPLE, isPeopleTab, favTheirTab, favItems, favCount, openFavItem, removeFavItem, FAV_EMPTY, heroGlow, FRAMES, THEMES, BADGES, myBadges, viewedBadges, decorOf, decorDraft, togglePinBadge, toggleHideBadge, hideBadgeNow, myEarnedBadges, decorDirty, saveDecor, profileBg, pageBg, bgBannerChoices, setBgUrl, onBgFile, bgUrlDraft, bgUploading, bgInput,
             debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, SECTIONS, SECTION_OF_TYPE, tierManhwaNow, tierWho, tierPlaceholder, tierNoun, picOf, charPicFix, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
-            follows, isFollowing, toggleFollow, checkFollowed,             buddyState, buddyRequests, askBuddy, acceptBuddy, endBuddy,
+            follows, isFollowing, toggleFollow, checkFollowed,             buddyState, buddyRequests, askBuddy, acceptBuddy, endBuddy, buddySectionsFor, buddyLabel,
             siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList, malLink, malSync, connectMal, disconnectMal, pushAllToMal,
             rankTab, RANK_CATS, myRankings, viewedRankings, shownOf, showMoreRank, rankEdit, moveRank, setRankPos, resetRankOrder, myRankOrders, rankDrag, onRankPointerDown, onRankPointerMove, onRankPointerUp, rankRowStyle,
             compareBig, compareAddable, theirList, openTheirList, theirCounts, theirGrouped, openFriendStat, setViewedSection, openFriendLists, openFriendsManage, friendsOpen, friendsQuery, friendsFiltered, friendCounts,
