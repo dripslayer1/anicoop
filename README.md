@@ -1173,3 +1173,12 @@ What wasn't changed (small, by design, or needs your dashboard):
 - **The add button on a recommendation matches the section:** Plan to watch (anime, movies & TV), Plan to read
   (manga), Plan to play (games), and **Like** for a song (it's added with everything the player needs).
 - **Lists → Status:** clicking the status you already picked again goes back to **All**.
+
+## v2.5 — score it when you finish
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.5**.
+
+- When **+1** on the last episode (anime, movies & TV) or chapter (manga) puts a title on Completed by itself, a small
+  window asks for your score (Save score / Skip). It also shows when "I watched N episodes" after your watch link
+  reaches the last one, since that counts the same way as +1.
+- It doesn't show when you set Completed yourself (menu, status buttons, editor), and not when a rewatch ends.

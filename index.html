@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.4">
+    <link rel="stylesheet" href="app.css?v=2.5">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.4" defer></script>
+    <script src="app.js?v=2.5" defer></script>
 </head>
 <body>
 
@@ -5275,6 +5275,29 @@
                     <div class="mt-6 flex flex-wrap justify-center gap-2">
                         <button @click="lilBro.open = false; closeEditor(); openSection('anime')" class="btn-primary"><i class="fa-solid fa-compass"></i> Find something new</button>
                         <button @click="lilBro.open = false" class="btn-ghost">ok fine</button>
+                    </div>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
+    <!-- ============ v2.5 FINISHED IT: YOUR SCORE (after +1 on the last episode) ============ -->
+    <transition name="fade">
+        <div v-if="rateBox.open" class="modal-back !z-[92]" @click.self="rateBox.open = false">
+            <transition name="pop" appear>
+                <div class="modal-card max-w-sm w-full p-6" role="dialog" aria-modal="true" @keydown.esc="rateBox.open = false">
+                    <div class="flex items-start gap-3.5">
+                        <img v-if="rateBox.anime?.coverImage?.large" :src="rateBox.anime.coverImage.large" class="w-14 h-20 rounded-lg object-cover shrink-0" alt="">
+                        <div class="min-w-0">
+                            <p class="kicker"><i class="fa-solid fa-flag-checkered mr-1"></i>// finished</p>
+                            <h3 class="mt-1 font-display font-bold text-ink text-lg leading-snug line-clamp-2">{{ titleOf(rateBox.anime) }}</h3>
+                            <p class="mt-1 text-sm text-sub">It's on Completed. How would you score it?</p>
+                        </div>
+                    </div>
+                    <div class="mt-5"><score-input v-model="rateBox.score"></score-input></div>
+                    <div class="flex gap-2 mt-6">
+                        <button @click="rateBox.open = false" class="btn-ghost flex-1 !py-2.5">Skip</button>
+                        <button @click="saveRate" :disabled="rateBox.busy" class="btn-primary flex-1 !py-2.5"><i v-if="rateBox.busy" class="fa-solid fa-circle-notch fa-spin"></i> Save score</button>
                     </div>
                 </div>
             </transition>
