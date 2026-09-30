@@ -6403,11 +6403,34 @@ createApp({
                 ? (entry.status === 'COMPLETED' ? `Finished ${title}! Marked as Completed` : `${UNIT.ep} ${entry.progress}${anime.episodes ? '/' + anime.episodes : ''} · ${title}`)
                 : `${title} → ${statusLabelFor(anime.type, action)}`);
             if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
-            try { await upsertSolo(entry); logActivity(entry.anime, before, entry); }
+            try {
+                await upsertSolo(entry); logActivity(entry.anime, before, entry);
+                // v2.5 +1 on the last episode finished it (not setting Completed yourself, not the end of a rewatch): rate it
+                const finished = action === 'EP' && !finishedRepeat && entry.status === 'COMPLETED' && before?.status !== 'COMPLETED';
+                if (finished && ['ANIME', 'TV', 'MANGA'].includes(entry.anime?.type || anime.type || 'ANIME')) openRate(entry);
+            }
             catch (err) {
                 showToast('Could not save: ' + (err.message || err), 'error');
                 if (before) setSoloLocal(before); else soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
             }
+        };
+        // v2.5 "You finished it — your score?" after +1 on the last episode
+        const rateBox = reactive({ open: false, anime: null, score: 0, busy: false });
+        const openRate = (e) => Object.assign(rateBox, { open: true, anime: e.anime, score: Number(e.score) || 0, busy: false });
+        const saveRate = async () => {
+            const cur = soloEntry(rateBox.anime?.id); if (!cur || rateBox.busy) { rateBox.open = false; return; }
+            const score = clamp(Number(rateBox.score) || 0, 0, 10);
+            if (score === (Number(cur.score) || 0)) { rateBox.open = false; return; }
+            rateBox.busy = true;
+            const entry = { ...cur, score };
+            setSoloLocal(entry);
+            try {
+                await upsertSolo(entry);
+                if (selectedAnime.value?.id === entry.anime.id) inlineForm.value = buildForm(selectedAnime.value);
+                showToast(score ? `Rated ${titleOf(entry.anime)} ${formatScore(score)}` : 'Score removed');
+                rateBox.open = false;
+            } catch (err) { setSoloLocal(cur); showToast('Could not save the score: ' + (err.message || err), 'error'); }
+            finally { rateBox.busy = false; }
         };
 
         // ---------- v10.3 my watch link (anime + TV) ----------
@@ -6661,7 +6684,10 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 : entry.status === 'COMPLETED' ? `Finished ${title}! Marked as Completed`
                 : `+${done} · ${UNIT.ep} ${now}${eps ? '/' + eps : ''} · ${title}`);
             if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
-            try { await upsertSolo(entry); logActivity(entry.anime, before, entry); }
+            try {
+                await upsertSolo(entry); logActivity(entry.anime, before, entry);
+                if (!finishedRepeat && entry.status === 'COMPLETED' && before?.status !== 'COMPLETED' && ['ANIME', 'TV', 'MANGA'].includes(entry.anime?.type || 'ANIME')) openRate(entry);   // v2.5
+            }
             catch (err) {
                 showToast('Could not save: ' + (err.message || err), 'error');
                 if (before) setSoloLocal(before); else soloList.value = soloList.value.filter(i => i.anime.id !== anime.id);
@@ -6847,8 +6873,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.4';
+        const APP_VERSION = '2.5';
         const WHATS_NEW = {
+            '2.5': [
+                { icon: 'fa-star', t: 'Score it when you finish', d: 'When +1 on the last episode (or chapter) puts something on Completed, a small window asks for your score. Setting Completed yourself doesn’t ask.' },
+            ],
             '2.4': [
                 { icon: 'fa-music', t: 'Shared songs open', d: 'A song a friend sends you (or posts, or likes) opens even if you’ve never seen it: it used to say it couldn’t be found on Spotify.' },
                 { icon: 'fa-comment-dots', t: 'The right button', d: 'A recommendation in a chat offers Plan to watch, Plan to read, Plan to play — or Like for a song — to match what it is.' },
@@ -11017,7 +11046,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
