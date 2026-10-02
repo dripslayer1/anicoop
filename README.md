@@ -1182,3 +1182,17 @@ What wasn't changed (small, by design, or needs your dashboard):
   window asks for your score (Save score / Skip). It also shows when "I watched N episodes" after your watch link
   reaches the last one, since that counts the same way as +1.
 - It doesn't show when you set Completed yourself (menu, status buttons, editor), and not when a rewatch ends.
+
+## v2.6 — shows you picked back up
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.6**.
+
+- **Went past where you'd stopped:** while you've started a show over, it keeps two counts (first watch, new watch).
+  As soon as the new watch goes past the first one (watched 600, started over, now at 601), there's nothing left to
+  keep apart: it goes back to **Watching** at that episode by itself, with a message. The episodes you saw twice (the
+  first 600) still count in the profile's "Episodes watched — with rewatches".
+- **Titles already past it get fixed when you open anicoop:** e.g. One Piece on Repeating with first watch 600 and the
+  rewatch at 911 becomes Watching at 911.
+- **Start over works without an episode count:** for airing shows like One Piece, anicoop now remembers that you
+  started over, instead of working it out from the total (which it didn't have).
+- **Posters on Repeating** show the rewatch's own count (911/?), not the first watch's.

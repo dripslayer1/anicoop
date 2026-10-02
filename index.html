@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.5">
+    <link rel="stylesheet" href="app.css?v=2.6">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.5" defer></script>
+    <script src="app.js?v=2.6" defer></script>
 </head>
 <body>
 
@@ -530,13 +530,13 @@
                                 </button>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div v-if="inlineForm.status === 'REPEATING'">
-                                        <label class="label block mb-2 rep-label">{{ selectedAnime.episodes && (inlineForm.progress || 0) < selectedAnime.episodes ? 'Started over' : 'Rewatch #' + (inlineForm.repeats.length || 1) }} <span class="normal-case tracking-normal">/ {{ selectedAnime.episodes || '?' }}</span></label>
+                                        <label class="label block mb-2 rep-label">{{ formRestart(inlineForm) ? 'Started over' : 'Rewatch #' + (inlineForm.repeats.length || 1) }} <span class="normal-case tracking-normal">/ {{ selectedAnime.episodes || '?' }}</span></label>
                                         <div class="flex items-center bg-base border rounded-xl overflow-hidden rep-box">
                                             <button @click="stepProgress(inlineForm, -1)" class="px-2.5 py-2.5 text-sub hover:text-ink"><i class="fa-solid fa-minus text-[10px]"></i></button>
                                             <input v-model.number="inlineForm.repProgress" type="number" min="0" :max="selectedAnime.episodes || 99999" class="w-full min-w-0 bg-transparent text-center text-sm text-ink focus:outline-none">
                                             <button @click="stepProgress(inlineForm, 1)" class="px-2.5 py-2.5 text-sub hover:text-ink"><i class="fa-solid fa-plus text-[10px]"></i></button>
                                         </div>
-                                        <p v-if="selectedAnime.episodes && (inlineForm.progress || 0) < selectedAnime.episodes" class="text-[11px] text-mute mt-1.5">First watch: {{ inlineForm.progress || 0 }}/{{ selectedAnime.episodes }} (not finished)</p>
+                                        <p v-if="formRestart(inlineForm)" class="text-[11px] text-mute mt-1.5">First watch: {{ inlineForm.progress || 0 }}/{{ selectedAnime.episodes || '?' }} (not finished). Going past it puts it back on Watching.</p>
                                     </div>
                                     <div v-else>
                                         <label class="label block mb-2">{{ UNIT.ep }}s <span v-if="selectedAnime.type !== 'GAME' && selectedAnime.type !== 'SONG'" class="normal-case tracking-normal">/ {{ selectedAnime.type === 'MANGA' ? fmtChapter(lastChapterOf(selectedAnime)) : (selectedAnime.episodes || '?') }}</span><span v-else class="normal-case tracking-normal">{{ selectedAnime.type === 'SONG' ? 'so far' : 'played' }}</span></label>
@@ -3498,14 +3498,14 @@
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div v-if="editForm.status === 'REPEATING'">
-                                <p class="label mb-2.5 rep-label"><i class="fa-solid fa-rotate-right mr-1"></i>{{ editForm.anime.episodes && (editForm.progress || 0) < editForm.anime.episodes ? 'Started over' : 'Rewatch #' + (editForm.repeats.length || 1) + ' of ' + MAX_REPEATS }}</p>
+                                <p class="label mb-2.5 rep-label"><i class="fa-solid fa-rotate-right mr-1"></i>{{ formRestart(editForm) ? 'Started over' : 'Rewatch #' + (editForm.repeats.length || 1) + ' of ' + MAX_REPEATS }}</p>
                                 <div class="flex items-center bg-base border rounded-2xl overflow-hidden rep-box">
                                     <button @click="stepProgress(editForm, -1)" class="px-4 py-3.5 text-sub hover:text-ink"><i class="fa-solid fa-minus text-xs"></i></button>
                                     <input v-model.number="editForm.repProgress" type="number" min="0" :max="editForm.anime.episodes || 99999" class="w-full min-w-0 bg-transparent text-ink text-center focus:outline-none">
                                     <button @click="stepProgress(editForm, 1)" class="px-4 py-3.5 text-sub hover:text-ink"><i class="fa-solid fa-plus text-xs"></i></button>
                                     <span v-if="editForm.anime.type !== 'SONG' && editForm.anime.type !== 'GAME'" class="px-4 text-mute font-mono text-sm border-l border-line self-stretch flex items-center">/ {{ editForm.anime.episodes || '?' }}</span>
                                 </div>
-                                <p v-if="editForm.anime.episodes && (editForm.progress || 0) < editForm.anime.episodes" class="text-[11px] text-mute mt-2">Counts separately from your first watch ({{ editForm.progress || 0 }}/{{ editForm.anime.episodes }}, not finished). Reaching the last episode marks it Completed.</p>
+                                <p v-if="formRestart(editForm)" class="text-[11px] text-mute mt-2">Counts separately from your first watch ({{ editForm.progress || 0 }}/{{ editForm.anime.episodes || '?' }}, not finished). Going past it puts it back on Watching; reaching the last episode marks it Completed.</p>
                                 <p v-else class="text-[11px] text-mute mt-2">Counts separately from your first watch. Reaching the last episode finishes this rewatch.</p>
                             </div>
                             <div v-else>

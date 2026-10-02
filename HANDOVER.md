@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '2.5'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '2.6'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '2.5'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '2.6'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -456,6 +456,7 @@ These are cumulative; the README has one section per version.
 - **v2.3** (SQL `supabase/v2.3-buddy-sections.sql`, also in setup after the on_list_buddy_sync trigger): `watch_buddies.media_type` (null = every section, links from before; check ANIME / MANGA / TV / GAME), unique index `watch_buddies_pair_type_idx` on (pair, coalesce(media_type, '*')) replaces `watch_buddies_pair_idx` (its old create line in setup is now a comment, or re-running setup would fail on pairs with 2 sections). New `merge_buddy_section(src, dst, mtype)` (the old 2-arg merge_buddy_planning is kept, still revoked); `on_buddy_change` passes media_type (also on the notifications); `sync_buddy_planning` only for buddies with media_type null or = the row's. 9b revokes merge_buddy_section from authenticated after its blanket grant (guarded with to_regprocedure). App: `buddySectionsFor`, `askBuddy(userId, type)`, `acceptBuddy(row)`, `endBuddy(row)`, `buddyState(userId)` = any section. Tested in PGlite (`scratchpad/pg/buddy23.mjs`: fresh setup twice + old setup upgraded).
 - **v2.4** (no SQL): song ids are `songNum(extId)` (a hash) and `songIds` (number → extId) was only in the finder's localStorage. `findSongExt(id, hint)` (module level): hint.ext → any visible `list_entries.media_data.extId` → iTunes search by title where `songNum(APPLE_KEY(trackId)) === id` (exact). `fetchAnimeDetails` calls it for SONG ids without extId. Chat payloads come from `sharePayload` (songs add `ext`, `artists`); chat cards use `openShared` / `addShared` (songs → Like with full details); posts store `extra.ext`; feed / notifications open through `mediaNode()`. Lists status buttons toggle back to ALL.
 - **v2.5** (no SQL): `rateBox` / `openRate` / `saveRate` (after `quickSolo`): opened after a successful save when action 'EP' took an ANIME / TV / MANGA entry to COMPLETED from a non-Completed status and it wasn't the end of a rewatch (`finishedRepeat`); same in `saveAsk` (the watch link's "watched N"). Uses the `score-input` component; saving only writes if the score changed.
+- **v2.6** (no SQL): entries carry `startedOver` (media_data `so`, only kept while REPEATING) and `rewatchedEps` (`rx`). `isRestart` = REPEATING and (startedOver or progress < episodes). Starting over no longer needs a known total and always pushes a fresh 0. `passedFirstWatch` / `mergePassed` (module level): a restart whose new count passes the first watch → WATCHING at the new count, the run popped, first-watch count added to rewatchedEps (counted in statsFor's repeatEps). Applied in soloNext EP, saveEntry, movedTo, alEntryOf, and once per visit to the loaded list (legacy entries like One Piece). PosterCard `shownProgress` shows the rewatch counter. `formRestart(form)` drives the "Started over" labels.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
