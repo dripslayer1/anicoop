@@ -1204,3 +1204,19 @@ What wasn't changed (small, by design, or needs your dashboard):
 - Setting a **Completed** title to fewer episodes (typing a number or the − button, on its page or in the editor) now
   moves it back to **Watching** at that episode (Plan to watch at 0). Before, saving put it straight back to every
   episode, so you couldn't lower it. Picking Completed for something you're watching still fills in every episode.
+
+## v2.8 — rewatch fixes
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.8**.
+
+- **Titles showing your old count on Watching:** a show you'd started over and then moved off Repeating kept the new
+  watch in its rewatch slots while the card showed the first watch (7/12 though you'd finished it). Once, the first
+  time you open v2.8, those get the new watch back: if it reached the last episode the title becomes **Completed**,
+  otherwise it goes to that episode. A message says how many were fixed.
+- **Take out a rewatch:** every rewatch slot on a title's page (and in the editor) has an **×**. Taking out the one
+  you're on ends the rewatch. Press Save afterwards.
+- **No more empty rewatch:** switching a Repeating title to another status and back to Repeating carries on the same
+  rewatch (v2.6 added a new one at 0 each time).
+- **AniList can't move you backwards:** a change coming from AniList is ignored if it would put a finished title back
+  on Watching or lower your episode count (an app writing old numbers to AniList could undo your progress).
+- Going past where you stopped on the last episode now goes straight to Completed.
