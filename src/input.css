@@ -2200,3 +2200,9 @@ button.buddy-chip:hover { color: rgb(var(--c-lilac)); border-color: rgb(var(--c-
 .buddy-x { width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: .75; }
 .buddy-x:hover { opacity: 1; background: rgb(var(--c-raised)); }
 .buddy-yes { height: 22px; padding: 0 9px; border-radius: 999px; background: rgb(var(--c-lilac)); color: #fff; font-size: 11px; font-weight: 700; }
+
+/* v2.8 take a rewatch out */
+.rep-slot { position: relative; }
+.rep-x { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: rgb(var(--c-mute)); opacity: .55; transition: opacity .15s, color .15s, background .15s; }
+.rep-x:hover, .rep-x:focus-visible { opacity: 1; color: #fb7185; background: rgb(244 63 94 / .14); }

@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.7">
+    <link rel="stylesheet" href="app.css?v=2.8">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.7" defer></script>
+    <script src="app.js?v=2.8" defer></script>
 </head>
 <body>
 
@@ -555,6 +555,7 @@
                                     <p class="label mb-2 flex items-center gap-1.5"><i class="fa-solid fa-rotate-right text-[#14b8a6]"></i>Rewatches <span class="normal-case tracking-normal text-mute">{{ inlineForm.repeats.length }}/{{ MAX_REPEATS }}</span></p>
                                     <div class="rep-slots">
                                         <span v-for="n in MAX_REPEATS" :key="n" class="rep-slot" :class="{ used: n <= inlineForm.repeats.length, done: selectedAnime.episodes && (inlineForm.status === 'REPEATING' && n === inlineForm.repeats.length ? inlineForm.repProgress : inlineForm.repeats[n - 1]) >= selectedAnime.episodes, now: inlineForm.status === 'REPEATING' && n === inlineForm.repeats.length }" :title="n <= inlineForm.repeats.length ? 'Rewatch #' + n : 'Not used yet'">
+                                            <button v-if="n <= inlineForm.repeats.length" @click.stop="removeRun(inlineForm, n - 1)" class="rep-x" :title="'Take out rewatch #' + n" :aria-label="'Take out rewatch #' + n"><i class="fa-solid fa-xmark"></i></button>
                                             <b>#{{ n }}</b><template v-if="n <= inlineForm.repeats.length">{{ inlineForm.status === 'REPEATING' && n === inlineForm.repeats.length ? (inlineForm.repProgress || 0) : inlineForm.repeats[n - 1] }}<i>/{{ selectedAnime.episodes || '?' }}</i></template><template v-else>—</template>
                                         </span>
                                     </div>
@@ -3526,6 +3527,7 @@
                             <p class="label mb-2.5 flex items-center gap-1.5"><i class="fa-solid fa-rotate-right text-[#14b8a6]"></i>Rewatches <span class="normal-case tracking-normal text-mute">{{ editForm.repeats.length }}/{{ MAX_REPEATS }} used</span></p>
                             <div class="rep-slots">
                                 <span v-for="n in MAX_REPEATS" :key="n" class="rep-slot" :class="{ used: n <= editForm.repeats.length, done: editForm.anime.episodes && (editForm.status === 'REPEATING' && n === editForm.repeats.length ? editForm.repProgress : editForm.repeats[n - 1]) >= editForm.anime.episodes, now: editForm.status === 'REPEATING' && n === editForm.repeats.length }" :title="n <= editForm.repeats.length ? 'Rewatch #' + n : 'Not used yet'">
+                                    <button v-if="n <= editForm.repeats.length" @click.stop="removeRun(editForm, n - 1)" class="rep-x" :title="'Take out rewatch #' + n" :aria-label="'Take out rewatch #' + n"><i class="fa-solid fa-xmark"></i></button>
                                     <b>#{{ n }}</b><template v-if="n <= editForm.repeats.length">{{ editForm.status === 'REPEATING' && n === editForm.repeats.length ? (editForm.repProgress || 0) : editForm.repeats[n - 1] }}<i>/{{ editForm.anime.episodes || '?' }}</i></template><template v-else>—</template>
                                 </span>
                             </div>

@@ -61,8 +61,19 @@ const passedFirstWatch = (x) => x?.status === 'REPEATING' && (x.progress || 0) >
     && (!!x.startedOver || !x.anime?.episodes || x.progress < x.anime.episodes);   // (a rewatch of something you finished never counts)
 const mergePassed = (x) => {
     if (!passedFirstWatch(x)) return x;
-    const r = [...x.repeats], now = r.pop() || 0, first = x.progress || 0;
+    const r = [...x.repeats], now = r.pop() || 0, first = x.progress || 0, eps = x.anime?.episodes || 0;
+    // (v2.8 at the last episode it's simply finished: Completed — your first time finishing it, so not a rewatch)
+    if (eps && now >= eps) return { ...x, status: 'COMPLETED', progress: eps, repeats: r, startedOver: false, rewatchedEps: (x.rewatchedEps || 0) + first, passedAt: first };
     return { ...x, status: 'WATCHING', progress: now, repeats: r, startedOver: false, rewatchedEps: (x.rewatchedEps || 0) + first, passedAt: first };
+};
+// v2.8 a new watch left in the rewatch slots while the title is on Watching / On hold / Dropped (it was moved off
+// Repeating before v2.6 merged it): that watch is where you really are. Finished → Completed; otherwise that episode.
+const strandedRun = (e) => ['WATCHING', 'PAUSED', 'DROPPED', 'PLANNING'].includes(e?.status) && REPEAT_TYPES.includes(e.anime?.type || 'ANIME') && (e.repeats || []).some(n => n > (e.progress || 0));
+const fixStranded = (e) => {
+    const r = [...(e.repeats || [])], best = Math.max(...r), first = e.progress || 0, eps = e.anime?.episodes || 0;
+    r.splice(r.lastIndexOf(best), 1);
+    const base = { ...e, repeats: r, startedOver: false, rewatchedEps: (e.rewatchedEps || 0) + first };
+    return eps && best >= eps ? { ...base, status: 'COMPLETED', progress: eps } : { ...base, status: e.status === 'PLANNING' ? 'WATCHING' : e.status, progress: best };
 };
 // v1.6 watching together (friend tags on titles) is for anime, manga and movies & TV
 const PARTY_TYPES = ['ANIME', 'MANGA', 'TV', 'GAME'];   // v2.2 games too ("play together")
@@ -118,6 +129,7 @@ const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
     msgSound: true,   // v2.1 a short chime with the message pop-up
+    fixedRuns: false,   // v2.8 the one-time repair of new watches left in the rewatch slots has run
     contOrder: {},   // v2.1 your own order of Continue watching / reading, per section: { anime: [media ids] }
     alPull: null,   // v2.0 { id: your AniList id, at: the newest AniList change already brought in (AniList's updatedAt) }
     activity: { enabled: true, progress: true, WATCHING: true, PLANNING: true, COMPLETED: true, REPEATING: true, PAUSED: true, DROPPED: true },
@@ -2553,6 +2565,7 @@ createApp({
             // v1.5 all at once (they used to wait for each other: profile, then settings, then friends, then the lists)
             await Promise.all([fetchProfile().then(() => markActive()), fetchSettings(), fetchFriends(), fetchSolo(), fetchFavs(), fetchFavStaff(), fetchParties()]);
             pullParties(false);   // v1.6 titles your friends moved on while you were away
+            fixStrandedOnce();   // v2.8 (after your settings, so it runs once)
             fetchNotifications();   // after friends + parties: most of the people in it are known by then
             movePicsToStorage().catch(() => {});   // v1.5
             maybeStartTour();
@@ -4549,6 +4562,21 @@ createApp({
         // Stats count each episode once; hovering "Episodes watched" shows the total with rewatches.
         const LILBRO = 'lilbro';
         const lilBro = reactive({ open: false, title: '', fresh: false });
+        // v2.8 take a rewatch out (added by mistake, or an empty one). Taking out the one you're on ends the rewatch.
+        // (saved with the Save button, like everything else on the form)
+        const removeRun = async (form, n) => {
+            const r = [...(form.repeats || [])]; if (n < 0 || n >= r.length) return;
+            const current = form.status === 'REPEATING' && n === r.length - 1;
+            const shown = current ? (Number(form.repProgress) || 0) : r[n];
+            if (shown > 0 && !(await askConfirm({ title: `Take out rewatch #${n + 1}?`, body: `It was at ${UNIT.ep.toLowerCase()} ${shown}. Press Save afterwards to keep the change.`, ok: 'Take it out' }))) return;
+            r.splice(n, 1);
+            form.repeats = r; form.savedRepeats = current ? [...r] : form.status === 'REPEATING' ? r.slice(0, -1) : [...r];
+            if (current) {
+                const eps = form.anime?.episodes || 0, p = Number(form.progress) || 0;
+                form.status = eps && p >= eps ? 'COMPLETED' : p > 0 ? 'WATCHING' : 'PLANNING';
+                form.startedOver = false; form.repProgress = 0;
+            }
+        };
         const formRestart = (form) => form?.status === 'REPEATING' && (!!form.startedOver || (!!form.anime?.episodes && (Number(form.progress) || 0) < form.anime.episodes));   // v2.6
         const repeatNow = (e) => e?.status === 'REPEATING' ? ((e.repeats || [])[(e.repeats || []).length - 1] || 0) : null;
         // start a rewatch (or carry on with an unfinished one). null = all 5 used up
@@ -4574,15 +4602,30 @@ createApp({
                 const restart = form.status !== 'COMPLETED' && !(eps && (Number(form.progress) || 0) >= eps);
                 if (restart && !(Number(form.progress) > 0)) { showToast(`You haven't watched any of it yet: set it to ${STATUS_LABELS.WATCHING}`, 'error'); return; }
                 const saved = form.savedRepeats || [];
-                const r = restart ? (saved.length >= MAX_REPEATS ? null : [...saved, 0]) : startRepeat(saved, eps);   // (starting over always counts from 0)
+                // (v2.8 back to Repeating on something that was already on it: the same rewatch carries on — v2.6 added a
+                // new empty one every time you switched away and back)
+                const wasRepeating = soloEntry(form.anime?.id)?.status === 'REPEATING' && saved.length > 0;
+                const r = wasRepeating ? [...saved] : restart ? (saved.length >= MAX_REPEATS ? null : [...saved, 0]) : startRepeat(saved, eps);   // (starting over counts from 0)
                 if (!r) { triggerLilBro(form.anime); return; }
-                form.repeats = r; form.repProgress = r[r.length - 1] || 0; form.startedOver = restart;
+                form.repeats = r; form.repProgress = r[r.length - 1] || 0; form.startedOver = wasRepeating ? !!soloEntry(form.anime?.id)?.startedOver || restart : restart;
                 if (eps && !restart) form.progress = eps;      // rewatching a finished one: the first watch is done
             } else if (form.status === 'REPEATING') {
                 form.repeats = [...form.savedRepeats];         // changed your mind: no new rewatch
                 form.startedOver = false;
             }
             form.status = s;
+        };
+        // v2.8 once (PREFS.fixedRuns, with your settings): titles on Watching / On hold / Dropped whose new watch was left
+        // in the rewatch slots get that watch back (Completed if it reached the last episode)
+        const fixStrandedOnce = () => {
+            if (PREFS.fixedRuns || !uid()) return;
+            const fix = soloList.value.filter(strandedRun).map(fixStranded);
+            PREFS.fixedRuns = true;
+            if (!fix.length) return;
+            fix.forEach(setSoloLocal);
+            upsertSolo(fix).catch(err => console.warn('rewatch repair', err.message || err));
+            const done = fix.filter(e => e.status === 'COMPLETED').length;
+            showToast(`Fixed ${fix.length} title${fix.length === 1 ? '' : 's'} where your new watch was hidden in the rewatches${done ? ` (${done} finished → ${STATUS_LABELS.COMPLETED})` : ''}`);
         };
         let passFixFor = null;
         watch(() => soloList.value.length, (n) => {
@@ -6917,8 +6960,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.7';
+        const APP_VERSION = '2.8';
         const WHATS_NEW = {
+            '2.8': [
+                { icon: 'fa-screwdriver-wrench', t: 'Rewatches fixed', d: 'Titles whose new watch was hidden in the rewatches (showing your old count on Watching) are put right once: finished ones go to Completed.' },
+                { icon: 'fa-xmark', t: 'Take out a rewatch', d: 'Each rewatch slot on a title’s page has an × to take it out, and switching away from Repeating and back no longer adds an empty rewatch.' },
+                { icon: 'fa-shield-halved', t: 'AniList never goes backwards', d: 'A change coming from AniList can’t move a finished title back to Watching or lower your count.' },
+            ],
             '2.7': [
                 { icon: 'fa-arrow-down-1-9', t: 'Lower a Completed title', d: 'Set a Completed title to fewer episodes and it goes back to Watching (it used to jump back to every episode).' },
             ],
@@ -10597,6 +10645,9 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     const cur = soloEntry(en.media.id);
                     if (cur?.updatedAt && Date.parse(cur.updatedAt) > en.updatedAt * 1000) continue;   // changed here since: ours wins
                     const e = alEntryOf(en, cur);
+                    // v2.8 never backwards: a title you finished doesn't go back to Watching, and the count doesn't go down
+                    // (another app writing old numbers to AniList could undo your progress here)
+                    if (cur && ((cur.status === 'COMPLETED' && !['COMPLETED', 'REPEATING'].includes(e.status)) || (cur.status !== 'REPEATING' && e.status !== 'REPEATING' && (e.progress || 0) < (cur.progress || 0)))) continue;
                     if (cur && sameOnAniList(alSaveOp(cur), alSaveOp(e))) continue;   // the same (e.g. our own change, back from AniList)
                     befores.set(e.anime.id, cur); apply.push(e);
                 }
@@ -11098,7 +11149,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
