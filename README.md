@@ -1196,3 +1196,11 @@ What wasn't changed (small, by design, or needs your dashboard):
 - **Start over works without an episode count:** for airing shows like One Piece, anicoop now remembers that you
   started over, instead of working it out from the total (which it didn't have).
 - **Posters on Repeating** show the rewatch's own count (911/?), not the first watch's.
+
+## v2.7 — lower a Completed title
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.7**.
+
+- Setting a **Completed** title to fewer episodes (typing a number or the − button, on its page or in the editor) now
+  moves it back to **Watching** at that episode (Plan to watch at 0). Before, saving put it straight back to every
+  episode, so you couldn't lower it. Picking Completed for something you're watching still fills in every episode.

@@ -4540,6 +4540,8 @@ createApp({
             form.progress = clamp((Number(form.progress) || 0) + delta, 0, max);
             if (form.anime?.episodes && form.progress === form.anime.episodes) form.status = 'COMPLETED';
             else if (form.progress > 0 && form.status === 'PLANNING') form.status = 'WATCHING';
+            // v2.7 fewer episodes on a Completed title: it isn't finished any more
+            else if (form.status === 'COMPLETED' && form.anime?.episodes && form.progress < form.anime.episodes) form.status = form.progress > 0 ? 'WATCHING' : 'PLANNING';
         };
 
         // ---------- repeats: rewatching an anime you finished ----------
@@ -4598,8 +4600,15 @@ createApp({
             if (form.status === 'COMPLETED' || form.status === 'REPEATING') await fillTotal(anime);
             const episodes = totalOf(anime);
             let progress = clamp(Math.floor(Number(form.progress) || 0), 0, episodes || 99999);
-            if (form.status === 'COMPLETED' && episodes) progress = episodes;
-            const fields = { status: form.status, score: clamp(Number(form.score) || 0, 0, 10), progress, repeats: [...(form.repeats || [])] };
+            // v2.7 a title that was Completed and now has fewer episodes typed in goes back to Watching (it used to be put
+            // back to every episode, so you couldn't lower it); picking Completed for something you were watching still
+            // fills in every episode
+            let status = form.status;
+            if (status === 'COMPLETED' && episodes) {
+                if (soloEntry(anime.id)?.status === 'COMPLETED' && progress < episodes) status = progress > 0 ? 'WATCHING' : 'PLANNING';
+                else progress = episodes;
+            }
+            const fields = { status, score: clamp(Number(form.score) || 0, 0, 10), progress, repeats: [...(form.repeats || [])] };
             let finishedRepeat = 0, finishedFirst = false;
             if (form.status === 'REPEATING') {
                 const r = fields.repeats.length ? fields.repeats : [0];
@@ -6908,8 +6917,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.6';
+        const APP_VERSION = '2.7';
         const WHATS_NEW = {
+            '2.7': [
+                { icon: 'fa-arrow-down-1-9', t: 'Lower a Completed title', d: 'Set a Completed title to fewer episodes and it goes back to Watching (it used to jump back to every episode).' },
+            ],
             '2.6': [
                 { icon: 'fa-forward', t: 'Picked it back up', d: 'Started a show over and went past where you’d stopped? It goes back to Watching at that episode by itself (the episodes you saw twice still count “with rewatches”).' },
                 { icon: 'fa-rotate-left', t: 'Start over on airing shows', d: '“Start over” now works for shows without an episode count yet, like One Piece.' },
