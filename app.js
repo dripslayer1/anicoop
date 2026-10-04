@@ -109,7 +109,12 @@ const isAniListType = (t) => !t || t === 'ANIME' || t === 'MANGA';
 // never clash with an AniList id: games = IGDB id + 1.0e9, movies = TMDB id + 1.2e9, shows = TMDB id + 1.3e9,
 // songs = a number made from the Spotify id + 1.5e9 (Spotify ids are text; the real id is kept in the saved data).
 const GAME_BASE = 1000000000, MOVIE_BASE = 1200000000, SHOW_BASE = 1300000000, PERSON_BASE = 1400000000, SONG_BASE = 1500000000;
-const typeOfId = (id) => id >= SONG_BASE ? 'SONG' : id >= MOVIE_BASE && id < PERSON_BASE ? 'TV' : id >= GAME_BASE && id < MOVIE_BASE ? 'GAME' : null;
+// v2.9 a TV season is its own title: SEASON_BASE + the show's TMDB id × 100 + the season number (shows up to id 499,999,
+// seasons 1–99), so a season can be opened from its number alone (a chat, a friend's list)
+const SEASON_BASE = 1450000000;
+const seasonIdOf = (showId, n) => (showId > 0 && showId < 500000 && n > 0 && n < 100) ? SEASON_BASE + showId * 100 + n : null;
+const seasonOf = (id) => id >= SEASON_BASE && id < SONG_BASE ? { show: Math.floor((id - SEASON_BASE) / 100), n: (id - SEASON_BASE) % 100 } : null;
+const typeOfId = (id) => id >= SONG_BASE ? 'SONG' : id >= SEASON_BASE ? 'TV' : id >= MOVIE_BASE && id < PERSON_BASE ? 'TV' : id >= GAME_BASE && id < MOVIE_BASE ? 'GAME' : null;
 const SECTION_LIST = Object.values(SECTIONS);
 const ACCENTS = ['#B490F5', '#D4FF3A', '#FF4D8D', '#3b82f6', '#22c55e', '#f59e0b', '#22d3ee', '#f97316'];
 const THEME_ACCENTS = ['#D4FF3A', '#B490F5', '#FF4D8D', '#22d3ee', '#3b82f6', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#F5F5F7'];
@@ -1340,6 +1345,26 @@ const normTmdb = (x, kind = x.media_type) => {
         runtime: kind === 'movie' ? (x.runtime || null) : ((x.episode_run_time || [])[0] || null), adult: !!x.adult, trailer: null,
     };
 };
+// v2.9 one season of a show (x = the show from TMDB, s = one of its seasons)
+const normSeason = (x, s) => {
+    const id = seasonIdOf(x.id, s.season_number); if (!id) return null;
+    const show = normTmdb(x, 'tv'), date = s.air_date || null, today = new Date().toISOString().slice(0, 10);
+    const label = !s.name || /^season \d+$/i.test(s.name) ? 'Season ' + s.season_number : s.name;
+    return {
+        ...show, id, extId: `${x.id}:${s.season_number}`, kind: 'season', showId: x.id, seasonNumber: s.season_number, showTitle: show.title.romaji,
+        title: { romaji: `${show.title.romaji}: ${label}`, english: null, native: null },
+        coverImage: { large: TMDB_IMG(s.poster_path) || show.coverImage.large },
+        episodes: s.episode_count || (s.episodes || []).length || null,
+        seasonYear: date ? Number(date.slice(0, 4)) : null, releaseDate: date,
+        status: !date || date > today ? 'NOT_YET_RELEASED' : (s.season_number === x.number_of_seasons && show.status === 'RELEASING') ? 'RELEASING' : 'FINISHED',
+        averageScore: s.vote_average ? Math.round(s.vote_average * 10) : show.averageScore,
+    };
+};
+// a show and its seasons in a row (search results): the show first, then Season 1, 2… (only shows with 2+ seasons)
+const withSeasons = (show, x) => {
+    const ss = (x?.seasons || []).filter(s => s.season_number > 0).map(s => normSeason(x, s)).filter(Boolean);
+    return ss.length > 1 ? [show, ...ss] : [show];
+};
 const normTmdbDetail = (x, kind, collection) => {
     const m = normTmdb(x, kind);
     const vids = (x.videos?.results || []).filter(v => v.site === 'YouTube' && v.key)
@@ -1405,7 +1430,14 @@ const tvApi = {
         const keep = tvKeep(o);
         if (q) {
             const d = kinds.length === 2 ? await tmdbCall('search/multi', { query: q, page, include_adult: !!o.adult }) : await tmdbCall(`search/${kinds[0]}`, { query: q, page, include_adult: !!o.adult });
-            const items = tmdbPopular((d.results || []).filter(x => (x.media_type || kinds[0]) !== 'person' && ['movie', 'tv'].includes(x.media_type || kinds[0]) && keep(x))).map(x => normTmdb(x, x.media_type || kinds[0]));
+            let items = tmdbPopular((d.results || []).filter(x => (x.media_type || kinds[0]) !== 'person' && ['movie', 'tv'].includes(x.media_type || kinds[0]) && keep(x))).map(x => normTmdb(x, x.media_type || kinds[0]));
+            // v2.9 the first shows found also bring their seasons (each season is its own title)
+            if (page === 1) {
+                const shows = items.filter(m => m.kind === 'tv').slice(0, 4);
+                const full = await Promise.all(shows.map(m => tmdbCall(`tv/${m.extId}`).catch(() => null)));
+                const byId = new Map(shows.map((m, k) => [m.id, full[k]]));
+                items = items.flatMap(m => byId.has(m.id) ? withSeasons(m, byId.get(m.id)) : [m]);
+            }
             return { items, hasNextPage: page < (d.total_pages || 1) };
         }
         const gs = splitMulti(f.genre).map(v => TV_GENRES.find(x => x.v === v)).filter(Boolean);
@@ -1451,7 +1483,19 @@ const tvApi = {
     },
     async search(q) { const d = await tmdbCall('search/multi', { query: q }); return tmdbPopular((d.results || []).filter(x => (x.media_type === 'movie' || x.media_type === 'tv') && tvKeep({})(x))).slice(0, 8).map(x => normTmdb(x, x.media_type)); },
     async details(id) {
-        const kind = id >= SHOW_BASE ? 'tv' : 'movie'; const ext = id - (kind === 'tv' ? SHOW_BASE : MOVIE_BASE);
+        const so = seasonOf(id);
+        if (so) {   // v2.9 one season: the show's details, with this season's episodes, poster and description
+            const [x, s] = await Promise.all([
+                tmdbCall(`tv/${so.show}`, { append_to_response: 'videos,aggregate_credits,watch/providers,recommendations,external_ids,content_ratings' }),
+                tmdbCall(`tv/${so.show}/season/${so.n}`),
+            ]);
+            const d = normTmdbDetail(x, 'tv'), m = normSeason(x, { ...s, episode_count: (s.episodes || []).length || s.episode_count });
+            if (!m) return null;
+            const overview = s.overview ? escapeHtml(s.overview).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>') : null;
+            return { ...d, ...m, description: overview || d.description,
+                seasonEps: (s.episodes || []).map(e => ({ n: e.episode_number, name: e.name, air: e.air_date, still: TMDB_IMG(e.still_path, 'w300') })) };
+        }
+        const kind = id >= SHOW_BASE && id < PERSON_BASE ? 'tv' : 'movie'; const ext = id - (kind === 'tv' ? SHOW_BASE : MOVIE_BASE);
         const x = await tmdbCall(`${kind}/${ext}`, { append_to_response: kind === 'movie' ? 'videos,credits,watch/providers,recommendations,external_ids,release_dates' : 'videos,aggregate_credits,watch/providers,recommendations,external_ids,content_ratings' });
         const collection = kind === 'movie' && x.belongs_to_collection?.id ? await tmdbCall(`collection/${x.belongs_to_collection.id}`).catch(() => null) : null;
         return normTmdbDetail(x, kind, collection);
@@ -5491,6 +5535,8 @@ createApp({
             const find = (k) => { while (parent.get(k) !== k) { const p = parent.get(k); parent.set(k, parent.get(p)); k = p; } return k; };
             const join = (a, b) => { if (!parent.has(a)) parent.set(a, a); if (!parent.has(b)) parent.set(b, b); const ra = find(a), rb = find(b); if (ra !== rb) parent.set(rb, ra); };
             const nodeOf = (a) => {
+                // (v2.9 a show and its seasons are one series)
+                if (a.type === 'TV') { const so = seasonOf(a.id); if (so) return 'sh' + so.show; if (a.id >= SHOW_BASE && a.id < PERSON_BASE) return 'sh' + (a.id - SHOW_BASE); }
                 if (a.type === 'TV') { const m = isMovieItem(a) ? seriesInfo['m' + a.id] : null; return m?.c ? 'c' + m.c : 't' + a.id; }
                 return 'a' + a.id;
             };
@@ -6371,7 +6417,9 @@ createApp({
         const fillTotal = async (a) => {
             if (!a || totalOf(a)) return;
             try {
-                if (a.type === 'TV' && a.extId) { const d = await tmdbCall(`tv/${a.extId}`); if (d?.number_of_episodes) a.episodes = d.number_of_episodes; }
+                const so = seasonOf(a.id);   // v2.9 a season: its own episodes
+                if (so) { const d = await tmdbCall(`tv/${so.show}/season/${so.n}`); if (d?.episodes?.length) a.episodes = d.episodes.length; }
+                else if (a.type === 'TV' && a.extId) { const d = await tmdbCall(`tv/${a.extId}`); if (d?.number_of_episodes) a.episodes = d.number_of_episodes; }
                 else if (a.type === 'MANGA') { needMangaInfo(a); for (let i = 0; i < 25 && !mangaInfo[a.id]?.at; i++) await sleep(200); }
             } catch {}
         };
@@ -6960,8 +7008,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.8';
+        const APP_VERSION = '2.9';
         const WHATS_NEW = {
+            '2.9': [
+                { icon: 'fa-layer-group', t: 'TV seasons as their own titles', d: 'Searching a show lists its seasons too, and the Seasons row on its page opens each one: track Season 1, Season 2… with their own status, episodes and score.' },
+            ],
             '2.8': [
                 { icon: 'fa-screwdriver-wrench', t: 'Rewatches fixed', d: 'Titles whose new watch was hidden in the rewatches (showing your old count on Watching) are put right once: finished ones go to Completed.' },
                 { icon: 'fa-xmark', t: 'Take out a rewatch', d: 'Each rewatch slot on a title’s page has an × to take it out, and switching away from Repeating and back no longer adds an empty rewatch.' },
@@ -7976,7 +8027,10 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         const openCharacter = (id) => { if (id >= GAME_BASE) return; openEntity('character', id); };   // game / movie characters have no page of their own
         // favourite actors are kept with the staff favourites, under PERSON_BASE + their TMDB id
-        const openStaff = (id) => id >= PERSON_BASE && id < SONG_BASE ? openEntity('actor', id - PERSON_BASE) : openEntity('staff', id);
+        // v2.9 the Seasons row on a show's (or a season's) page: each season opens as its own title
+        const seasonShowId = (a) => a?.type !== 'TV' ? null : a.showId || (a.kind === 'tv' || (a.id >= SHOW_BASE && a.id < PERSON_BASE) ? (a.extId || a.id - SHOW_BASE) : null);
+        const openSeason = (n) => { const id = seasonIdOf(seasonShowId(selectedAnime.value), n); if (id) fetchAnimeDetails(id); else showToast('That season can’t be opened on its own', 'error'); };
+        const openStaff = (id) => id >= PERSON_BASE && id < SEASON_BASE ? openEntity('actor', id - PERSON_BASE) : openEntity('staff', id);
         const openActor = (tmdbId) => openEntity('actor', tmdbId);
         // music artists (Apple ids). By name when all we have is a name (songs saved from Spotify before v8).
         const artistNameHint = {};   // Apple artist id → name, when we already know it (lets the photo & bio load sooner)
@@ -10308,7 +10362,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         watch(favCharacters, (l) => fixCharPics(l));
         watch(() => viewedUser.value?.favs, (l) => fixCharPics(l));
         // favourite people, by kind: anime voice actors, actors (movies & TV), singers (songs) and staff
-        const personKind = (p) => p.id < 0 ? 'SINGER' : (p.id >= PERSON_BASE && p.id < SONG_BASE) ? 'ACTOR' : p.kind === 'va' ? 'VA' : 'STAFF';
+        const personKind = (p) => p.id < 0 ? 'SINGER' : (p.id >= PERSON_BASE && p.id < SEASON_BASE) ? 'ACTOR' : p.kind === 'va' ? 'VA' : 'STAFF';
         // Actors aren't a tab in People (still counted as people, so an old "Actors" pick doesn't turn into characters)
         const FAV_PEOPLE = [{ t: 'VA', l: 'Voice actors' }, { t: 'SINGER', l: 'Singers' }, { t: 'STAFF', l: 'Staff' }];
         const isPeopleTab = (t) => t === 'ACTOR' || FAV_PEOPLE.some(x => x.t === t);
@@ -11149,7 +11203,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,

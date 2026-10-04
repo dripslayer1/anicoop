@@ -2206,3 +2206,13 @@ button.buddy-chip:hover { color: rgb(var(--c-lilac)); border-color: rgb(var(--c-
 .rep-x { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
   font-size: 9px; color: rgb(var(--c-mute)); opacity: .55; transition: opacity .15s, color .15s, background .15s; }
 .rep-x:hover, .rep-x:focus-visible { opacity: 1; color: #fb7185; background: rgb(244 63 94 / .14); }
+
+/* v2.9 season cards open each season */
+.season-card .poster { transition: transform .2s var(--ease), box-shadow .2s; }
+.season-card:hover .poster { transform: translateY(-3px); box-shadow: 0 12px 26px -12px rgb(0 0 0 / .6); }
+.season-card.is-here .poster { box-shadow: 0 0 0 2px rgb(var(--c-lilac)); }
+.season-show { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgb(var(--c-raised)); color: rgb(var(--c-sub)); font-size: 12px; font-weight: 700; }
+.season-show i { font-size: 22px; color: rgb(var(--c-lilac)); }
+.season-mine { position: absolute; left: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-size: 9px; font-weight: 800; letter-spacing: .06em;
+  background: rgb(0 0 0 / .72); color: #fff; }
+.season-mine::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: var(--dot); }
