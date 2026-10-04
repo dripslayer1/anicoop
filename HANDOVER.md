@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '2.8'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '2.9'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '2.8'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '2.9'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -459,6 +459,7 @@ These are cumulative; the README has one section per version.
 - **v2.6** (no SQL): entries carry `startedOver` (media_data `so`, only kept while REPEATING) and `rewatchedEps` (`rx`). `isRestart` = REPEATING and (startedOver or progress < episodes). Starting over no longer needs a known total and always pushes a fresh 0. `passedFirstWatch` / `mergePassed` (module level): a restart whose new count passes the first watch → WATCHING at the new count, the run popped, first-watch count added to rewatchedEps (counted in statsFor's repeatEps). Applied in soloNext EP, saveEntry, movedTo, alEntryOf, and once per visit to the loaded list (legacy entries like One Piece). PosterCard `shownProgress` shows the rewatch counter. `formRestart(form)` drives the "Started over" labels.
 - **v2.7** (no SQL): `saveEntry` only fills progress = episodes for COMPLETED when the saved entry wasn't already Completed; a Completed entry saved with fewer episodes becomes WATCHING (PLANNING at 0). `stepProgress` flips Completed → Watching when − goes below the total.
 - **v2.8** (no SQL): `strandedRun` / `fixStranded` (module level): a WATCHING / PAUSED / DROPPED / PLANNING anime or TV entry with a repeats value above its progress → that run becomes the progress (COMPLETED if ≥ episodes), removed from repeats, first-watch count → rewatchedEps. Run once by `fixStrandedOnce()` after settings load (`PREFS.fixedRuns`). `setFormStatus` keeps the saved repeats when the entry was already REPEATING (no extra 0). `removeRun(form, n)` + `.rep-x` on each used slot. `mergePassed` completes at the last episode. AniList pull skips changes that would un-complete or lower the count.
+- **v2.9** (no SQL): TV seasons are titles. `SEASON_BASE` = 1,450,000,000; id = SEASON_BASE + TMDB show id × 100 + season number (`seasonIdOf` / `seasonOf`; shows ≤ 499,999, seasons 1–99), between PERSON_BASE and SONG_BASE — `typeOfId` maps it to TV, `openStaff` / `personKind` now stop at SEASON_BASE. `normSeason(x, s)` (kind 'season', extId 'show:n', showId, seasonNumber, showTitle). `tvApi.details` for a season fetches `tv/{show}` + `tv/{show}/season/{n}` (already allowed by the Edge Function's TMDB_PATH). `tvApi.browse` search page 1: the first 4 shows bring their seasons (`withSeasons`). `fillTotal` counts a season's episodes. `groupSeries` nodeOf joins a show and its seasons. Title page: `openSeason(n)`, `seasonShowId(a)`, Whole show card.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

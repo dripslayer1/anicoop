@@ -1220,3 +1220,16 @@ What wasn't changed (small, by design, or needs your dashboard):
 - **AniList can't move you backwards:** a change coming from AniList is ignored if it would put a finished title back
   on Watching or lower your episode count (an app writing old numbers to AniList could undo your progress).
 - Going past where you stopped on the last episode now goes straight to Completed.
+
+## v2.9 — TV seasons as their own titles
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v2.9**.
+
+- **Search shows the seasons:** searching Movies & TV for a show with 2+ seasons lists the show and then each season
+  ("Breaking Bad: Season 1", "Season 2"…), like anime seasons.
+- **Season pages:** the Seasons row on a show's page is clickable. Each season opens its own page with its own poster,
+  description, year and episode count, and goes on your list as its own title (status, episodes, score, +1,
+  watching together… all per season). On a season's page the row starts with **Whole show** to go back, the season
+  you're on is marked, and seasons on your list show their status.
+- **The whole show is still a title**, so everything already on your list stays as it is.
+- Lists → Group seasons puts a show and its seasons in one row.

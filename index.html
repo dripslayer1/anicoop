@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=2.8">
+    <link rel="stylesheet" href="app.css?v=2.9">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=2.8" defer></script>
+    <script src="app.js?v=2.9" defer></script>
 </head>
 <body>
 
@@ -952,11 +952,19 @@
                                     <div class="flex gap-1.5"><button @click="scrollRow($event, -1)" class="row-arrow" aria-label="Scroll left"><i class="fa-solid fa-chevron-left"></i></button><button @click="scrollRow($event, 1)" class="row-arrow" aria-label="Scroll right"><i class="fa-solid fa-chevron-right"></i></button></div>
                                 </div>
                                 <div class="row-scroll flex gap-4 overflow-x-auto no-scrollbar pb-1">
-                                    <div v-for="s in selectedAnime.seasons" :key="s.n" class="w-32 shrink-0">
-                                        <div class="poster"><img v-if="s.poster" :src="s.poster" class="art" loading="lazy" decoding="async" alt=""></div>
+                                    <!-- v2.9 each season opens as its own title (on a season's page: back to the whole show first) -->
+                                    <button v-if="selectedAnime.kind === 'season'" @click="fetchAnimeDetails(seasonShowId(selectedAnime) + 1300000000)" class="season-card w-32 shrink-0 text-left" title="The whole show">
+                                        <div class="poster season-show"><i class="fa-solid fa-layer-group"></i><span>Whole show</span></div>
+                                        <p class="text-xs text-ink font-semibold line-clamp-1 mt-2.5">{{ selectedAnime.showTitle }}</p>
+                                        <p class="font-mono text-[10px] text-mute mt-0.5">all seasons</p>
+                                    </button>
+                                    <button v-for="s in selectedAnime.seasons" :key="s.n" @click="openSeason(s.n)" class="season-card w-32 shrink-0 text-left" :class="{ 'is-here': selectedAnime.seasonNumber === s.n }" :title="'Open ' + s.name">
+                                        <div class="poster"><img v-if="s.poster" :src="s.poster" class="art" loading="lazy" decoding="async" alt="">
+                                            <span v-if="myEntry(seasonIdOf(seasonShowId(selectedAnime), s.n))" class="season-mine" :style="{ '--dot': STATUS_COLORS[myEntry(seasonIdOf(seasonShowId(selectedAnime), s.n)).status] }">{{ STATUS_SHORT[myEntry(seasonIdOf(seasonShowId(selectedAnime), s.n)).status] }}</span>
+                                        </div>
                                         <p class="text-xs text-ink font-semibold line-clamp-1 mt-2.5">{{ s.name }}</p>
-                                        <p class="font-mono text-[10px] text-mute mt-0.5">{{ s.episodes }} eps{{ s.air ? ' · ' + s.air.slice(0, 4) : '' }}</p>
-                                    </div>
+                                        <p class="font-mono text-[10px] text-mute mt-0.5">{{ s.episodes }} eps{{ s.air ? ' · ' + s.air.slice(0, 4) : '' }}<span v-if="selectedAnime.seasonNumber === s.n" class="text-lilac"> · here</span></p>
+                                    </button>
                                 </div>
                             </section>
 
