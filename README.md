@@ -1233,3 +1233,11 @@ What wasn't changed (small, by design, or needs your dashboard):
   you're on is marked, and seasons on your list show their status.
 - **The whole show is still a title**, so everything already on your list stays as it is.
 - Lists → Group seasons puts a show and its seasons in one row.
+
+## v3.0 — adult streaming sites only with 18+ access
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.0**.
+
+- The official streaming sites listed on an anime's page (from AniList), and the site the **Watch** button picks by
+  itself, no longer include sites for adult anime unless you have 18+ access: OceanVeil, FAKKU, Hanime, Nutaku, DLsite,
+  Project-H, and any site with "hentai" in its name or address. People with 18+ access see them as before.

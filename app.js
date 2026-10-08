@@ -6626,10 +6626,15 @@ createApp({
         const WATCH_SERVICES = ['Crunchyroll', 'Netflix', 'HIDIVE', 'Amazon Prime Video', 'Hulu', 'Disney Plus', 'Bilibili TV', 'YouTube'];
         const autoLinks = reactive((() => { try { const v = JSON.parse(localStorage.getItem(AUTO_LINKS_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } })());
         const keepAutoLinks = () => { try { const ids = Object.keys(autoLinks); ids.slice(0, Math.max(0, ids.length - 600)).forEach(k => delete autoLinks[k]); localStorage.setItem(AUTO_LINKS_KEY, JSON.stringify(autoLinks)); } catch {} };
+        // v3.0 streaming sites for adult anime (OceanVeil, FAKKU, Hanime…) only for people with 18+ access
+        const ADULT_SITE = /oceanveil|fakku|hanime|nutaku|dlsite|project-?h\b|hentai/i;
+        const adultLink = (l) => { let host = ''; try { host = new URL(l?.url || '').hostname; } catch {} return ADULT_SITE.test(l?.site || '') || ADULT_SITE.test(host); };
+        const linkOk = (l) => adultAllowed.value || !adultLink(l);
         const streamLinks = (ext) => { const seen = new Set(); return (ext || []).filter(l => l?.type === 'STREAMING' && /^https?:\/\//.test(l.url || '') && !seen.has(l.site) && seen.add(l.site)).map(l => ({ site: l.site, url: l.url })); };
         const pickService = (links) => {
             const want = PREFS.watchService || 'any';
-            if (want === 'off' || !links?.length) return null;
+            links = (links || []).filter(linkOk);   // (v3.0 saved before: checked again here)
+            if (want === 'off' || !links.length) return null;
             if (want !== 'any') return links.find(l => l.site === want) || null;
             return links.find(l => /crunchyroll/i.test(l.site)) || links[0];
         };
@@ -6791,7 +6796,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const officialLinks = computed(() => {
             const a = selectedAnime.value; if (!a || a.type !== 'ANIME') return [];
             const seen = new Set();
-            return (a.externalLinks || []).filter(l => l.type === 'STREAMING' && /^https?:\/\//.test(l.url || '') && !seen.has(l.site) && seen.add(l.site))
+            return (a.externalLinks || []).filter(l => l.type === 'STREAMING' && /^https?:\/\//.test(l.url || '') && linkOk(l) && !seen.has(l.site) && seen.add(l.site))
                 .sort((x, y) => (/crunchyroll/i.test(y.site) ? 1 : 0) - (/crunchyroll/i.test(x.site) ? 1 : 0));
         });
         const useOfficial = (a, l) => { wlEdit.text = l.url; saveWatchLink(a); };
@@ -7008,8 +7013,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '2.9';
+        const APP_VERSION = '3.0';
         const WHATS_NEW = {
+            '3.0': [
+                { icon: 'fa-eye-slash', t: 'Adult streaming sites hidden', d: 'Streaming sites for adult anime (like OceanVeil) only show up for people with 18+ access, on title pages and as the automatic Watch link.' },
+            ],
             '2.9': [
                 { icon: 'fa-layer-group', t: 'TV seasons as their own titles', d: 'Searching a show lists its seasons too, and the Seasons row on its page opens each one: track Season 1, Season 2… with their own status, episodes and score.' },
             ],
