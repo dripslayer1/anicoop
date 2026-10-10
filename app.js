@@ -4979,6 +4979,25 @@ createApp({
             if (!missing.length) { showToast(`All of them are already in “${p.name}”`); return; }
             if (await editSongs(p, s => [...s, ...missing.filter(x => !s.some(y => y.id === x.id)).map(slimAnime)])) showToast(`Added ${missing.length} song${missing.length === 1 ? '' : 's'} to “${p.name}”`);
         };
+        // v3.1 the + on a song also likes it ("Liked songs" at the top of the picker); one song: like ⇄ unlike
+        const LIKED = ['COMPLETED', 'WATCHING'];   // Liked, or In love
+        const pickerSongs = () => plPicker.list || (plPicker.song ? [plPicker.song] : []);
+        const pickerLiked = computed(() => pickerSongs().filter(s => LIKED.includes(soloEntry(s.id)?.status)).length);
+        const pickerLike = async () => {
+            const songs = pickerSongs(); if (!songs.length) return;
+            if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
+            if (!plPicker.list) {
+                const s = songs[0], cur = soloEntry(s.id);
+                if (cur && LIKED.includes(cur.status)) await uncheckStatus(s); else await quickSolo(s, 'COMPLETED');
+                return;
+            }
+            const todo = songs.filter(s => !LIKED.includes(soloEntry(s.id)?.status));
+            if (!todo.length) { showToast('All of them are already liked'); return; }
+            const entries = todo.map(s => soloNext(s, 'COMPLETED').entry).filter(Boolean);
+            entries.forEach(setSoloLocal);
+            try { await upsertSolo(entries); showToast(`Liked ${entries.length} song${entries.length === 1 ? '' : 's'}`); }
+            catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); fetchSolo(); }
+        };
         const plPickerNew = async () => {
             const list = plPicker.list, s = plPicker.song; closePlPicker();
             const p = await createPlaylist(s);
@@ -7013,8 +7032,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.0';
+        const APP_VERSION = '3.1';
         const WHATS_NEW = {
+            '3.1': [
+                { icon: 'fa-heart', t: 'Like from the +', d: 'The + on a song now starts with “Liked songs”: tap it to like the song (tap again to unlike), or pick a playlist like before.' },
+            ],
             '3.0': [
                 { icon: 'fa-eye-slash', t: 'Adult streaming sites hidden', d: 'Streaming sites for adult anime (like OceanVeil) only show up for people with 18+ access, on title pages and as the automatic Watch link.' },
             ],
@@ -11211,7 +11233,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,

@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '3.0'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '3.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '3.0'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '3.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -461,6 +461,7 @@ These are cumulative; the README has one section per version.
 - **v2.8** (no SQL): `strandedRun` / `fixStranded` (module level): a WATCHING / PAUSED / DROPPED / PLANNING anime or TV entry with a repeats value above its progress → that run becomes the progress (COMPLETED if ≥ episodes), removed from repeats, first-watch count → rewatchedEps. Run once by `fixStrandedOnce()` after settings load (`PREFS.fixedRuns`). `setFormStatus` keeps the saved repeats when the entry was already REPEATING (no extra 0). `removeRun(form, n)` + `.rep-x` on each used slot. `mergePassed` completes at the last episode. AniList pull skips changes that would un-complete or lower the count.
 - **v2.9** (no SQL): TV seasons are titles. `SEASON_BASE` = 1,450,000,000; id = SEASON_BASE + TMDB show id × 100 + season number (`seasonIdOf` / `seasonOf`; shows ≤ 499,999, seasons 1–99), between PERSON_BASE and SONG_BASE — `typeOfId` maps it to TV, `openStaff` / `personKind` now stop at SEASON_BASE. `normSeason(x, s)` (kind 'season', extId 'show:n', showId, seasonNumber, showTitle). `tvApi.details` for a season fetches `tv/{show}` + `tv/{show}/season/{n}` (already allowed by the Edge Function's TMDB_PATH). `tvApi.browse` search page 1: the first 4 shows bring their seasons (`withSeasons`). `fillTotal` counts a season's episodes. `groupSeries` nodeOf joins a show and its seasons. Title page: `openSeason(n)`, `seasonShowId(a)`, Whole show card.
 - **v3.0** (no SQL): `ADULT_SITE` / `adultLink` / `linkOk` (next to `streamLinks`): `officialLinks` and `pickService` (the automatic Watch link, also for links saved in `autoLinks` before) skip adult streaming sites unless `adultAllowed`. Add a site to the ADULT_SITE pattern if another one turns up.
+- **v3.1** (no SQL): the playlist picker (`plPicker`, the song +) starts with "Liked songs": `pickerLike` / `pickerLiked` — one song: COMPLETED via quickSolo, or `uncheckStatus` if it's already Liked / In love; several: soloNext('COMPLETED') for the ones not liked, one upsertSolo.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

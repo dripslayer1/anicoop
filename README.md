@@ -1241,3 +1241,11 @@ What wasn't changed (small, by design, or needs your dashboard):
 - The official streaming sites listed on an anime's page (from AniList), and the site the **Watch** button picks by
   itself, no longer include sites for adult anime unless you have 18+ access: OceanVeil, FAKKU, Hanime, Nutaku, DLsite,
   Project-H, and any site with "hentai" in its name or address. People with 18+ access see them as before.
+
+## v3.1 — like a song from the +
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.1**.
+
+- The **+** on a song (song lists, albums, charts) opens "Save to" with **Liked songs** at the top: tap it to like the
+  song (it goes on your list as Liked), tap again to unlike it. With several songs selected it likes all of them.
+  Your playlists are below it like before.
