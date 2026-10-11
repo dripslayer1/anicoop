@@ -175,10 +175,44 @@ const applyTheme = () => {
 };
 applyTheme();
 
+// v3.4 AniList's English name is sometimes cut short ("Yu-Gi-Oh!" for Yu☆Gi☆Oh! Duel Monsters, "Initial D" for Initial D
+// First Stage). When the romaji name starts with every word of the English one and goes on, the longer name is used:
+// a Latin spelling of it from the other names ("Yu-Gi-Oh!: Duel Monsters") or else the romaji. Saved as title.full.
+const nameWords = (s) => String(s || '').toLowerCase().split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+const LATIN_NAME = /^[ -\u024F\u2010-\u2027\u00D7]+$/;
+const JP_LITTLE = new Set(['no', 'wa', 'ga', 'wo', 'o', 'ni', 'nite', 'de', 'to', 'kara', 'made', 'e', 'mo', 'ya', 'na', 'ka', 'yo', 'shite', 'suru', 'desu', 'datta', 'nai', 'hen', 'shou']);
+const fullCache = new WeakMap();
+const fullEnglishOf = (a) => {
+    const t = a?.title; if (!t?.english || !t.romaji) return null;
+    if (t.full) return t.full;
+    if (fullCache.has(t)) return fullCache.get(t);
+    const en = nameWords(t.english), ro = nameWords(t.romaji);
+    let out = null;
+    // only when the rest is English written in katakana in the Japanese title (デュエルモンスターズ = Duel Monsters), not
+    // Japanese ("Suzume" stays, not "Suzume no Tojimari"; "Ghost in the Shell", not "…: Koukaku Kidoutai")
+    const rest = ro.slice(en.length);
+    if (en.length && rest.length && en.every((w, i) => ro[i] === w) && /[ァ-ヺー]{3}/.test(t.native || '')
+        && !rest.some(w => JP_LITTLE.has(w) || /ou|uu/.test(w))) {
+        const same = (s) => { const w = nameWords(s); return LATIN_NAME.test(s) && w.length === ro.length && w.every((x, i) => x === ro[i]); };
+        const syn = (a.synonyms || []).filter(same);
+        out = syn.find(s => s.startsWith(t.english)) || syn[0] || t.romaji;
+    }
+    fullCache.set(t, out);
+    return out;
+};
+// v3.4 movie numbers ("Detective Conan Movie 13"): AniList has them in the other names, not in the title
+const movieNoOf = (a) => {
+    if (a?.mn) return a.mn;
+    if (a?.format !== 'MOVIE' || !a.synonyms?.length) return null;
+    const n = {};
+    a.synonyms.forEach(s => { const m = /\bmovie\s*0*(\d{1,3})\b/i.exec(s); if (m && +m[1] > 0) n[+m[1]] = (n[+m[1]] || 0) + 1; });
+    const best = Object.entries(n).sort((x, y) => y[1] - x[1])[0];
+    return best ? +best[0] : null;
+};
 // Title language: Romaji / English / Native (falls back when a title has no translation)
 const titleOf = (a) => {
     const t = a?.title || {};
-    const order = PREFS.titleLang === 'english' ? [t.english, t.romaji, t.native] : PREFS.titleLang === 'native' ? [t.native, t.romaji, t.english] : [t.romaji, t.english, t.native];
+    const order = PREFS.titleLang === 'english' ? [fullEnglishOf(a) || t.english, t.romaji, t.native] : PREFS.titleLang === 'native' ? [t.native, t.romaji, t.english] : [t.romaji, t.english, t.native];
     return order.find(Boolean) || 'Untitled';
 };
 const altTitleOf = (a) => {
@@ -218,7 +252,7 @@ const epBadge = (a) => {
     if (a.type === 'SONG') return a.durationMs ? fmtDuration(a.durationMs) : '';
     if (a.type === 'TV') return a.status === 'NOT_YET_RELEASED' ? 'SOON' : a.format === 'MOVIE' ? (a.runtime ? fmtRuntime(a.runtime) : 'MOVIE') : a.episodes ? a.episodes + ' EPS' : (a.status === 'RELEASING' ? 'AIRING' : 'SERIES');
     if (a.type === 'GAME') return a.priceText || (a.kind === 'DLC' || a.kind === 'Expansion' ? a.kind.toUpperCase() : a.status === 'NOT_YET_RELEASED' ? 'SOON' : a.gameStatus === 'Early access' ? 'EARLY ACCESS' : (a.platforms || []).slice(0, 2).join(' · '));
-    if (a.format === 'MOVIE' && (a.episodes || 1) === 1) return 'MOVIE';
+    if (a.format === 'MOVIE' && (a.episodes || 1) === 1) return movieNoOf(a) ? 'MOVIE ' + movieNoOf(a) : 'MOVIE';
     const total = a.episodes || null;
     if (a.status === 'RELEASING') {
         const n = a.nextAiringEpisode;
@@ -239,7 +273,8 @@ const posterGrid = () => POSTER_GRIDS[PREFS.posterSize] || POSTER_GRIDS.m;
 const normMedia = (m) => m ? ({ ...m, type: m.type || 'ANIME', episodes: m.episodes ?? m.chapters ?? null }) : m;
 // Only store what the lists need (the detail query includes characters/description which bloat storage)
 const slimAnime = (a) => ({
-    id: a.id, title: { romaji: a.title?.romaji || null, english: a.title?.english || null, native: a.title?.native || null },
+    id: a.id, title: { romaji: a.title?.romaji || null, english: a.title?.english || null, native: a.title?.native || null, ...(fullEnglishOf(a) ? { full: fullEnglishOf(a) } : {}) },
+    ...(movieNoOf(a) ? { mn: movieNoOf(a) } : {}),   // v3.4
     status: a.status || null, seasonYear: a.seasonYear || null, chapters: a.chapters || null,
     nextAiringEpisode: a.nextAiringEpisode?.episode ? { episode: a.nextAiringEpisode.episode, airingAt: a.nextAiringEpisode.airingAt || null } : null,
     coverImage: { large: a.coverImage?.large || null }, bannerImage: a.bannerImage || null,
@@ -270,7 +305,7 @@ const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, scor
     startedOver: !!r.media_data?.so, rewatchedEps: Math.max(0, Number(r.media_data?.rx) || 0),
     repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
 // the fields every list/browse query asks AniList for
-const MEDIA_FIELDS = 'id type isAdult episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
+const MEDIA_FIELDS = 'id type isAdult synonyms episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
 const LIST_ORDERS = [
     { v: 'updated', l: 'Last updated' }, { v: 'added', l: 'Last added' }, { v: 'score', l: 'Score' },
     { v: 'title', l: 'Title' }, { v: 'progress', l: 'Progress' }, { v: 'release', l: 'Release year' }, { v: 'average', l: 'Average score' },
@@ -5016,6 +5051,21 @@ createApp({
             try { await upsertSolo(entries); showToast(`Liked ${entries.length} song${entries.length === 1 ? '' : 's'}`); }
             catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); fetchSolo(); }
         };
+        // v3.4 "In Love" (your favourite songs) from the + too, so a new song doesn't need Liked first and then the Lists page;
+        // one song: In Love ⇄ back to Liked
+        const pickerPlayNext = () => { const songs = pickerSongs(); closePlPicker(); playNextSongs(songs); };
+        const pickerLoved = computed(() => pickerSongs().filter(s => soloEntry(s.id)?.status === 'WATCHING').length);
+        const pickerLove = async () => {
+            const songs = pickerSongs(); if (!songs.length) return;
+            if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
+            if (!plPicker.list) { const s = songs[0]; await quickSolo(s, soloEntry(s.id)?.status === 'WATCHING' ? 'COMPLETED' : 'WATCHING'); return; }
+            const todo = songs.filter(s => soloEntry(s.id)?.status !== 'WATCHING');
+            if (!todo.length) { showToast('You’re already in love with all of them'); return; }
+            const entries = todo.map(s => soloNext(s, 'WATCHING').entry).filter(Boolean);
+            entries.forEach(setSoloLocal);
+            try { await upsertSolo(entries); showToast(`${entries.length} song${entries.length === 1 ? '' : 's'} in In Love`); }
+            catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); fetchSolo(); }
+        };
         const plPickerNew = async () => {
             const list = plPicker.list, s = plPicker.song; closePlPicker();
             const p = await createPlaylist(s);
@@ -5068,7 +5118,7 @@ createApp({
         const player = reactive({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
             vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
-            queue: [], qi: -1, shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
+            queue: [], qi: -1, next: [], shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
             full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '',
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
@@ -5194,7 +5244,7 @@ createApp({
             return candCache.get(k);
         };
         const prefetchNextSong = () => {
-            const n = player.queue[player.qi + 1]; if (!n || !player.full || n.pending) return;
+            const n = player.next[0] || player.queue[player.qi + 1]; if (!n || !player.full || n.pending) return;
             setTimeout(() => { if (!candCache.has(songYtKey(n))) ytCandidates(n).catch(() => {}); }, 2500);
         };
         const ytCandidatesRaw = async (s) => {
@@ -5304,6 +5354,19 @@ createApp({
             player.qi = player.queue.findIndex(x => sameSong(x, s));
             startSong(s);
         };
+        // v3.5 "Play next": songs you pick play right after this one, in the order you picked them, before the rest of the
+        // queue (also on shuffle). Only for now: nothing is saved, it's gone when you close the player or the page.
+        const playNextSongs = (songs) => {
+            songs = (songs || []).filter(s => s?.type === 'SONG');
+            if (!songs.length || songBlocked()) return;
+            if (!player.song) { playPreview(songs[0], songs); return; }   // nothing playing: they just play
+            const add = songs.filter(s => !sameSong(s, player.song));
+            if (!add.length) { showToast('That song is playing now'); return; }
+            player.next.push(...add);
+            showToast(add.length === 1 ? `“${add[0].title?.romaji || 'Song'}” plays next` : `${add.length} songs play next`);
+        };
+        const playNextNow = (i) => { const [s] = player.next.splice(i, 1); if (!s) return; player.queue.splice(player.qi + 1, 0, s); backStack = backStack.map(x => x > player.qi ? x + 1 : x); playQueueAt(player.qi + 1); };
+        const removeNext = (i) => { player.next.splice(i, 1); };
         const playQueueAt = (i) => { const s = player.queue[i]; if (!s) return; if (player.qi >= 0) backStack.push(player.qi); player.qi = i; startSong(s); };
         // lock screen / headphone buttons: "play" always plays and "pause" always pauses (a toggle could do the opposite
         // when the phone paused the song by itself)
@@ -5331,6 +5394,7 @@ createApp({
         };
         const nextSong = (auto = false) => {
             if (auto && player.repeat === 'one') { newListen(); seekTo(0); if (player.mode === 'yt') ytP?.playVideo(); else audio.play().catch(() => {}); return; }
+            if (player.next.length) { playNextNow(0); return; }   // v3.5 the songs you picked to play next go first
             const i = nextIndex(auto);
             if (i < 0 || (!auto && player.queue.length < 2 && player.repeat !== 'all')) { if (auto) { player.playing = false; player.t = 0; } else seekTo(player.dur - 0.5); return; }
             playQueueAt(i);
@@ -5359,7 +5423,7 @@ createApp({
         const setVolume = (v) => { const n = clamp(Number(v) || 0, 0, 1); player.vol = n; player.muted = n <= 0.01; if (n > 0.01) lastVol = n; applyVolume(); saveVol(); };
         const toggleMute = () => { if (player.muted && player.vol <= 0.01) player.vol = lastVol; player.muted = !player.muted; applyVolume(); saveVol(); };
         const isPlaying = (s) => !!s && player.playing && sameSong(player.song, s);
-        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
+        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1, next: [] }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
         // lock screen / keyboard media keys
         // ---- plays: a song counts as played after 30 seconds of listening (half of a 30-second preview) ----
@@ -7050,8 +7114,21 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.2';
+        const APP_VERSION = '3.5';
         const WHATS_NEW = {
+            '3.5': [
+                { icon: 'fa-forward-step', t: 'Play next', d: 'Tap + on any song → “Play next”: it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
+            ],
+            '3.4': [
+                { icon: 'fa-hashtag', t: 'Movie numbers', d: 'Movies in a long series (like Detective Conan) show their number: “MOVIE 13” on the poster and on the title page.' },
+                { icon: 'fa-font', t: 'Full English names', d: 'With English titles on, shows whose English name is cut short get the full one, like “Yu-Gi-Oh!: Duel Monsters” instead of “Yu-Gi-Oh!”.' },
+                { icon: 'fa-link', t: 'Only on MyAnimeList', d: 'Title pages list related specials, OVAs and movies that AniList is missing but MyAnimeList has. Tap one to open it on MyAnimeList.' },
+                { icon: 'fa-star', t: 'In Love from the +', d: 'The + on a song now also has “In Love” (your favourites), so you don’t have to like it first and then change it on your list.' },
+            ],
+            '3.3': [
+                { icon: 'fa-magnifying-glass', t: 'Search the countdown', d: 'Anime countdown has a search bar: type any airing or upcoming anime (English or Japanese name) to see when its next episode comes out.' },
+                { icon: 'fa-filter', t: 'Countdown filters', d: 'Filter the countdown by your list status (Plan to watch, Watching, not on your list…), genre and type (TV, movie…). “Only my list” is now “On my list” in the status filter.' },
+            ],
             '3.2': [
                 { icon: 'fa-envelope', t: 'Invites have their own icon', d: 'Friend requests, watch buddy requests and invites to watch or play something together now go to the ✉ next to the bell, with their own count, so they don’t get lost between episode alerts and likes. Answer them right there.' },
             ],
@@ -7434,6 +7511,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 a.meanScore && ['Mean score', a.meanScore + '%'],
                 a.popularity && ['Popularity', a.popularity.toLocaleString()],
                 a.favourites && ['Favorites', a.favourites.toLocaleString()],
+                movieNoOf(a) && ['Movie number', '#' + movieNoOf(a) + ' in the series'],
                 a.title?.native && ['Native', a.title.native],
                 a.synonyms?.length && ['Also known as', a.synonyms.slice(0, 3).join(' · ')],
             ];
@@ -7464,6 +7542,41 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             .map(e => ({ ...normMedia(e.node), relationType: e.relationType }))
             .sort((a, b) => RELATION_ORDER.indexOf(a.relationType) - RELATION_ORDER.indexOf(b.relationType) || (a.seasonYear || 9999) - (b.seasonYear || 9999)));
 
+        // ---------- v3.4 related entries only MyAnimeList has (specials, OVAs, movies AniList is missing) ----------
+        // MyAnimeList's own API (through the Edge Function, with the app's MAL client id) gives the title's MAL relations;
+        // the ones AniList has no entry for are shown on the title page and open on MyAnimeList. Kept 3 days per title.
+        const malExtras = reactive({});   // AniList id → [{ malId, name, english, url, relation, kind, episodes, year, image }]
+        const MALX_KEY = 'anicoop_malx_v1';
+        const MAL_KIND = { tv: 'TV', ova: 'OVA', movie: 'Movie', special: 'Special', ona: 'ONA', music: 'Music', tv_special: 'TV special', cm: 'CM', pv: 'PV' };
+        const loadMalExtras = async (m) => {
+            if (!m?.idMal || (m.type || 'ANIME') !== 'ANIME' || malExtras[m.id]) return;
+            const cache = readJSON(MALX_KEY) || {};
+            const hit = cache[m.id];
+            if (hit && Date.now() - hit.at < 3 * 86400e3) { malExtras[m.id] = hit.list; return; }
+            malExtras[m.id] = [];   // (also when it fails: tried once per visit)
+            try {
+                const r = await malFn({ action: 'related', id: m.idMal });
+                const rel = (r?.related || []).filter(x => x.id && x.type !== 'character');   // (shares a character only)
+                let list = [];
+                if (rel.length) {
+                    const d = await anilistLow('query ($ids: [Int]) { Page(perPage: 50) { media(idMal_in: $ids, type: ANIME) { idMal } } }', { ids: rel.slice(0, 50).map(x => x.id) });
+                    const onAl = new Set((d?.Page?.media || []).map(x => x.idMal));
+                    const missing = rel.filter(x => !onAl.has(x.id)).slice(0, 10);
+                    const info = missing.length ? new Map(((await malFn({ action: 'info', ids: missing.map(x => x.id) }).catch(() => null))?.info || []).map(x => [x.id, x])) : new Map();
+                    list = missing.filter(x => adultAllowed.value || info.get(x.id)?.rating !== 'rx').map(x => {
+                        const i = info.get(x.id) || {};
+                        return { malId: x.id, name: x.title, english: i.english || null, url: 'https://myanimelist.net/anime/' + x.id, relation: x.relation, kind: MAL_KIND[i.kind] || null, episodes: i.episodes || null, year: i.year || null, image: x.image };
+                    });
+                }
+                malExtras[m.id] = list;
+                const keep = Object.fromEntries(Object.entries(cache).filter(([, v]) => Date.now() - v.at < 3 * 86400e3).slice(-150));
+                try { localStorage.setItem(MALX_KEY, JSON.stringify({ ...keep, [m.id]: { at: Date.now(), list } })); } catch {}
+            } catch (err) { console.warn('MAL extras skipped:', err.message || err); }
+        };
+        const malExtrasOf = (m) => (m && malExtras[m.id]) || [];
+        const malExtraTitle = (x) => (PREFS.titleLang === 'english' && x.english) || x.name;
+        watch(() => selectedAnime.value?.id, () => { const m = selectedAnime.value; if (m?.idMal) loadMalExtras(m); });
+
         let detailRequestId = 0;
         const fetchAnimeDetails = async (animeNode, { push = true } = {}) => {
             const id = typeof animeNode === 'object' ? animeNode?.id : animeNode;
@@ -7491,7 +7604,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 return;
             }
             const query = `query ($id: Int) { Media(id: $id) {
-                id type isAdult description(asHtml: true) bannerImage episodes chapters volumes countryOfOrigin duration status format season seasonYear
+                id idMal type isAdult description(asHtml: true) bannerImage episodes chapters volumes countryOfOrigin duration status format season seasonYear
                 averageScore meanScore popularity favourites genres source synonyms
                 startDate { year month day } endDate { year month day }
                 nextAiringEpisode { episode airingAt timeUntilAiring }
@@ -7506,7 +7619,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 characters(sort: [ROLE, FAVOURITES_DESC], perPage: 12) { pageInfo { hasNextPage } edges { role node { id name { full } image { large } }
                     voiceActors(language: JAPANESE, sort: [RELEVANCE, ID]) { id name { full } image { large } } } }
                 staff(sort: [RELEVANCE, ID], perPage: 8) { pageInfo { hasNextPage } edges { role node { id name { full } image { large } } } }
-                relations { edges { relationType node { id type format status seasonYear episodes chapters title { romaji english native } coverImage { large } } } }
+                relations { edges { relationType node { id type format status seasonYear episodes chapters synonyms title { romaji english native } coverImage { large } } } }
             } }`;
             try {
                 const data = await anilist(query, { id });
@@ -9151,7 +9264,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v10.1 anime countdown (AniList airing schedule) ----------
         // Three columns: trending shows airing now, upcoming shows (not started yet), and every episode airing next.
         // "Only my list" shows the ones on your lists. The timers tick every second while the page is open.
-        const cd = reactive({ trending: [], upcoming: [], soon: [], mine: [], loading: false, error: '', at: 0, onlyMine: false, col: 'soon' });
+        const cd = reactive({ trending: [], upcoming: [], soon: [], mine: [], loading: false, error: '', at: 0, col: 'soon', q: '', found: [], searching: false, status: '', genre: '', format: '' });
         const cdNow = ref(Date.now());
         let cdTimer = null;
         const openCountdown = () => navigate(() => {
@@ -9194,13 +9307,54 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             loadCountdown();
             cdTimer = setInterval(() => { cdNow.value = Date.now(); if (cd.soon.length && cd.soon[0].at < Date.now() - 60e3) loadCountdown(true); }, 1000);
         }, { immediate: true });
-        const myIdsSet = computed(() => new Set(uniqueItems.value.map(i => i.anime?.id)));
+        // v3.3 search: any airing or upcoming anime by name (AniList, so English, romaji and other names all work), with its
+        // countdown. What's already on the page shows straight away while AniList answers.
+        const cdQuery = computed(() => cd.q.trim().length >= 2 ? cd.q.trim() : '');
+        const cdHas = (r, q) => [r.anime.title?.english, r.anime.title?.romaji, r.anime.title?.native].some(t => t && t.toLowerCase().includes(q));
+        const cdLocal = (q) => {
+            const seen = new Set(), l = q.toLowerCase();
+            return [...cd.soon, ...cd.mine, ...cd.trending, ...cd.upcoming].filter(r => cdHas(r, l) && !seen.has(r.anime.id) && seen.add(r.anime.id));
+        };
+        const cdOrder = (r) => r.at || (r.start?.year ? new Date(r.start.year, (r.start.month || 12) - 1, r.start.day || 28).getTime() + 1e13 : 9e15);
+        let cdReq = 0;
+        const cdSearch = debounce(async (q) => {
+            const req = ++cdReq;
+            try {
+                const d = await anilist(`query ($q: String) { Page(perPage: 20) { media(search: $q, type: ANIME, status_in: [RELEASING, NOT_YET_RELEASED], sort: [SEARCH_MATCH], isAdult: false) { ${MEDIA_FIELDS} startDate { year month day } } } }`, { q });
+                if (req !== cdReq) return;
+                const rows = (d?.Page?.media || []).filter(adultOk).map(m => ({ ...cdRow(m, m.nextAiringEpisode?.episode, m.nextAiringEpisode?.airingAt), start: m.startDate }));
+                const ids = new Set(rows.map(r => r.anime.id));
+                cd.found = [...rows, ...cdLocal(q).filter(r => !ids.has(r.anime.id))].sort((x, y) => cdOrder(x) - cdOrder(y));
+            } catch (err) { if (req === cdReq) showToast('Search failed: ' + (err.message || err), 'error'); }
+            finally { if (req === cdReq) cd.searching = false; }
+        }, 400);
+        watch(cdQuery, (q) => {
+            if (!q) { cdReq++; cd.found = []; cd.searching = false; return; }
+            cd.found = cdLocal(q).sort((x, y) => cdOrder(x) - cdOrder(y)); cd.searching = true; cdSearch(q);
+        });
+        // v3.3 filters: your list status (Plan to watch, Watching…, on / not on your list), genre and type
+        const CD_MINE = ['WATCHING', 'PLANNING', 'REPEATING', 'PAUSED'];   // the statuses loadCountdownMine looks up
+        const cdStatusOpts = computed(() => [{ v: '', l: 'All anime' }, { v: 'MINE', l: 'On my list' },
+            ...['WATCHING', 'PLANNING', 'PAUSED', 'REPEATING', 'COMPLETED', 'DROPPED'].map(s => ({ v: s, l: STATUS_LABELS[s] })), { v: 'NOT', l: 'Not on my list' }]);
+        const cdAll = computed(() => [...cd.trending, ...cd.upcoming, ...cd.soon, ...cd.mine, ...cd.found]);
+        const cdGenres = computed(() => [...new Set([...cdAll.value.flatMap(r => r.anime.genres || []), cd.genre].filter(Boolean))].sort());
+        const cdFormats = computed(() => [...new Set([...cdAll.value.map(r => r.anime.format), cd.format].filter(Boolean))].map(k => ({ k, l: FORMAT_LABELS[k] || k })));
+        const cdFiltersOn = computed(() => !!(cd.status || cd.genre || cd.format));
+        const clearCdFilters = () => { cd.status = ''; cd.genre = ''; cd.format = ''; };
+        const cdKeep = (r) => {
+            const st = myEntry(r.anime.id)?.status, on = !!st && st !== 'NONE';
+            if (cd.status === 'MINE' ? !on : cd.status === 'NOT' ? on : cd.status && st !== cd.status) return false;
+            if (cd.genre && !(r.anime.genres || []).includes(cd.genre)) return false;
+            return !cd.format || r.anime.format === cd.format;
+        };
         const cdCols = computed(() => {
-            const mine = (l) => cd.onlyMine ? l.filter(r => myIdsSet.value.has(r.anime.id)) : l;
+            const f = (l) => l.filter(cdKeep);
+            if (cdQuery.value) return [{ id: 'search', title: `Results for “${cdQuery.value}”`, icon: 'fa-magnifying-glass', rows: f(cd.found) }];
             return [
-                { id: 'trending', title: 'Trending anime', icon: 'fa-fire', rows: mine(cd.trending) },
-                { id: 'upcoming', title: 'Upcoming anime', icon: 'fa-calendar-plus', rows: mine(cd.upcoming) },
-                { id: 'soon', title: 'Airing soon', icon: 'fa-clock', rows: cd.onlyMine ? cd.mine : cd.soon },
+                { id: 'trending', title: 'Trending anime', icon: 'fa-fire', rows: f(cd.trending) },
+                { id: 'upcoming', title: 'Upcoming anime', icon: 'fa-calendar-plus', rows: f(cd.upcoming) },
+                // (your own airing shows are looked up separately, so they're all here, not only the next 40 episodes)
+                { id: 'soon', title: 'Airing soon', icon: 'fa-clock', rows: f(cd.status === 'MINE' || CD_MINE.includes(cd.status) ? cd.mine : cd.soon) },
             ];
         });
         const cdParts = (at) => {
@@ -9371,7 +9525,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (entity.value && (entity.value.type === 'artist' || entity.value.type === 'album')) entity.value = null;
             music.open = false; player.queueOpen = false;
             if (rankTab.me === 'SONG') rankTab.me = 'ANIME'; if (rankTab.them === 'SONG') rankTab.them = 'ANIME'; if (favTab.me === 'SINGER') favTab.me = 'VA';
-            if (player.song) { pauseSong(); player.song = null; player.queue = []; player.qi = -1; }
+            if (player.song) { pauseSong(); player.song = null; player.queue = []; player.qi = -1; player.next = []; }
         });
         watch(section, (v) => { if (v === 'songs' && songsCfg.ready && !songsOn.value) section.value = 'anime'; });
         const setAdultEveryone = (on) => { adultConfig.everyone = on; saveAdultConfig(); };
@@ -11255,7 +11409,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
@@ -11294,7 +11448,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdQuery, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

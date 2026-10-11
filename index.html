@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=3.2">
+    <link rel="stylesheet" href="app.css?v=3.5">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=3.2" defer></script>
+    <script src="app.js?v=3.5" defer></script>
 </head>
 <body>
 
@@ -1109,12 +1109,26 @@
                                 <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
                                     <div v-for="rel in detailRelations" :key="rel.id" @click="fetchAnimeDetails(rel.id)" @keydown.enter.self="fetchAnimeDetails(rel.id)" role="button" tabindex="0" class="w-32 shrink-0 text-left group cursor-pointer">
                                         <div class="poster"><img :src="rel.coverImage?.large" class="art" loading="lazy" decoding="async" alt=""></div>
-                                        <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ rel.relationType.replace('_', ' ') }}<span v-if="rel.type !== selectedAnime.type" class="text-mute"> · {{ rel.type }}</span></p>
+                                        <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ rel.relationType.replace('_', ' ') }}<span v-if="rel.type !== selectedAnime.type" class="text-mute"> · {{ rel.type }}</span><span v-if="movieNoOf(rel)" class="text-mute"> · Movie {{ movieNoOf(rel) }}</span></p>
                                         <p class="text-xs text-ink font-semibold line-clamp-2 mt-0.5">{{ titleOf(rel) }}</p>
                                         <div class="qadd mt-2" @click.stop>
                                             <button v-for="st in addStatuses(rel)" :key="st" @click.stop="quickAdd(rel, st)" class="qadd-btn" :class="{ on: addOn(rel, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(rel.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
                                         </div>
                                     </div>
+                                </div>
+                            </section>
+
+                            <!-- v3.4 related entries AniList doesn't have (from MyAnimeList) -->
+                            <section v-if="malExtrasOf(selectedAnime).length" class="mt-12">
+                                <h3 class="font-display font-semibold text-ink text-xl">Only on MyAnimeList</h3>
+                                <p class="text-xs text-sub mt-1 mb-4">Related entries AniList doesn't have. They open on MyAnimeList (they can't go on your list here).</p>
+                                <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
+                                    <a v-for="x in malExtrasOf(selectedAnime)" :key="x.malId" :href="x.url" target="_blank" rel="noopener" class="w-32 shrink-0 text-left group">
+                                        <div class="poster"><img v-if="x.image" :src="x.image" class="art" loading="lazy" decoding="async" alt=""><span v-else class="absolute inset-0 flex items-center justify-center text-mute"><i class="fa-solid fa-film text-xl"></i></span></div>
+                                        <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ x.relation }}<span v-if="x.kind" class="text-mute"> · {{ x.kind }}</span></p>
+                                        <p class="text-xs text-ink font-semibold line-clamp-2 mt-0.5 group-hover:text-lilac">{{ malExtraTitle(x) }}</p>
+                                        <p class="text-[10px] text-mute mt-0.5">{{ [x.episodes && (x.episodes + (x.episodes === 1 ? ' ep' : ' eps')), x.year].filter(Boolean).join(' · ') }} <i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5"></i></p>
+                                    </a>
                                 </div>
                             </section>
 
@@ -1574,22 +1588,34 @@
                     <p class="kicker">// airing schedule · times in your time zone</p>
                     <div class="flex flex-wrap items-end justify-between gap-3 mt-2">
                         <h1 class="font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Anime countdown</h1>
-                        <div class="flex items-center gap-2">
-                            <button @click="cd.onlyMine = !cd.onlyMine" class="toggle !h-10" :class="{ 'is-on': cd.onlyMine }"><span class="knob"></span>Only my list</button>
-                            <button @click="loadCountdown(true)" class="icon-btn !w-10 !h-10" title="Refresh"><i class="fa-solid fa-rotate-right text-xs" :class="{ 'fa-spin': cd.loading }"></i></button>
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                            <!-- v3.3 search any airing / upcoming anime -->
+                            <label class="cd-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input v-model="cd.q" type="search" placeholder="Search airing anime…" aria-label="Search airing and upcoming anime" @keydown.esc="cd.q = ''">
+                                <button v-if="cd.q" @click="cd.q = ''" type="button" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+                            </label>
+                            <button @click="loadCountdown(true)" class="icon-btn !w-10 !h-10 shrink-0" title="Refresh"><i class="fa-solid fa-rotate-right text-xs" :class="{ 'fa-spin': cd.loading }"></i></button>
                         </div>
+                    </div>
+                    <!-- v3.3 filters -->
+                    <div class="cd-filters mt-5">
+                        <div class="chip-wrap"><select v-model="cd.status" :class="{ 'is-on': cd.status }" class="chip w-full" aria-label="Your list status"><option v-for="o in cdStatusOpts" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div class="chip-wrap"><select v-model="cd.genre" :class="{ 'is-on': cd.genre }" class="chip w-full" aria-label="Genre"><option value="">All genres</option><option v-for="g in cdGenres" :key="g" :value="g">{{ g }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div class="chip-wrap"><select v-model="cd.format" :class="{ 'is-on': cd.format }" class="chip w-full" aria-label="Type"><option value="">All types</option><option v-for="x in cdFormats" :key="x.k" :value="x.k">{{ x.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <button v-if="cdFiltersOn" @click="clearCdFilters" class="btn-ghost !h-10 !py-0 !px-3 !text-xs shrink-0"><i class="fa-solid fa-xmark"></i> Clear</button>
                     </div>
                     <p v-if="cd.error" class="mt-6 panel !rounded-2xl px-4 py-3 text-sm text-rose-300"><i class="fa-solid fa-circle-exclamation mr-2"></i>{{ cd.error }}</p>
                     <!-- phones: one column at a time -->
-                    <div class="seg w-full mt-6 lg:hidden">
+                    <div v-if="!cdQuery" class="seg w-full mt-6 lg:hidden">
                         <button v-for="c in cdCols" :key="c.id" @click="cd.col = c.id" :class="{ 'is-on': cd.col === c.id }" class="seg-btn flex-1"><i class="fa-solid mr-1.5" :class="c.icon"></i>{{ c.title.replace(' anime', '') }}</button>
                     </div>
-                    <div class="cd-cols mt-6">
-                        <section v-for="c in cdCols" :key="c.id" class="cd-col" :class="{ 'is-on': cd.col === c.id }">
-                            <h2 class="font-display font-semibold text-ink text-xl mb-4 hidden lg:flex items-center gap-2"><i class="fa-solid text-lilac text-base" :class="c.icon"></i>{{ c.title }}</h2>
-                            <div v-if="cd.loading && !c.rows.length" class="space-y-3"><div v-for="n in 4" :key="n" class="h-40 rounded-2xl skeleton"></div></div>
-                            <p v-else-if="!c.rows.length" class="panel !rounded-2xl p-6 text-center text-sm text-mute">{{ cd.onlyMine ? 'Nothing from your lists here.' : 'Nothing here right now.' }}</p>
-                            <div class="space-y-3">
+                    <div class="cd-cols mt-6" :class="{ 'is-search': cdQuery }">
+                        <section v-for="c in cdCols" :key="c.id" class="cd-col" :class="{ 'is-on': cd.col === c.id || c.id === 'search' }">
+                            <h2 class="font-display font-semibold text-ink text-xl mb-4 items-center gap-2" :class="c.id === 'search' ? 'flex' : 'hidden lg:flex'"><i class="fa-solid text-lilac text-base" :class="c.icon"></i>{{ c.title }}</h2>
+                            <div v-if="(c.id === 'search' ? cd.searching : cd.loading) && !c.rows.length" :class="c.id === 'search' ? 'cd-found' : 'space-y-3'"><div v-for="n in 4" :key="n" class="h-40 rounded-2xl skeleton"></div></div>
+                            <p v-else-if="!c.rows.length" class="panel !rounded-2xl p-6 text-center text-sm text-mute">{{ cdFiltersOn ? 'Nothing here matches these filters.' : c.id === 'search' ? 'No airing or upcoming anime matches that. (Anime that already finished have no countdown.)' : 'Nothing here right now.' }}</p>
+                            <div :class="c.id === 'search' ? 'cd-found' : 'space-y-3'">
                                 <button v-for="r in c.rows" :key="c.id + r.anime.id + '-' + r.ep" @click="fetchAnimeDetails(r.anime)" class="cd-card">
                                     <img :src="r.anime.coverImage?.large" alt="" loading="lazy" decoding="async">
                                     <span class="cd-body">
@@ -3114,8 +3140,19 @@
                 <div class="relative">
                     <button @click="player.queueOpen = !player.queueOpen" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: player.queueOpen }" title="Queue"><i class="fa-solid fa-list-ul"></i></button>
                     <transition name="pop"><div v-if="player.queueOpen" class="pbar-queue">
-                        <div class="flex items-center justify-between px-3 pt-2.5 pb-1.5"><p class="font-mono text-[10px] font-bold tracking-[.16em] text-mute">QUEUE · {{ player.queue.length }}</p><button @click="player.queueOpen = false" class="vol-btn !w-7 !h-7" title="Close"><i class="fa-solid fa-xmark"></i></button></div>
+                        <div class="flex items-center justify-between px-3 pt-2.5 pb-1.5"><p class="font-mono text-[10px] font-bold tracking-[.16em] text-mute">QUEUE · {{ player.queue.length + player.next.length }}</p><button @click="player.queueOpen = false" class="vol-btn !w-7 !h-7" title="Close"><i class="fa-solid fa-xmark"></i></button></div>
                         <div class="pbar-queue-list">
+                            <!-- v3.5 picked with "Play next": these go first -->
+                            <template v-if="player.next.length">
+                                <p class="font-mono text-[9px] font-bold tracking-[.16em] text-volt px-3 pt-1 pb-1">NEXT UP · {{ player.next.length }}</p>
+                                <div v-for="(q, i) in player.next" :key="'n' + i + ':' + q.id" class="pbar-q" role="button" tabindex="0" @click="playNextNow(i)" @keydown.enter="playNextNow(i)" title="Play it now">
+                                    <span class="pbar-q-n text-volt"><i class="fa-solid fa-forward-step text-[10px]"></i></span>
+                                    <img v-if="q.coverImage?.large" :src="q.coverImage.large" alt="" loading="lazy"><span v-else class="pbar-q-ph"><i class="fa-solid fa-music"></i></span>
+                                    <span class="min-w-0 flex-grow"><span class="pbar-q-t block truncate text-[13px] font-semibold text-ink">{{ q.title?.romaji }}</span><span class="block truncate text-[11px] text-sub">{{ (q.artists || []).join(', ') }}</span></span>
+                                    <button @click.stop="removeNext(i)" class="vol-btn !w-7 !h-7 shrink-0" title="Take it out"><i class="fa-solid fa-xmark text-[11px]"></i></button>
+                                </div>
+                                <p class="font-mono text-[9px] font-bold tracking-[.16em] text-mute px-3 pt-2 pb-1">THEN</p>
+                            </template>
                             <div v-for="(q, i) in player.queue" :key="i + ':' + q.id" class="pbar-q" :class="{ on: i === player.qi }" role="button" tabindex="0" @click="i === player.qi ? togglePlay() : playQueueAt(i)" @keydown.enter="playQueueAt(i)">
                                 <span class="pbar-q-n"><i v-if="i === player.qi" class="fa-solid" :class="player.playing ? 'fa-volume-high' : 'fa-pause'"></i><template v-else>{{ i + 1 }}</template></span>
                                 <img v-if="q.coverImage?.large" :src="q.coverImage.large" alt="" loading="lazy"><span v-else class="pbar-q-ph"><i class="fa-solid fa-music"></i></span>
@@ -3208,12 +3245,25 @@
                     <img v-if="plPicker.song.coverImage?.large" :src="plPicker.song.coverImage.large" class="w-9 h-9 rounded-md object-cover shrink-0" alt="">
                     <div class="min-w-0"><p class="font-mono text-[9px] font-bold tracking-[.16em] text-mute">SAVE TO</p><p class="text-[13px] font-semibold text-ink truncate">{{ plPicker.list ? plPicker.list.length + ' songs' : plPicker.song.title?.romaji }}</p></div>
                 </div>
+                <!-- v3.5 play it right after the song that's playing -->
+                <button @click="pickerPlayNext" class="qa-row mx-1.5 !w-auto">
+                    <span class="pl-pick-art pl-next"><i class="fa-solid fa-forward-step"></i></span>
+                    <span class="min-w-0 flex-grow text-left"><span class="block truncate">{{ player.song ? 'Play next' : 'Play now' }}</span><span v-if="player.song" class="block text-[10px] text-mute truncate">after {{ player.song.title?.romaji }}<template v-if="player.next.length"> + {{ player.next.length }} more</template></span></span>
+                </button>
+                <div class="h-px bg-line mx-2 my-1"></div>
                 <!-- v3.1 like it from the + too -->
                 <button @click="pickerLike" class="qa-row mx-1.5 !w-auto" :class="{ 'bg-overlay': pickerLiked === (plPicker.list ? plPicker.list.length : 1) }" :title="!plPicker.list && pickerLiked ? 'Unlike' : 'Like'">
                     <span class="pl-pick-art pl-like"><i class="fa-solid fa-heart"></i></span>
                     <span class="min-w-0 flex-grow truncate text-left">Liked songs</span>
                     <span v-if="plPicker.list && pickerLiked" class="font-mono text-[10px] text-volt shrink-0">{{ pickerLiked }}/{{ plPicker.list.length }}</span>
                     <i class="fa-solid shrink-0 text-[12px]" :class="pickerLiked === (plPicker.list ? plPicker.list.length : 1) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
+                </button>
+                <!-- v3.4 straight into In Love (favourites) -->
+                <button @click="pickerLove" class="qa-row mx-1.5 !w-auto" :class="{ 'bg-overlay': pickerLoved === (plPicker.list ? plPicker.list.length : 1) }" :title="!plPicker.list && pickerLoved ? 'Back to Liked' : 'Add to In Love'">
+                    <span class="pl-pick-art pl-love"><i class="fa-solid fa-star"></i></span>
+                    <span class="min-w-0 flex-grow text-left"><span class="block truncate">In Love</span><span class="block text-[10px] text-mute">your favourites</span></span>
+                    <span v-if="plPicker.list && pickerLoved" class="font-mono text-[10px] text-volt shrink-0">{{ pickerLoved }}/{{ plPicker.list.length }}</span>
+                    <i class="fa-solid shrink-0 text-[12px]" :class="pickerLoved === (plPicker.list ? plPicker.list.length : 1) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
                 </button>
                 <div class="h-px bg-line mx-2 my-1"></div>
                 <p v-if="plMissing" class="px-3 pb-2 text-xs text-sub">Playlists need the latest database update: run the whole supabase_setup.sql in Supabase again.</p>
