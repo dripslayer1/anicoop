@@ -5522,6 +5522,13 @@ createApp({
         const savePending = () => { try { localStorage.setItem(PLAYS_KEY, JSON.stringify(pendingPlays)); } catch {} };
         let listenSecs = 0, playCounted = false;
         const newListen = () => { listenSecs = 0; playCounted = false; };
+        // v1.2.1 a play that can't be saved says why (once per visit) instead of failing quietly
+        let playErrShown = false;
+        const playSaveFailed = (err) => {
+            console.warn('play not saved:', err?.message || err);
+            if (playErrShown) return; playErrShown = true;
+            showToast('Your song plays aren’t being saved: ' + (err?.message || err || 'unknown error'), 'error');
+        };
         const countPlay = async (song) => {
             if (!song?.id || !uid()) return;
             const e = soloEntry(song.id);
@@ -5530,12 +5537,12 @@ createApp({
                 const entry = { anime: song, status: 'NONE', score: 0, progress: before + 1, repeats: [] };
                 setSoloLocal(entry);
                 try { await upsertSolo(entry); if (before) { delete pendingPlays[song.id]; savePending(); } }
-                catch { soloList.value = soloList.value.filter(i => i.anime.id !== song.id); pendingPlays[song.id] = before + 1; savePending(); }
+                catch (err) { soloList.value = soloList.value.filter(i => i.anime.id !== song.id); pendingPlays[song.id] = before + 1; savePending(); playSaveFailed(err); }
                 return;
             }
             const entry = { ...e, progress: (e.progress || 0) + 1 };
             setSoloLocal(entry);
-            try { await upsertSolo(entry); } catch { setSoloLocal(e); }
+            try { await upsertSolo(entry); } catch (err) { setSoloLocal(e); playSaveFailed(err); }
         };
         const movePendingPlays = async () => {
             const ids = Object.keys(pendingPlays).filter(id => pendingPlays[id] > 0);
@@ -5554,7 +5561,7 @@ createApp({
                 await upsertSolo(rows);
                 rows.forEach(r => delete pendingPlays[r.anime.id]); savePending();
                 showToast(`Your plays of ${rows.length} song${rows.length === 1 ? '' : 's'} are on your profile now`);
-            } catch (err) { console.warn('plays not moved:', err.message || err); fetchSolo(); }
+            } catch (err) { playSaveFailed(err); fetchSolo(); }
         };
         setInterval(() => {
             if (!player.playing || !player.song || playCounted) return;
@@ -7231,8 +7238,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.2';
+        const APP_VERSION = '1.2.1';
         const WHATS_NEW = {
+            '1.2.1': [
+                { icon: 'fa-triangle-exclamation', t: 'Song plays: no silent failures', d: 'If a song play can’t be saved to your list, you now get a message saying why, instead of it quietly not counting.' },
+            ],
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
             ],

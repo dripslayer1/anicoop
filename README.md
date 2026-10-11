@@ -1366,3 +1366,10 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   played them in; the song's details come from your History).
 - **Lists → Songs → Played** shows them (not mixed into All). Liking a played song keeps its plays; un-liking a song
   you've played keeps it as Played instead of taking it off your list.
+
+## v1.2.1 — song plays don't fail quietly
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.2.1**.
+
+- When a song play (or moving the old browser-only plays) can't be saved to your list, a message says why (once per
+  visit); before, it went back into the browser without a word. Helps find out why someone's plays stay at 0.
