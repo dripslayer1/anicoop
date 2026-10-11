@@ -7114,8 +7114,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.5';
+        const APP_VERSION = '3.5.1';
         const WHATS_NEW = {
+            '3.5.1': [
+                { icon: 'fa-hashtag', t: 'Movie numbers on your lists', d: 'Movies that were already on your list (like the Detective Conan movies) now get their number right away, instead of after the next daily list check.' },
+            ],
             '3.5': [
                 { icon: 'fa-forward-step', t: 'Play next', d: 'Tap + on any song → “Play next”: it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
             ],
@@ -11282,7 +11285,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const checkListMedia = async ({ force = false } = {}) => {
             const me = uid(); if (!me) return;
             const DAY_KEY = `anicoop_mediacheck:${me}`, SNAP_KEY = `anicoop_mediasnap:${me}`;
-            try { if (!force && localStorage.getItem(DAY_KEY) === localDay()) return; } catch { return; }
+            // v3.5.1 once right away (not waiting for tomorrow's check): titles saved before v3.4 get their movie number
+            // and full English name now
+            const NAMES_KEY = `anicoop_names_v34:${me}`;
+            let namesDone = true; try { namesDone = !!localStorage.getItem(NAMES_KEY); } catch {}
+            try { if (!force && namesDone && localStorage.getItem(DAY_KEY) === localDay()) return; } catch { return; }
             const all = new Map();
             soloList.value.forEach(i => { if (i.anime?.id && isAniListType(i.anime.type)) all.set(i.anime.id, i.anime); });
             if (!all.size) return;
@@ -11317,7 +11324,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     if (i + 50 < ids.length) await sleep(1200);
                 }
             } catch (err) { console.warn('list check skipped:', err.message || err); return; }
-            try { localStorage.setItem(SNAP_KEY, JSON.stringify(next)); localStorage.setItem(DAY_KEY, localDay()); } catch {}
+            try { localStorage.setItem(SNAP_KEY, JSON.stringify(next)); localStorage.setItem(DAY_KEY, localDay()); localStorage.setItem(NAMES_KEY, '1'); } catch {}
             const rows = notes.filter(n => n.pref).map(n => ({ user_id: me, kind: n.kind, media_id: n.media?.id || null, media_type: n.media?.type || 'ANIME', media_title: n.media ? titleOf(n.media) : null, media_cover: n.media?.coverImage?.large || null, text: n.text }));
             if (rows.length) {
                 const { error } = await sb.from('notifications').insert(rows);

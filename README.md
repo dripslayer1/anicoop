@@ -1295,3 +1295,11 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   of them go in. When nothing is playing it says **Play now**.
 - The queue (the list button on the player) shows them under **Next up**: tap one to play it now, ✕ to take it out.
 - It's only for now: nothing is saved, it's gone when you close the player or leave the page.
+
+## v3.5.1 — movie numbers on titles already on your list
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.5.1**.
+
+- Titles saved on your list before v3.4 didn't have AniList's other names, so their movie number (and full English
+  name) only came with the daily list check, the next day. Now that check runs once right away after the update
+  (about 10 seconds after the page loads), then daily as before.

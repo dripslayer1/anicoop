@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '3.5'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '3.5.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '3.5'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '3.5.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -466,6 +466,7 @@ These are cumulative; the README has one section per version.
 - **v3.3** (no SQL): countdown search (`cd.q` → `cdQuery`, debounced `cdSearch`: AniList search, RELEASING + NOT_YET_RELEASED, merged with `cdLocal` matches; `cdCols` becomes one "search" column, `.cd-found` grid) and filters (`cd.status` / `cd.genre` / `cd.format`, `cdKeep`). `cd.onlyMine` is gone: status "MINE" or a status in `CD_MINE` makes Airing soon use `cd.mine`.
 - **v3.4** (no SQL, Edge Function redeploy): `MEDIA_FIELDS` has `synonyms`. `movieNoOf` (MOVIE format, "Movie N" in synonyms → saved as `mn`, shown by `epBadge`) and `fullEnglishOf` (English title cut short → longer Latin name, saved as `title.full`; only when the native title has katakana and the extra words aren't Japanese, `JP_LITTLE`). `loadMalExtras` → Edge `mal` actions `related` / `info` (public MAL API with X-MAL-CLIENT-ID), minus what AniList has (`idMal_in`), cached 3 days (`anicoop_malx_v1`). Song picker: `pickerLove` / `pickerLoved` (WATCHING = In Love).
 - **v3.5** (no SQL): `player.next` (session only) filled by `playNextSongs` (picker `pickerPlayNext`); `nextSong` plays `player.next[0]` first (`playNextNow`: spliced into the queue right after `qi`, backStack shifted), before `nextIndex`/shuffle; repeat-one still repeats. Cleared by `closePlayer`. `prefetchNextSong` looks at `player.next[0]` first.
+- **v3.5.1** (no SQL): `checkListMedia` also runs (once per account per browser, `anicoop_names_v34:<id>`) when it already ran today, so lists saved before v3.4 get `mn` / `title.full` right away.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
