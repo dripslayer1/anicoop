@@ -40,6 +40,8 @@ LABEL_SETS.GAME.labels.ROTATION = LABEL_SETS.GAME.short.ROTATION = 'In Rotation'
 // v1.4 "no status": a title that's only on a mark list (In Rotation, Wanna …) after you unchecked its status. It shows
 // in those lists only, and isn't sent to AniList / MyAnimeList (it's taken off there).
 Object.values(LABEL_SETS).forEach(set => { set.labels.NONE = 'No status'; set.short.NONE = 'No status'; });
+// v1.2 songs: every song you listen to (30 s+) is on your list with its plays; one you didn't like / love is "Played"
+LABEL_SETS.SONG.labels.NONE = LABEL_SETS.SONG.short.NONE = 'Played';
 // v10 "Wanna rewatch" (anime, movies & TV): not a status of its own but a mark on a title you've seen, so it keeps its
 // status (Completed…) and also shows in its own "Wanna Rewatch" list. Saved with the entry (media_data.rw).
 const REWISH_TYPES = ['ANIME', 'TV', 'MANGA', 'GAME'];
@@ -2027,7 +2029,7 @@ const TrackRow = {
         <span v-if="entry" class="tr-status" :style="{ '--dot': STATUS_COLORS[entry.status] }"><span class="qa-dot"></span><span class="tr-status-l">{{ LABEL_SETS.SONG.short[entry.status] || entry.status }}</span><span v-if="entry.progress" class="tr-plays" :title="entry.progress + ' play' + (entry.progress === 1 ? '' : 's')"><i class="fa-solid fa-play"></i>{{ entry.progress }}</span></span>
         <span v-if="!selectable" class="tr-acts">
             <button @click.stop="openPlPicker(song, $event)" class="tr-add" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i></button>
-            <button @click.stop="entry ? $emit('edit') : $emit('action', 'COMPLETED')" class="tr-add" :title="entry ? 'Edit' : 'Like'"><i class="fa-solid" :class="entry ? 'fa-pen' : 'fa-heart'"></i></button>
+            <button @click.stop="entry && entry.status !== 'NONE' ? $emit('edit') : $emit('action', 'COMPLETED')" class="tr-add" :title="entry && entry.status !== 'NONE' ? 'Edit' : 'Like'"><i class="fa-solid" :class="entry && entry.status !== 'NONE' ? 'fa-pen' : 'fa-heart'"></i></button>
         </span>
     </div>`,
 };
@@ -2672,7 +2674,7 @@ createApp({
             startPresence(); touchLastSeen();
             fetchFollows().then(() => setTimeout(checkFollowed, 6000));
             loadAniListLink(); loadMalLink();
-            setTimeout(fillNames, 4000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
+            setTimeout(fillNames, 4000); setTimeout(movePendingPlays, 5000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
         };
         const clearUserData = () => {
             loadedUserId = null;
@@ -5512,8 +5514,9 @@ createApp({
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
         // lock screen / keyboard media keys
         // ---- plays: a song counts as played after 30 seconds of listening (half of a 30-second preview) ----
-        // It goes on the song's entry in your list (the "Plays" number); songs not on your list keep their count
-        // in this browser and it's added when you add the song.
+        // It goes on the song's entry in your list (the "Plays" number). v1.2: a song that isn't on your list yet goes on
+        // it as "Played" (no status: not in In Love / Liked / Disliked), so your plays and songs show on your profile, for
+        // friends too. Before, those plays stayed in this browser only (pendingPlays), so profiles said 0.
         const PLAYS_KEY = 'anicoop_pending_plays';
         const pendingPlays = reactive(readJSON(PLAYS_KEY) || {});
         const savePending = () => { try { localStorage.setItem(PLAYS_KEY, JSON.stringify(pendingPlays)); } catch {} };
@@ -5522,10 +5525,36 @@ createApp({
         const countPlay = async (song) => {
             if (!song?.id || !uid()) return;
             const e = soloEntry(song.id);
-            if (!e) { pendingPlays[song.id] = (pendingPlays[song.id] || 0) + 1; savePending(); return; }
+            if (!e) {
+                const before = pendingPlays[song.id] || 0;
+                const entry = { anime: song, status: 'NONE', score: 0, progress: before + 1, repeats: [] };
+                setSoloLocal(entry);
+                try { await upsertSolo(entry); if (before) { delete pendingPlays[song.id]; savePending(); } }
+                catch { soloList.value = soloList.value.filter(i => i.anime.id !== song.id); pendingPlays[song.id] = before + 1; savePending(); }
+                return;
+            }
             const entry = { ...e, progress: (e.progress || 0) + 1 };
             setSoloLocal(entry);
             try { await upsertSolo(entry); } catch { setSoloLocal(e); }
+        };
+        const movePendingPlays = async () => {
+            const ids = Object.keys(pendingPlays).filter(id => pendingPlays[id] > 0);
+            if (!ids.length || !uid()) return;
+            const media = new Map();
+            histList.value.forEach(x => { if (x.type === 'SONG' && x.media?.id && !media.has(String(x.id))) media.set(String(x.id), x.media); });
+            const rows = [];
+            ids.forEach(id => {
+                const n = pendingPlays[id], cur = soloEntry(Number(id));
+                if (cur) rows.push({ ...cur, progress: (cur.progress || 0) + n });
+                else if (media.has(id)) rows.push({ anime: media.get(id), status: 'NONE', score: 0, progress: n, repeats: [] });
+            });
+            if (!rows.length) return;
+            rows.forEach(setSoloLocal);
+            try {
+                await upsertSolo(rows);
+                rows.forEach(r => delete pendingPlays[r.anime.id]); savePending();
+                showToast(`Your plays of ${rows.length} song${rows.length === 1 ? '' : 's'} are on your profile now`);
+            } catch (err) { console.warn('plays not moved:', err.message || err); fetchSolo(); }
         };
         setInterval(() => {
             if (!player.playing || !player.song || playCounted) return;
@@ -5640,16 +5669,16 @@ createApp({
             return items;
         });
         const statusCounts = computed(() => {
-            const counts = { ALL: baseListItems.value.length };
+            const counts = { ALL: baseListItems.value.filter(i => !(i.status === 'NONE' && typeOf(i) === 'SONG')).length };   // (v1.2 Played songs have their own list)
             baseListItems.value.forEach(i => { counts[i.status] = (counts[i.status] || 0) + 1; if (i.rewish) counts.REWISH = (counts.REWISH || 0) + 1; if (i.rotation) counts.ROTATION = (counts.ROTATION || 0) + 1; });
             return counts;
         });
         // v10 the solo list of anime / movies & TV also has "Wanna Rewatch" (titles can be in it and in their status)
         const extraLists = computed(() => activeTab.value !== 'solo' ? [] : [...(REWISH_TYPES.includes(UNIT.type) ? ['REWISH'] : []), ...(ROTATION_TYPES.includes(UNIT.type) ? ['ROTATION'] : [])]);
-        const listStatusOpts = computed(() => ['ALL', ...statusPick(), ...extraLists.value]);
+        const listStatusOpts = computed(() => ['ALL', ...statusPick(), ...extraLists.value, ...(UNIT.type === 'SONG' && activeTab.value === 'solo' ? ['NONE'] : [])]);
         watch(extraLists, (l) => { if (FLAG_OF[listFilterStatus.value] && !l.includes(listFilterStatus.value)) listFilterStatus.value = 'ALL'; });
         const filteredGroupedList = computed(() => {
-            const groups = Object.fromEntries([...STATUS_ORDER, 'REWISH', 'ROTATION'].map(s => [s, []]));
+            const groups = Object.fromEntries([...STATUS_ORDER, 'REWISH', 'ROTATION', 'NONE'].map(s => [s, []]));
             const extra = extraLists.value;
             baseListItems.value.forEach(item => {
                 groups[item.status]?.push(item);
@@ -6695,7 +6724,8 @@ createApp({
         const uncheckStatus = async (anime) => {
             const cur = soloEntry(anime.id); if (!cur) return;
             const label = statusLabelFor(anime.type, cur.status);
-            if (!cur.rewish && !cur.rotation) { await dropFromSolo(anime, `${titleOf(anime)} is off ${label} (and your list)`); return; }
+            const keepPlays = anime.type === 'SONG' && cur.progress > 0;   // v1.2 (it stays as Played, with its plays)
+            if (!cur.rewish && !cur.rotation && !keepPlays) { await dropFromSolo(anime, `${titleOf(anime)} is off ${label} (and your list)`); return; }
             const entry = { ...cur, status: 'NONE' };
             setSoloLocal(entry);
             if (selectedAnime.value?.id === anime.id) inlineForm.value = buildForm(selectedAnime.value);
@@ -7201,8 +7231,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.1.1';
+        const APP_VERSION = '1.2';
         const WHATS_NEW = {
+            '1.2': [
+                { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
+            ],
             '1.1.1': [
                 { icon: 'fa-music', t: 'The right song plays', d: 'Songs with a common name (like “Bounce”) could play another artist’s song. Now the full song has to be by the right artist and as long as the song; if YouTube doesn’t have it, the 30-second preview plays instead.' },
             ],
