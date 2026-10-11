@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=3.1">
+    <link rel="stylesheet" href="app.css?v=3.2">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=3.1" defer></script>
+    <script src="app.js?v=3.2" defer></script>
 </head>
 <body>
 
@@ -126,11 +126,12 @@
                     <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                     <span class="hdr-space" aria-hidden="true"></span>
                     <button v-if="songsOn" @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
-                    <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
+                    <button @click.stop="notifOpen = !notifOpen; friendsOpen = false; invOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                         <i class="fa-solid fa-bell text-sm"></i>
                         <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
                     </button>
-                    <button @click.stop="friendsOpen = !friendsOpen; notifOpen = false" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': friendsOpen }" title="Friends"><i class="fa-solid fa-user-group text-sm"></i><span v-if="pendingRequests.length + buddyRequests.length" class="notif-dot">{{ pendingRequests.length + buddyRequests.length }}</span></button>
+                    <button @click.stop="toggleInvites" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': invOpen, 'inv-pulse': invPulse && !invOpen }" title="Invites — friend requests, watch buddies, watch together"><i class="fa-solid fa-envelope text-sm"></i><span v-if="invCount" class="notif-dot inv-dot">{{ invCount > 9 ? '9+' : invCount }}</span></button>
+                    <button @click.stop="friendsOpen = !friendsOpen; notifOpen = false; invOpen = false" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': friendsOpen }" title="Friends"><i class="fa-solid fa-user-group text-sm"></i></button>
                     <button @click.stop="openTracker('chat')" class="icon-btn !w-9 !h-9 relative" title="Chat"><i class="fa-solid fa-comment-dots text-sm"></i><span v-if="chatUnread" class="notif-dot">{{ chatUnread > 9 ? '9+' : chatUnread }}</span></button>
                     <button @click.stop="openTracker('profile')" class="relative" title="Profile">
                         <user-avatar :user="currentProfile" :size="36"></user-avatar>
@@ -265,11 +266,12 @@
                         <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
                         <span class="hdr-space hdr-extra" aria-hidden="true"></span>
                         <button v-if="songsOn" @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
-                    <button @click.stop="notifOpen = !notifOpen; friendsOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
+                    <button @click.stop="notifOpen = !notifOpen; friendsOpen = false; invOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
                             <i class="fa-solid fa-bell text-sm"></i>
                             <span v-if="unreadCount" class="notif-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
                         </button>
-                        <button @click.stop="friendsOpen = !friendsOpen; notifOpen = false" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': friendsOpen }" title="Friends"><i class="fa-solid fa-user-group text-sm"></i><span v-if="pendingRequests.length + buddyRequests.length" class="notif-dot">{{ pendingRequests.length + buddyRequests.length }}</span></button>
+                        <button @click.stop="toggleInvites" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': invOpen, 'inv-pulse': invPulse && !invOpen }" title="Invites — friend requests, watch buddies, watch together"><i class="fa-solid fa-envelope text-sm"></i><span v-if="invCount" class="notif-dot inv-dot">{{ invCount > 9 ? '9+' : invCount }}</span></button>
+                        <button @click.stop="friendsOpen = !friendsOpen; notifOpen = false; invOpen = false" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': friendsOpen }" title="Friends"><i class="fa-solid fa-user-group text-sm"></i></button>
                         <button @click="switchTab('chat')" class="icon-btn !w-9 !h-9 relative" :class="{ '!bg-ink !text-inv': activeTab === 'chat' && !selectedAnime && !viewUserId && !entity }" title="Chat"><i class="fa-solid fa-comment-dots text-sm"></i><span v-if="chatUnread" class="notif-dot">{{ chatUnread > 9 ? '9+' : chatUnread }}</span></button>
                         <button @click="switchTab('profile')" class="relative hidden sm:block" title="Profile">
                             <user-avatar :user="currentProfile" :size="36"></user-avatar>
@@ -3312,7 +3314,7 @@
             </div>
             <button v-if="!systemNotifOn" @click="enableSystemNotifs" class="mx-3 mb-2 w-[calc(100%-1.5rem)] flex items-center gap-2 px-3 py-2 rounded-xl bg-lilac/10 text-lilac text-xs font-semibold"><i class="fa-solid fa-bell"></i> Turn on desktop notifications</button>
             <div class="max-h-[60dvh] overflow-y-auto px-2 pb-2">
-                <div v-for="n in notifications" :key="n.id" @click="openNotification(n)" @keydown.enter.self="openNotification(n)" role="button" tabindex="0" class="w-full flex items-start gap-3 p-2.5 rounded-xl text-left hover:bg-overlay transition-colors cursor-pointer" :class="{ 'bg-lilac/[.06]': !n.read }">
+                <div v-for="n in bellNotifs" :key="n.id" @click="openNotification(n)" @keydown.enter.self="openNotification(n)" role="button" tabindex="0" class="w-full flex items-start gap-3 p-2.5 rounded-xl text-left hover:bg-overlay transition-colors cursor-pointer" :class="{ 'bg-lilac/[.06]': !n.read }">
                     <user-avatar v-if="n.actor_id" :user="personOf(n.actor_id)" :size="34"></user-avatar>
                     <span v-else class="w-[34px] h-[34px] rounded-full bg-overlay text-volt flex items-center justify-center shrink-0"><i class="fa-solid text-sm" :class="notifIcon(n)"></i></span>
                     <span class="min-w-0 flex-grow">
@@ -3322,14 +3324,61 @@
                         <button v-if="alertWatch(n)" @click.stop="watchFromAlert(n)" class="notif-watch" :title="'Open your link on ' + alertWatch(n).site"><i class="fa-solid fa-play"></i> Watch<span class="opacity-70"> · {{ alertWatch(n).site }}</span></button>
                         <span v-if="n.kind === 'party_invite' && inviteFor(n.media_id)" class="flex gap-1.5 mt-1.5">
                             <button @click.stop="answerInvite(inviteFor(n.media_id), true); n.read = true" class="notif-watch"><i class="fa-solid fa-check"></i> Join</button>
-                            <button @click.stop="answerInvite(inviteFor(n.media_id), false); n.read = true" class="notif-watch !text-sub">No</button>
+                            <button @click.stop="answerInvite(inviteFor(n.media_id), false); n.read = true" class="notif-watch !bg-overlay !text-sub">No</button>
                         </span>
                     </span>
                     <img v-if="n.media_cover" :src="n.media_cover" class="w-8 h-11 rounded-md object-cover shrink-0" alt="">
                     <span v-if="!n.read" class="w-2 h-2 rounded-full bg-pink shrink-0 mt-1.5"></span>
                 </div>
 
-                <p v-if="!notifications.length" class="text-center text-sm text-mute py-10">Nothing yet — when friends comment or invite you to watch something together, it shows up here.</p>
+                <p v-if="!bellNotifs.length" class="text-center text-sm text-mute py-10">Nothing yet — when friends comment, like your posts or a new episode comes out, it shows up here.</p>
+                <button v-if="invCount" @click.stop="toggleInvites" class="w-full mt-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-lilac/10 text-lilac text-xs font-semibold"><i class="fa-solid fa-envelope"></i> {{ invCount }} invite{{ invCount === 1 ? '' : 's' }} waiting<i class="fa-solid fa-chevron-right ml-auto text-[10px]"></i></button>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ============ v3.2 INVITES PANEL (its own icon, so invites don't get lost between the other notifications) ============ -->
+    <transition name="pop">
+        <div v-if="invOpen && currentUser" class="notif-panel" @click.stop>
+            <div class="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+                <p class="font-display font-semibold text-ink">Invites <span class="font-mono text-xs text-mute">{{ invCount }}</span></p>
+            </div>
+            <div class="max-h-[65dvh] overflow-y-auto px-2 pb-2">
+                <template v-if="partyInvites.length">
+                    <p class="label px-2 pt-1 pb-1.5">Watch together</p>
+                    <div v-for="p in partyInvites" :key="p.id" class="flex items-start gap-2.5 p-2 rounded-xl bg-lilac/[.06] mb-1">
+                        <button @click="openInviteTitle(p)" class="w-9 h-[52px] rounded-md overflow-hidden bg-overlay shrink-0"><img v-if="p.anime.coverImage?.large" :src="p.anime.coverImage.large" class="w-full h-full object-cover" loading="lazy" alt=""></button>
+                        <span class="min-w-0 flex-grow">
+                            <span class="block text-[13px] text-ink leading-snug"><b>{{ inviteFrom(p).username }}</b> wants to {{ (p.anime?.type || 'ANIME') === 'GAME' ? 'play' : 'watch' }} <button @click="openInviteTitle(p)" class="font-semibold hover:text-lilac text-left">{{ titleOf(p.anime) }}</button> with you</span>
+                            <span class="block text-[11px] text-mute mt-0.5">{{ buddyLabel(p.anime?.type || 'ANIME') }}<template v-if="invitePeople(p).length"> · {{ invitePeople(p).length }} in already</template><template v-if="p.progress"> · at {{ p.anime?.type === 'MANGA' ? 'ch' : 'ep' }} {{ p.progress }}</template></span>
+                            <span class="flex gap-1.5 mt-1.5">
+                                <button @click="answerInvite(p, true)" class="notif-watch"><i class="fa-solid fa-check"></i> Join</button>
+                                <button @click="answerInvite(p, false)" class="notif-watch !bg-overlay !text-sub">No</button>
+                            </span>
+                        </span>
+                    </div>
+                </template>
+                <template v-if="pendingRequests.length">
+                    <p class="label px-2 pt-1 pb-1.5">Friend requests</p>
+                    <div v-for="req in pendingRequests" :key="req.friendshipId" class="flex items-center gap-2.5 p-2 rounded-xl bg-lilac/[.06] mb-1">
+                        <button @click="openInviter(req.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left"><user-avatar :user="req" :size="32"></user-avatar><span class="min-w-0 text-sm font-semibold text-ink truncate">{{ req.username }}</span></button>
+                        <button @click="acceptRequest(req.friendshipId)" class="px-3 py-1.5 rounded-full bg-[#22c55e] text-onaccent text-[11px] font-bold">Accept</button>
+                        <button @click="deleteFriendship(req.friendshipId, 'Request declined')" class="w-7 h-7 rounded-full bg-overlay text-sub hover:text-ink" title="Decline"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </div>
+                </template>
+                <template v-if="buddyRequests.length">
+                    <p class="label px-2 pt-1 pb-1.5">Watch buddy requests</p>
+                    <div v-for="b in buddyRequests" :key="b.id" class="flex items-center gap-2.5 p-2 rounded-xl bg-lilac/[.06] mb-1">
+                        <button @click="openInviter(b.requester)" class="shrink-0"><user-avatar :user="personOf(b.requester)" :size="32"></user-avatar></button>
+                        <span class="flex-grow min-w-0 text-xs text-ink"><b>{{ personOf(b.requester).username }}</b> · sync {{ b.media_type ? buddyLabel(b.media_type) + ' ' : '' }}{{ statusLabelFor(b.media_type || 'ANIME', 'PLANNING') }}</span>
+                        <button @click="acceptBuddy(b)" class="px-3 py-1.5 rounded-full bg-[#22c55e] text-onaccent text-[11px] font-bold">Accept</button>
+                        <button @click="endBuddy(b)" class="w-7 h-7 rounded-full bg-overlay text-sub hover:text-ink" title="Decline"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </div>
+                </template>
+                <div v-if="!invCount" class="text-center py-10 px-6">
+                    <i class="fa-solid fa-envelope-open text-2xl text-mute"></i>
+                    <p class="text-sm text-mute mt-3">No invites right now. Friend requests, watch buddy requests and invites to watch or play something together show up here.</p>
+                </div>
             </div>
         </div>
     </transition>
