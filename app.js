@@ -1999,6 +1999,8 @@ const plPicker = reactive({ open: false, song: null, list: null, anchor: null, x
 // v1.5 your Steam achievements per game (Steam app id → { done, total }): filled by the profile total and by game pages,
 // shown on your game posters
 const achByApp = reactive({});
+// v3.5 the player lives in the app's setup; song menus outside it (the card's hover bar) reach "Play next" through here
+const songHooks = { playNext: null };
 const openPlPicker = (song, e) => {
     const list = Array.isArray(song) ? song.filter(Boolean) : null;
     if (list ? !list.length : !song) return;
@@ -2059,6 +2061,7 @@ const QuickAdd = {
         const songItems = computed(() => {
             const e = props.entry, list = [];
             if (props.canPlay) list.push({ k: 'PLAY', icon: 'fa-play', label: 'Play', play: true });
+            list.push({ k: 'NEXT', icon: 'fa-forward-step', label: 'Play next' });   // v3.5
             ['WATCHING', 'COMPLETED', 'DROPPED'].forEach(st => list.push({ k: st, icon: SONG_ICONS[st], label: STATUS_LABELS[st], color: STATUS_COLORS[st], on: e?.status === st }));
             list.push({ k: 'PLAYLIST', icon: 'fa-circle-plus', label: 'Add to playlist…' });
             list.push({ k: 'EDIT', icon: 'fa-ellipsis', label: 'Edit & more…' });
@@ -2067,6 +2070,7 @@ const QuickAdd = {
         });
         const pick = (k, ev) => {
             if (k === 'PLAY') emit('play');
+            else if (k === 'NEXT') songHooks.playNext?.([props.anime]);
             else if (k === 'PLAYLIST') openPlPicker(props.anime, ev);
             else if (k === 'EDIT') emit('edit');
             else emit('action', k);
@@ -5053,6 +5057,8 @@ createApp({
         };
         // v3.4 "In Love" (your favourite songs) from the + too, so a new song doesn't need Liked first and then the Lists page;
         // one song: In Love ⇄ back to Liked
+        // (not for the song that's playing: opened from the player bar's +)
+        const pickerCanNext = computed(() => !!plPicker.list || !player.song || !sameSong(plPicker.song, player.song));
         const pickerPlayNext = () => { const songs = pickerSongs(); closePlPicker(); playNextSongs(songs); };
         const pickerLoved = computed(() => pickerSongs().filter(s => soloEntry(s.id)?.status === 'WATCHING').length);
         const pickerLove = async () => {
@@ -5365,6 +5371,7 @@ createApp({
             player.next.push(...add);
             showToast(add.length === 1 ? `“${add[0].title?.romaji || 'Song'}” plays next` : `${add.length} songs play next`);
         };
+        songHooks.playNext = playNextSongs;
         const playNextNow = (i) => { const [s] = player.next.splice(i, 1); if (!s) return; player.queue.splice(player.qi + 1, 0, s); backStack = backStack.map(x => x > player.qi ? x + 1 : x); playQueueAt(player.qi + 1); };
         const removeNext = (i) => { player.next.splice(i, 1); };
         const playQueueAt = (i) => { const s = player.queue[i]; if (!s) return; if (player.qi >= 0) backStack.push(player.qi); player.qi = i; startSong(s); };
@@ -6509,6 +6516,7 @@ createApp({
             if (action === 'EDIT') { closeSheet(); openEditor(a); return; }
             if (action === 'PARTY') { closeSheet(); openPartyDraft(a); return; }
             if (action === 'REMOVE') { closeSheet(); removeEverywhere(a); return; }
+            if (action === 'NEXT') { closeSheet(); playNextSongs([a]); return; }   // v3.5
             quickSolo(a, action);
             if (action !== 'EP') closeSheet();
         };
@@ -7117,7 +7125,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const APP_VERSION = '3.5';
         const WHATS_NEW = {
             '3.5': [
-                { icon: 'fa-forward-step', t: 'Play next', d: 'Tap + on any song → “Play next”: it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
+                { icon: 'fa-forward-step', t: 'Play next', d: '“Play next” on any song (the ⏭ in a song card’s menu, or the + on a song row): it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
             ],
             '3.4': [
                 { icon: 'fa-hashtag', t: 'Movie numbers', d: 'Movies in a long series (like Detective Conan) show their number: “MOVIE 13” on the poster and on the title page.' },
@@ -11409,7 +11417,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, pickerCanNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,

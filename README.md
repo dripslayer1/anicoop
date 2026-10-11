@@ -1290,7 +1290,8 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
 
 **No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.5**.
 
-- The **+** on a song has **Play next** at the top: the song plays right after the one playing now. Pick more and they
+- **Play next** on any song: in the hover bar of a song card (next to ▶), in the phone menu of a song, and at the top
+  of the song + menu (not for the song that's already playing): the song plays right after the one playing now. Pick more and they
   play in the order you picked them, before the rest of the queue (also on shuffle). With several songs selected, all
   of them go in. When nothing is playing it says **Play now**.
 - The queue (the list button on the player) shows them under **Next up**: tap one to play it now, ✕ to take it out.
