@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.0.1">
+    <link rel="stylesheet" href="app.css?v=1.0.2">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.0.1" defer></script>
+    <script src="app.js?v=1.0.2" defer></script>
 </head>
 <body>
 
@@ -594,7 +594,7 @@
                                 <p v-else-if="!inviteFor(selectedAnime.id)" class="text-xs text-sub leading-relaxed">Invite friends to watch it with you. Their pictures show on the poster, everyone keeps their own status, and when anyone counts an episode, everyone moves along.</p>
                                 <div class="flex gap-2">
                                     <button @click="openPartyDraft(selectedAnime)" :disabled="!friendsList.length" class="btn-ghost flex-1 !py-2 !text-xs" :title="friendsList.length ? '' : 'Add friends first (Profile → Friends)'"><i class="fa-solid fa-user-plus"></i> Invite friends</button>
-                                    <button v-if="detailParty" @click="leaveParty(selectedAnime)" class="btn-ghost !py-2 !text-xs !px-3" :title="selectedAnime.type === 'GAME' ? 'Stop playing together (it stays on your list)' : 'Stop watching together (it stays on your list)'"><i class="fa-solid fa-right-from-bracket"></i></button>
+                                    <button v-if="detailParty" @click="leaveParty(selectedAnime)" class="btn-ghost !py-2 !text-xs !px-3" title="It stays on your list"><i class="fa-solid fa-right-from-bracket"></i> Leave</button>
                                 </div>
                             </div>
 
@@ -4725,6 +4725,7 @@
                 </div>
                 <div class="grid grid-cols-2 gap-2 mt-2">
                     <button v-if="partyType(sheetAnime)" @click="sheetAction('PARTY')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold col-span-2"><i class="fa-solid fa-user-plus mr-2 text-xs"></i>Watch with friends</button>
+                    <button v-if="partyHooks.inParty?.(sheetAnime.id)" @click="sheetAction('LEAVE')" class="py-3.5 rounded-2xl bg-raised text-sub text-sm font-semibold col-span-2"><i class="fa-solid fa-right-from-bracket mr-2 text-xs"></i>{{ sheetAnime.type === 'GAME' ? 'Stop playing together' : 'Stop watching together' }}</button>
                     <button @click="sheetAction('EDIT')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold"><i class="fa-solid fa-pen mr-2 text-xs"></i>Edit & more</button>
                     <button @click="sheetAction('REMOVE')" :disabled="!isOnMyList(sheetAnime.id)" class="py-3.5 rounded-2xl bg-rose-500/10 text-rose-300 text-sm font-semibold disabled:opacity-30"><i class="fa-solid fa-trash-can mr-2 text-xs"></i>Remove all</button>
                 </div>

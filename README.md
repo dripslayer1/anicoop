@@ -1321,3 +1321,13 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
 - The part of v3.5 that put **Play next** in the song card's hover bar (⏭ after ▶) and at the top of the phone menu
   didn't make it into the v3.5 merge; it's here now. The + menu opened on the song that's already playing no longer
   offers Play next.
+
+## v1.0.2 — leave watching together any time
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.0.2**.
+
+- **Stop watching together** (games: playing) is in the **+** menu of the title's card when you're in a watch party on
+  it, in the phone menu, and the title page's leave button now says **Leave**. The title stays on your list; the
+  friends' pictures come off it. No more taking it off your list and adding it again.
+- Leaving while your invite isn't answered yet (nobody else joined): the open invites are taken back too, so nobody can
+  join a party that has no one in it.
