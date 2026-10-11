@@ -2239,3 +2239,5 @@ button.buddy-chip:hover { color: rgb(var(--c-lilac)); border-color: rgb(var(--c-
 .cd-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .cd-filters > .chip-wrap { flex: 1 1 140px; max-width: 220px; }
 @media (max-width: 639px) { .cd-filters > .chip-wrap { max-width: none; } }
+/* v3.4 "In Love" in the + picker */
+.pl-love { background: linear-gradient(135deg, #f59e0b, #ec4899) !important; color: #fff; }

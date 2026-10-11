@@ -521,6 +521,21 @@ const malCall = async (body: Record<string, any>) => {
         if (!rt) return json({ error: 'No refresh token' }, 400);
         return tokenCall({ grant_type: 'refresh_token', refresh_token: rt });
     }
+    // v3.4 public title info (no user token, the app's client id): a title's related entries, and a few details of up
+    // to 10 titles (for the "Only on MyAnimeList" row on a title page)
+    if (action === 'related' || action === 'info') {
+        const pub = (path: string) => fetch('https://api.myanimelist.net/v2/' + path, { headers: { 'X-MAL-CLIENT-ID': MAL_ID } }).then(r => r.ok ? r.json() : null).catch(() => null);
+        if (action === 'related') {
+            const id = Number(body.id);
+            if (!Number.isInteger(id) || id <= 0) return json({ error: 'Bad id' }, 400);
+            const d = await pub(`anime/${id}?fields=related_anime`);
+            if (!d) return json({ error: 'MyAnimeList did not answer' }, 502);
+            return json({ related: (d.related_anime || []).map((r: any) => ({ id: r.node?.id, title: r.node?.title || '', image: r.node?.main_picture?.medium || null, type: r.relation_type || '', relation: r.relation_type_formatted || r.relation_type || '' })) });
+        }
+        const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0).slice(0, 10);
+        const list = await Promise.all(ids.map((id: number) => pub(`anime/${id}?fields=alternative_titles,media_type,num_episodes,start_date,rating`)));
+        return json({ info: list.filter(Boolean).map((d: any) => ({ id: d.id, english: d.alternative_titles?.en || null, kind: d.media_type || null, episodes: d.num_episodes || null, year: Number(String(d.start_date || '').slice(0, 4)) || null, rating: d.rating || null })) });
+    }
     if (action === 'api') {
         const tok = String(body.token || ''), path = String(body.path || ''), method = String(body.method || 'GET').toUpperCase();
         if (!tok || !MAL_PATH.test(path) || !['GET', 'PATCH', 'DELETE'].includes(method) || (path === 'users/@me' && method !== 'GET')) return json({ error: 'Not allowed' }, 400);

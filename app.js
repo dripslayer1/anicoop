@@ -175,10 +175,44 @@ const applyTheme = () => {
 };
 applyTheme();
 
+// v3.4 AniList's English name is sometimes cut short ("Yu-Gi-Oh!" for Yu☆Gi☆Oh! Duel Monsters, "Initial D" for Initial D
+// First Stage). When the romaji name starts with every word of the English one and goes on, the longer name is used:
+// a Latin spelling of it from the other names ("Yu-Gi-Oh!: Duel Monsters") or else the romaji. Saved as title.full.
+const nameWords = (s) => String(s || '').toLowerCase().split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+const LATIN_NAME = /^[ -\u024F\u2010-\u2027\u00D7]+$/;
+const JP_LITTLE = new Set(['no', 'wa', 'ga', 'wo', 'o', 'ni', 'nite', 'de', 'to', 'kara', 'made', 'e', 'mo', 'ya', 'na', 'ka', 'yo', 'shite', 'suru', 'desu', 'datta', 'nai', 'hen', 'shou']);
+const fullCache = new WeakMap();
+const fullEnglishOf = (a) => {
+    const t = a?.title; if (!t?.english || !t.romaji) return null;
+    if (t.full) return t.full;
+    if (fullCache.has(t)) return fullCache.get(t);
+    const en = nameWords(t.english), ro = nameWords(t.romaji);
+    let out = null;
+    // only when the rest is English written in katakana in the Japanese title (デュエルモンスターズ = Duel Monsters), not
+    // Japanese ("Suzume" stays, not "Suzume no Tojimari"; "Ghost in the Shell", not "…: Koukaku Kidoutai")
+    const rest = ro.slice(en.length);
+    if (en.length && rest.length && en.every((w, i) => ro[i] === w) && /[ァ-ヺー]{3}/.test(t.native || '')
+        && !rest.some(w => JP_LITTLE.has(w) || /ou|uu/.test(w))) {
+        const same = (s) => { const w = nameWords(s); return LATIN_NAME.test(s) && w.length === ro.length && w.every((x, i) => x === ro[i]); };
+        const syn = (a.synonyms || []).filter(same);
+        out = syn.find(s => s.startsWith(t.english)) || syn[0] || t.romaji;
+    }
+    fullCache.set(t, out);
+    return out;
+};
+// v3.4 movie numbers ("Detective Conan Movie 13"): AniList has them in the other names, not in the title
+const movieNoOf = (a) => {
+    if (a?.mn) return a.mn;
+    if (a?.format !== 'MOVIE' || !a.synonyms?.length) return null;
+    const n = {};
+    a.synonyms.forEach(s => { const m = /\bmovie\s*0*(\d{1,3})\b/i.exec(s); if (m && +m[1] > 0) n[+m[1]] = (n[+m[1]] || 0) + 1; });
+    const best = Object.entries(n).sort((x, y) => y[1] - x[1])[0];
+    return best ? +best[0] : null;
+};
 // Title language: Romaji / English / Native (falls back when a title has no translation)
 const titleOf = (a) => {
     const t = a?.title || {};
-    const order = PREFS.titleLang === 'english' ? [t.english, t.romaji, t.native] : PREFS.titleLang === 'native' ? [t.native, t.romaji, t.english] : [t.romaji, t.english, t.native];
+    const order = PREFS.titleLang === 'english' ? [fullEnglishOf(a) || t.english, t.romaji, t.native] : PREFS.titleLang === 'native' ? [t.native, t.romaji, t.english] : [t.romaji, t.english, t.native];
     return order.find(Boolean) || 'Untitled';
 };
 const altTitleOf = (a) => {
@@ -218,7 +252,7 @@ const epBadge = (a) => {
     if (a.type === 'SONG') return a.durationMs ? fmtDuration(a.durationMs) : '';
     if (a.type === 'TV') return a.status === 'NOT_YET_RELEASED' ? 'SOON' : a.format === 'MOVIE' ? (a.runtime ? fmtRuntime(a.runtime) : 'MOVIE') : a.episodes ? a.episodes + ' EPS' : (a.status === 'RELEASING' ? 'AIRING' : 'SERIES');
     if (a.type === 'GAME') return a.priceText || (a.kind === 'DLC' || a.kind === 'Expansion' ? a.kind.toUpperCase() : a.status === 'NOT_YET_RELEASED' ? 'SOON' : a.gameStatus === 'Early access' ? 'EARLY ACCESS' : (a.platforms || []).slice(0, 2).join(' · '));
-    if (a.format === 'MOVIE' && (a.episodes || 1) === 1) return 'MOVIE';
+    if (a.format === 'MOVIE' && (a.episodes || 1) === 1) return movieNoOf(a) ? 'MOVIE ' + movieNoOf(a) : 'MOVIE';
     const total = a.episodes || null;
     if (a.status === 'RELEASING') {
         const n = a.nextAiringEpisode;
@@ -239,7 +273,8 @@ const posterGrid = () => POSTER_GRIDS[PREFS.posterSize] || POSTER_GRIDS.m;
 const normMedia = (m) => m ? ({ ...m, type: m.type || 'ANIME', episodes: m.episodes ?? m.chapters ?? null }) : m;
 // Only store what the lists need (the detail query includes characters/description which bloat storage)
 const slimAnime = (a) => ({
-    id: a.id, title: { romaji: a.title?.romaji || null, english: a.title?.english || null, native: a.title?.native || null },
+    id: a.id, title: { romaji: a.title?.romaji || null, english: a.title?.english || null, native: a.title?.native || null, ...(fullEnglishOf(a) ? { full: fullEnglishOf(a) } : {}) },
+    ...(movieNoOf(a) ? { mn: movieNoOf(a) } : {}),   // v3.4
     status: a.status || null, seasonYear: a.seasonYear || null, chapters: a.chapters || null,
     nextAiringEpisode: a.nextAiringEpisode?.episode ? { episode: a.nextAiringEpisode.episode, airingAt: a.nextAiringEpisode.airingAt || null } : null,
     coverImage: { large: a.coverImage?.large || null }, bannerImage: a.bannerImage || null,
@@ -270,7 +305,7 @@ const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, scor
     startedOver: !!r.media_data?.so, rewatchedEps: Math.max(0, Number(r.media_data?.rx) || 0),
     repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
 // the fields every list/browse query asks AniList for
-const MEDIA_FIELDS = 'id type isAdult episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
+const MEDIA_FIELDS = 'id type isAdult synonyms episodes chapters format status seasonYear countryOfOrigin title { romaji english native } coverImage { large } bannerImage averageScore genres trailer { id site } nextAiringEpisode { episode airingAt }';
 const LIST_ORDERS = [
     { v: 'updated', l: 'Last updated' }, { v: 'added', l: 'Last added' }, { v: 'score', l: 'Score' },
     { v: 'title', l: 'Title' }, { v: 'progress', l: 'Progress' }, { v: 'release', l: 'Release year' }, { v: 'average', l: 'Average score' },
@@ -5016,6 +5051,20 @@ createApp({
             try { await upsertSolo(entries); showToast(`Liked ${entries.length} song${entries.length === 1 ? '' : 's'}`); }
             catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); fetchSolo(); }
         };
+        // v3.4 "In Love" (your favourite songs) from the + too, so a new song doesn't need Liked first and then the Lists page;
+        // one song: In Love ⇄ back to Liked
+        const pickerLoved = computed(() => pickerSongs().filter(s => soloEntry(s.id)?.status === 'WATCHING').length);
+        const pickerLove = async () => {
+            const songs = pickerSongs(); if (!songs.length) return;
+            if (!currentUser.value) { showToast('Sign in to save it', 'error'); return; }
+            if (!plPicker.list) { const s = songs[0]; await quickSolo(s, soloEntry(s.id)?.status === 'WATCHING' ? 'COMPLETED' : 'WATCHING'); return; }
+            const todo = songs.filter(s => soloEntry(s.id)?.status !== 'WATCHING');
+            if (!todo.length) { showToast('You’re already in love with all of them'); return; }
+            const entries = todo.map(s => soloNext(s, 'WATCHING').entry).filter(Boolean);
+            entries.forEach(setSoloLocal);
+            try { await upsertSolo(entries); showToast(`${entries.length} song${entries.length === 1 ? '' : 's'} in In Love`); }
+            catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); fetchSolo(); }
+        };
         const plPickerNew = async () => {
             const list = plPicker.list, s = plPicker.song; closePlPicker();
             const p = await createPlaylist(s);
@@ -7050,8 +7099,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.3';
+        const APP_VERSION = '3.4';
         const WHATS_NEW = {
+            '3.4': [
+                { icon: 'fa-hashtag', t: 'Movie numbers', d: 'Movies in a long series (like Detective Conan) show their number: “MOVIE 13” on the poster and on the title page.' },
+                { icon: 'fa-font', t: 'Full English names', d: 'With English titles on, shows whose English name is cut short get the full one, like “Yu-Gi-Oh!: Duel Monsters” instead of “Yu-Gi-Oh!”.' },
+                { icon: 'fa-link', t: 'Only on MyAnimeList', d: 'Title pages list related specials, OVAs and movies that AniList is missing but MyAnimeList has. Tap one to open it on MyAnimeList.' },
+                { icon: 'fa-star', t: 'In Love from the +', d: 'The + on a song now also has “In Love” (your favourites), so you don’t have to like it first and then change it on your list.' },
+            ],
             '3.3': [
                 { icon: 'fa-magnifying-glass', t: 'Search the countdown', d: 'Anime countdown has a search bar: type any airing or upcoming anime (English or Japanese name) to see when its next episode comes out.' },
                 { icon: 'fa-filter', t: 'Countdown filters', d: 'Filter the countdown by your list status (Plan to watch, Watching, not on your list…), genre and type (TV, movie…). “Only my list” is now “On my list” in the status filter.' },
@@ -7438,6 +7493,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 a.meanScore && ['Mean score', a.meanScore + '%'],
                 a.popularity && ['Popularity', a.popularity.toLocaleString()],
                 a.favourites && ['Favorites', a.favourites.toLocaleString()],
+                movieNoOf(a) && ['Movie number', '#' + movieNoOf(a) + ' in the series'],
                 a.title?.native && ['Native', a.title.native],
                 a.synonyms?.length && ['Also known as', a.synonyms.slice(0, 3).join(' · ')],
             ];
@@ -7468,6 +7524,41 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             .map(e => ({ ...normMedia(e.node), relationType: e.relationType }))
             .sort((a, b) => RELATION_ORDER.indexOf(a.relationType) - RELATION_ORDER.indexOf(b.relationType) || (a.seasonYear || 9999) - (b.seasonYear || 9999)));
 
+        // ---------- v3.4 related entries only MyAnimeList has (specials, OVAs, movies AniList is missing) ----------
+        // MyAnimeList's own API (through the Edge Function, with the app's MAL client id) gives the title's MAL relations;
+        // the ones AniList has no entry for are shown on the title page and open on MyAnimeList. Kept 3 days per title.
+        const malExtras = reactive({});   // AniList id → [{ malId, name, english, url, relation, kind, episodes, year, image }]
+        const MALX_KEY = 'anicoop_malx_v1';
+        const MAL_KIND = { tv: 'TV', ova: 'OVA', movie: 'Movie', special: 'Special', ona: 'ONA', music: 'Music', tv_special: 'TV special', cm: 'CM', pv: 'PV' };
+        const loadMalExtras = async (m) => {
+            if (!m?.idMal || (m.type || 'ANIME') !== 'ANIME' || malExtras[m.id]) return;
+            const cache = readJSON(MALX_KEY) || {};
+            const hit = cache[m.id];
+            if (hit && Date.now() - hit.at < 3 * 86400e3) { malExtras[m.id] = hit.list; return; }
+            malExtras[m.id] = [];   // (also when it fails: tried once per visit)
+            try {
+                const r = await malFn({ action: 'related', id: m.idMal });
+                const rel = (r?.related || []).filter(x => x.id && x.type !== 'character');   // (shares a character only)
+                let list = [];
+                if (rel.length) {
+                    const d = await anilistLow('query ($ids: [Int]) { Page(perPage: 50) { media(idMal_in: $ids, type: ANIME) { idMal } } }', { ids: rel.slice(0, 50).map(x => x.id) });
+                    const onAl = new Set((d?.Page?.media || []).map(x => x.idMal));
+                    const missing = rel.filter(x => !onAl.has(x.id)).slice(0, 10);
+                    const info = missing.length ? new Map(((await malFn({ action: 'info', ids: missing.map(x => x.id) }).catch(() => null))?.info || []).map(x => [x.id, x])) : new Map();
+                    list = missing.filter(x => adultAllowed.value || info.get(x.id)?.rating !== 'rx').map(x => {
+                        const i = info.get(x.id) || {};
+                        return { malId: x.id, name: x.title, english: i.english || null, url: 'https://myanimelist.net/anime/' + x.id, relation: x.relation, kind: MAL_KIND[i.kind] || null, episodes: i.episodes || null, year: i.year || null, image: x.image };
+                    });
+                }
+                malExtras[m.id] = list;
+                const keep = Object.fromEntries(Object.entries(cache).filter(([, v]) => Date.now() - v.at < 3 * 86400e3).slice(-150));
+                try { localStorage.setItem(MALX_KEY, JSON.stringify({ ...keep, [m.id]: { at: Date.now(), list } })); } catch {}
+            } catch (err) { console.warn('MAL extras skipped:', err.message || err); }
+        };
+        const malExtrasOf = (m) => (m && malExtras[m.id]) || [];
+        const malExtraTitle = (x) => (PREFS.titleLang === 'english' && x.english) || x.name;
+        watch(() => selectedAnime.value?.id, () => { const m = selectedAnime.value; if (m?.idMal) loadMalExtras(m); });
+
         let detailRequestId = 0;
         const fetchAnimeDetails = async (animeNode, { push = true } = {}) => {
             const id = typeof animeNode === 'object' ? animeNode?.id : animeNode;
@@ -7495,7 +7586,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 return;
             }
             const query = `query ($id: Int) { Media(id: $id) {
-                id type isAdult description(asHtml: true) bannerImage episodes chapters volumes countryOfOrigin duration status format season seasonYear
+                id idMal type isAdult description(asHtml: true) bannerImage episodes chapters volumes countryOfOrigin duration status format season seasonYear
                 averageScore meanScore popularity favourites genres source synonyms
                 startDate { year month day } endDate { year month day }
                 nextAiringEpisode { episode airingAt timeUntilAiring }
@@ -7510,7 +7601,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 characters(sort: [ROLE, FAVOURITES_DESC], perPage: 12) { pageInfo { hasNextPage } edges { role node { id name { full } image { large } }
                     voiceActors(language: JAPANESE, sort: [RELEVANCE, ID]) { id name { full } image { large } } } }
                 staff(sort: [RELEVANCE, ID], perPage: 8) { pageInfo { hasNextPage } edges { role node { id name { full } image { large } } } }
-                relations { edges { relationType node { id type format status seasonYear episodes chapters title { romaji english native } coverImage { large } } } }
+                relations { edges { relationType node { id type format status seasonYear episodes chapters synonyms title { romaji english native } coverImage { large } } } }
             } }`;
             try {
                 const data = await anilist(query, { id });
@@ -11300,7 +11391,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
@@ -11339,7 +11430,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdQuery, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdQuery, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=3.3">
+    <link rel="stylesheet" href="app.css?v=3.4">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=3.3" defer></script>
+    <script src="app.js?v=3.4" defer></script>
 </head>
 <body>
 
@@ -1109,12 +1109,26 @@
                                 <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
                                     <div v-for="rel in detailRelations" :key="rel.id" @click="fetchAnimeDetails(rel.id)" @keydown.enter.self="fetchAnimeDetails(rel.id)" role="button" tabindex="0" class="w-32 shrink-0 text-left group cursor-pointer">
                                         <div class="poster"><img :src="rel.coverImage?.large" class="art" loading="lazy" decoding="async" alt=""></div>
-                                        <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ rel.relationType.replace('_', ' ') }}<span v-if="rel.type !== selectedAnime.type" class="text-mute"> · {{ rel.type }}</span></p>
+                                        <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ rel.relationType.replace('_', ' ') }}<span v-if="rel.type !== selectedAnime.type" class="text-mute"> · {{ rel.type }}</span><span v-if="movieNoOf(rel)" class="text-mute"> · Movie {{ movieNoOf(rel) }}</span></p>
                                         <p class="text-xs text-ink font-semibold line-clamp-2 mt-0.5">{{ titleOf(rel) }}</p>
                                         <div class="qadd mt-2" @click.stop>
                                             <button v-for="st in addStatuses(rel)" :key="st" @click.stop="quickAdd(rel, st)" class="qadd-btn" :class="{ on: addOn(rel, st) }" :style="{ '--dot': STATUS_COLORS[st] }" :title="statusLabelFor(rel.type, st)"><i class="fa-solid" :class="ADD_ICONS[st]"></i></button>
                                         </div>
                                     </div>
+                                </div>
+                            </section>
+
+                            <!-- v3.4 related entries AniList doesn't have (from MyAnimeList) -->
+                            <section v-if="malExtrasOf(selectedAnime).length" class="mt-12">
+                                <h3 class="font-display font-semibold text-ink text-xl">Only on MyAnimeList</h3>
+                                <p class="text-xs text-sub mt-1 mb-4">Related entries AniList doesn't have. They open on MyAnimeList (they can't go on your list here).</p>
+                                <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
+                                    <a v-for="x in malExtrasOf(selectedAnime)" :key="x.malId" :href="x.url" target="_blank" rel="noopener" class="w-32 shrink-0 text-left group">
+                                        <div class="poster"><img v-if="x.image" :src="x.image" class="art" loading="lazy" decoding="async" alt=""><span v-else class="absolute inset-0 flex items-center justify-center text-mute"><i class="fa-solid fa-film text-xl"></i></span></div>
+                                        <p class="font-mono text-[9px] tracking-widest uppercase font-bold text-lilac mt-2.5">{{ x.relation }}<span v-if="x.kind" class="text-mute"> · {{ x.kind }}</span></p>
+                                        <p class="text-xs text-ink font-semibold line-clamp-2 mt-0.5 group-hover:text-lilac">{{ malExtraTitle(x) }}</p>
+                                        <p class="text-[10px] text-mute mt-0.5">{{ [x.episodes && (x.episodes + (x.episodes === 1 ? ' ep' : ' eps')), x.year].filter(Boolean).join(' · ') }} <i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5"></i></p>
+                                    </a>
                                 </div>
                             </section>
 
@@ -3226,6 +3240,13 @@
                     <span class="min-w-0 flex-grow truncate text-left">Liked songs</span>
                     <span v-if="plPicker.list && pickerLiked" class="font-mono text-[10px] text-volt shrink-0">{{ pickerLiked }}/{{ plPicker.list.length }}</span>
                     <i class="fa-solid shrink-0 text-[12px]" :class="pickerLiked === (plPicker.list ? plPicker.list.length : 1) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
+                </button>
+                <!-- v3.4 straight into In Love (favourites) -->
+                <button @click="pickerLove" class="qa-row mx-1.5 !w-auto" :class="{ 'bg-overlay': pickerLoved === (plPicker.list ? plPicker.list.length : 1) }" :title="!plPicker.list && pickerLoved ? 'Back to Liked' : 'Add to In Love'">
+                    <span class="pl-pick-art pl-love"><i class="fa-solid fa-star"></i></span>
+                    <span class="min-w-0 flex-grow text-left"><span class="block truncate">In Love</span><span class="block text-[10px] text-mute">your favourites</span></span>
+                    <span v-if="plPicker.list && pickerLoved" class="font-mono text-[10px] text-volt shrink-0">{{ pickerLoved }}/{{ plPicker.list.length }}</span>
+                    <i class="fa-solid shrink-0 text-[12px]" :class="pickerLoved === (plPicker.list ? plPicker.list.length : 1) ? 'fa-circle-check text-volt' : 'fa-circle-plus text-mute'"></i>
                 </button>
                 <div class="h-px bg-line mx-2 my-1"></div>
                 <p v-if="plMissing" class="px-3 pb-2 text-xs text-sub">Playlists need the latest database update: run the whole supabase_setup.sql in Supabase again.</p>

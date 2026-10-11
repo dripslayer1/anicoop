@@ -1270,3 +1270,18 @@ What wasn't changed (small, by design, or needs your dashboard):
 - **Filters** under it: your list status (All anime, On my list, Watching, Plan to watch, On hold, Repeating,
   Completed, Dropped, Not on my list), genre and type (TV, movie, ONA…). They work on the columns and on search results.
   The old "Only my list" switch is now "On my list" in the status filter.
+
+## v3.4 — movie numbers, full English names, MyAnimeList-only entries, In Love from the +
+
+**No SQL. Redeploy the Edge Function** (`supabase/functions/igdb/index.ts`, same as before) for the MyAnimeList row;
+it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Hard-refresh: the footer says **v3.4**.
+
+- **Movie numbers**: AniList keeps "Detective Conan Movie 13" in a movie's other names, not its title. Movies with a
+  number there show it on the poster ("MOVIE 13"), on the title page (Movie number) and on the Franchise row.
+- **Full English names**: with English titles on, when AniList's English name is cut short and the full name is English
+  words (in katakana in the Japanese title), the full name is used: "Yu-Gi-Oh!: Duel Monsters" instead of "Yu-Gi-Oh!".
+  Japanese subtitles aren't added ("Suzume" stays "Suzume"). Checked on the 1,500 most popular anime: only Yu-Gi-Oh!
+  and Hamatora change. Lists pick it up on the daily list check.
+- **Only on MyAnimeList**: an anime's title page lists related entries (specials, OVAs, movies…) that MyAnimeList has
+  and AniList doesn't, opening on MyAnimeList. They can't go on your list (anicoop's lists use AniList ids).
+- **In Love from the +**: the song + has "In Love" (your favourites) under "Liked songs". Tap again to go back to Liked.
