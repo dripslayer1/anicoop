@@ -1285,3 +1285,13 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
 - **Only on MyAnimeList**: an anime's title page lists related entries (specials, OVAs, movies…) that MyAnimeList has
   and AniList doesn't, opening on MyAnimeList. They can't go on your list (anicoop's lists use AniList ids).
 - **In Love from the +**: the song + has "In Love" (your favourites) under "Liked songs". Tap again to go back to Liked.
+
+## v3.5 — Play next
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.5**.
+
+- The **+** on a song has **Play next** at the top: the song plays right after the one playing now. Pick more and they
+  play in the order you picked them, before the rest of the queue (also on shuffle). With several songs selected, all
+  of them go in. When nothing is playing it says **Play now**.
+- The queue (the list button on the player) shows them under **Next up**: tap one to play it now, ✕ to take it out.
+- It's only for now: nothing is saved, it's gone when you close the player or leave the page.

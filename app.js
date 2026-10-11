@@ -5053,6 +5053,7 @@ createApp({
         };
         // v3.4 "In Love" (your favourite songs) from the + too, so a new song doesn't need Liked first and then the Lists page;
         // one song: In Love ⇄ back to Liked
+        const pickerPlayNext = () => { const songs = pickerSongs(); closePlPicker(); playNextSongs(songs); };
         const pickerLoved = computed(() => pickerSongs().filter(s => soloEntry(s.id)?.status === 'WATCHING').length);
         const pickerLove = async () => {
             const songs = pickerSongs(); if (!songs.length) return;
@@ -5117,7 +5118,7 @@ createApp({
         const player = reactive({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
             vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
-            queue: [], qi: -1, shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
+            queue: [], qi: -1, next: [], shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
             full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '',
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
@@ -5243,7 +5244,7 @@ createApp({
             return candCache.get(k);
         };
         const prefetchNextSong = () => {
-            const n = player.queue[player.qi + 1]; if (!n || !player.full || n.pending) return;
+            const n = player.next[0] || player.queue[player.qi + 1]; if (!n || !player.full || n.pending) return;
             setTimeout(() => { if (!candCache.has(songYtKey(n))) ytCandidates(n).catch(() => {}); }, 2500);
         };
         const ytCandidatesRaw = async (s) => {
@@ -5353,6 +5354,19 @@ createApp({
             player.qi = player.queue.findIndex(x => sameSong(x, s));
             startSong(s);
         };
+        // v3.5 "Play next": songs you pick play right after this one, in the order you picked them, before the rest of the
+        // queue (also on shuffle). Only for now: nothing is saved, it's gone when you close the player or the page.
+        const playNextSongs = (songs) => {
+            songs = (songs || []).filter(s => s?.type === 'SONG');
+            if (!songs.length || songBlocked()) return;
+            if (!player.song) { playPreview(songs[0], songs); return; }   // nothing playing: they just play
+            const add = songs.filter(s => !sameSong(s, player.song));
+            if (!add.length) { showToast('That song is playing now'); return; }
+            player.next.push(...add);
+            showToast(add.length === 1 ? `“${add[0].title?.romaji || 'Song'}” plays next` : `${add.length} songs play next`);
+        };
+        const playNextNow = (i) => { const [s] = player.next.splice(i, 1); if (!s) return; player.queue.splice(player.qi + 1, 0, s); backStack = backStack.map(x => x > player.qi ? x + 1 : x); playQueueAt(player.qi + 1); };
+        const removeNext = (i) => { player.next.splice(i, 1); };
         const playQueueAt = (i) => { const s = player.queue[i]; if (!s) return; if (player.qi >= 0) backStack.push(player.qi); player.qi = i; startSong(s); };
         // lock screen / headphone buttons: "play" always plays and "pause" always pauses (a toggle could do the opposite
         // when the phone paused the song by itself)
@@ -5380,6 +5394,7 @@ createApp({
         };
         const nextSong = (auto = false) => {
             if (auto && player.repeat === 'one') { newListen(); seekTo(0); if (player.mode === 'yt') ytP?.playVideo(); else audio.play().catch(() => {}); return; }
+            if (player.next.length) { playNextNow(0); return; }   // v3.5 the songs you picked to play next go first
             const i = nextIndex(auto);
             if (i < 0 || (!auto && player.queue.length < 2 && player.repeat !== 'all')) { if (auto) { player.playing = false; player.t = 0; } else seekTo(player.dur - 0.5); return; }
             playQueueAt(i);
@@ -5408,7 +5423,7 @@ createApp({
         const setVolume = (v) => { const n = clamp(Number(v) || 0, 0, 1); player.vol = n; player.muted = n <= 0.01; if (n > 0.01) lastVol = n; applyVolume(); saveVol(); };
         const toggleMute = () => { if (player.muted && player.vol <= 0.01) player.vol = lastVol; player.muted = !player.muted; applyVolume(); saveVol(); };
         const isPlaying = (s) => !!s && player.playing && sameSong(player.song, s);
-        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1 }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
+        const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1, next: [] }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
         // lock screen / keyboard media keys
         // ---- plays: a song counts as played after 30 seconds of listening (half of a 30-second preview) ----
@@ -7099,8 +7114,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.4';
+        const APP_VERSION = '3.5';
         const WHATS_NEW = {
+            '3.5': [
+                { icon: 'fa-forward-step', t: 'Play next', d: 'Tap + on any song → “Play next”: it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
+            ],
             '3.4': [
                 { icon: 'fa-hashtag', t: 'Movie numbers', d: 'Movies in a long series (like Detective Conan) show their number: “MOVIE 13” on the poster and on the title page.' },
                 { icon: 'fa-font', t: 'Full English names', d: 'With English titles on, shows whose English name is cut short get the full one, like “Yu-Gi-Oh!: Duel Monsters” instead of “Yu-Gi-Oh!”.' },
@@ -9507,7 +9525,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (entity.value && (entity.value.type === 'artist' || entity.value.type === 'album')) entity.value = null;
             music.open = false; player.queueOpen = false;
             if (rankTab.me === 'SONG') rankTab.me = 'ANIME'; if (rankTab.them === 'SONG') rankTab.them = 'ANIME'; if (favTab.me === 'SINGER') favTab.me = 'VA';
-            if (player.song) { pauseSong(); player.song = null; player.queue = []; player.qi = -1; }
+            if (player.song) { pauseSong(); player.song = null; player.queue = []; player.qi = -1; player.next = []; }
         });
         watch(section, (v) => { if (v === 'songs' && songsCfg.ready && !songsOn.value) section.value = 'anime'; });
         const setAdultEveryone = (on) => { adultConfig.everyone = on; saveAdultConfig(); };
@@ -11391,7 +11409,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
