@@ -2219,3 +2219,8 @@ button.buddy-chip:hover { color: rgb(var(--c-lilac)); border-color: rgb(var(--c-
 
 /* v3.1 "Liked songs" in the + picker */
 .pl-like { background: linear-gradient(135deg, #e11d48, #a855f7) !important; color: #fff; }
+
+/* v3.2 invites icon: its own badge colour, and a short pulse when a new invite comes in */
+.inv-dot { background: rgb(var(--c-lilac)) !important; }
+@keyframes inv-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--c-lilac) / .55); } 50% { box-shadow: 0 0 0 7px rgb(var(--c-lilac) / 0); } }
+.inv-pulse { animation: inv-pulse 1.2s ease-out 4; }

@@ -1249,3 +1249,14 @@ What wasn't changed (small, by design, or needs your dashboard):
 - The **+** on a song (song lists, albums, charts) opens "Save to" with **Liked songs** at the top: tap it to like the
   song (it goes on your list as Liked), tap again to unlike it. With several songs selected it likes all of them.
   Your playlists are below it like before.
+
+## v3.2 — invites get their own icon
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.2**.
+
+- A new **✉ Invites** button next to the bell, with its own (purple) count: friend requests, watch buddy requests and
+  invites to watch / play something together. Accept, join or say no right in the panel; tap a name or a poster to
+  open it. The button pulses for a moment when a new invite comes in.
+- The bell no longer lists those invites (and doesn't count them), so they can't get buried under episode alerts and
+  likes. If invites are waiting, the bell panel has a link to them. The Friends button no longer has the request count
+  (it moved to ✉); the requests are still in the Friends panel too.

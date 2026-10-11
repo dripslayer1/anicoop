@@ -3676,7 +3676,24 @@ createApp({
 
         // ---------- notifications ----------
         const notifOpen = ref(false);
-        const unreadCount = computed(() => notifications.value.filter(n => !n.read).length);
+        // v3.2 invites (friend requests, watch buddy requests, watch / play together) have their own icon + panel, so
+        // they don't get lost between episode alerts and likes; the bell shows everything else
+        const INVITE_KINDS = ['follow', 'buddy_request', 'party_invite'];
+        const bellNotifs = computed(() => notifications.value.filter(n => !INVITE_KINDS.includes(n.kind)));
+        const unreadCount = computed(() => bellNotifs.value.filter(n => !n.read).length);
+        const invOpen = ref(false);
+        const invPulse = ref(false);
+        const invCount = computed(() => partyInvites.value.length + pendingRequests.value.length + buddyRequests.value.length);
+        const toggleInvites = () => {
+            invOpen.value = !invOpen.value; notifOpen.value = false; friendsOpen.value = false; invPulse.value = false;
+            if (!invOpen.value) return;
+            const unread = notifications.value.filter(n => !n.read && INVITE_KINDS.includes(n.kind));
+            if (!unread.length) return;
+            unread.forEach(n => { n.read = true; });
+            sb.from('notifications').update({ read: true }).eq('user_id', uid()).eq('read', false).in('kind', INVITE_KINDS).then(() => {}, () => {});
+        };
+        const openInviteTitle = (p) => { invOpen.value = false; fetchAnimeDetails(p.anime); };
+        const openInviter = (id) => { invOpen.value = false; openUser(id); };
         const fetchNotifications = async () => {
             const { data } = await sb.from('notifications').select('*').eq('user_id', uid()).order('created_at', { ascending: false }).limit(60);
             notifications.value = data || [];
@@ -3772,6 +3789,7 @@ createApp({
             if (chatting) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); return; }
             if (['message', 'message_request', 'group_message'].includes(n.kind)) { showMsgPop(n); pingSound(); }   // v2.1
             else showToast(text);
+            if (INVITE_KINDS.includes(n.kind)) { invPulse.value = true; setTimeout(() => { invPulse.value = false; }, 6000); }   // v3.2
             if (n.kind.startsWith('comment') && selectedAnime.value?.id === n.media_id) fetchComments();
             if (n.kind.startsWith('party_')) refreshPartiesSoon();
             if (n.kind === 'playlist_added') fetchPlaylists();
@@ -3788,7 +3806,7 @@ createApp({
         };
         const highlightActivity = ref(null);
         const openNotification = async (n) => {
-            notifOpen.value = false;
+            notifOpen.value = false; invOpen.value = false;
             if (!n.read) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); }
             if (n.kind === 'message' || n.kind === 'message_request') { openChat(n.actor_id); return; }
             if (n.kind === 'group_message') { openGroup(n.group_id); return; }
@@ -6297,7 +6315,7 @@ createApp({
         const hs = reactive({ open: false, q: '', results: [], loading: false });
         let hsReq = 0;
         const toggleHeaderSearch = async () => {
-            sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false;
+            sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false; invOpen.value = false;
             hs.open = !hs.open;
             if (!hs.open) return;
             await nextTick();
@@ -6328,7 +6346,7 @@ createApp({
             openSearch().then(() => debouncedSearch());
         };
         const openSearch = async () => {
-            sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false;
+            sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false; invOpen.value = false;
             const already = currentAppView.value === 'tracker' && activeTab.value === 'browse' && !selectedAnime.value && !viewUserId.value && !entity.value;
             if (!already) navigate(() => {
                 if (activeTab.value !== 'browse') resetSelection();
@@ -6374,7 +6392,7 @@ createApp({
             editForm.value = emptyForm();
             randomOpen.value = false;
             trailerOf.value = null;
-            notifOpen.value = false;
+            notifOpen.value = false; invOpen.value = false;
             closeSheet();
             currentAppView.value = s.view || 'home';
             if (s.section && SECTIONS[s.section]) section.value = s.section;
@@ -6983,7 +7001,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 let n = i;
                 while (n >= 0 && n < TOUR_STEPS.length) {
                     const st = TOUR_STEPS[n];
-                    sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false; hs.open = false;
+                    sectionMenu.value = false; notifOpen.value = false; friendsOpen.value = false; invOpen.value = false; hs.open = false;
                     if (extOpen.value && !st.copy && !st.paste && !st.interactive) extOpen.value = false;
                     if (!st.hero || st.manga) tourScene(st);
                     if (st.go) { try { await st.go(); } catch {} }
@@ -7032,8 +7050,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.1';
+        const APP_VERSION = '3.2';
         const WHATS_NEW = {
+            '3.2': [
+                { icon: 'fa-envelope', t: 'Invites have their own icon', d: 'Friend requests, watch buddy requests and invites to watch or play something together now go to the ✉ next to the bell, with their own count, so they don’t get lost between episode alerts and likes. Answer them right there.' },
+            ],
             '3.1': [
                 { icon: 'fa-heart', t: 'Like from the +', d: 'The + on a song now starts with “Liked songs”: tap it to like the song (tap again to unlike), or pick a playlist like before.' },
             ],
@@ -11205,7 +11226,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
             if (!bootNav) try { history.replaceState(navState(), ''); } catch {}
             window.addEventListener('popstate', onPopState);
-            document.addEventListener('click', () => { hs.open = false; quickMenuFor.value = null; sectionMenu.value = false; adminMenu.value = false; notifOpen.value = false; friendsOpen.value = false; });
+            document.addEventListener('click', () => { hs.open = false; quickMenuFor.value = null; sectionMenu.value = false; adminMenu.value = false; notifOpen.value = false; friendsOpen.value = false; invOpen.value = false; });
             document.addEventListener('keydown', (e) => {
                 if (introMode.value !== 'done') { skipIntro(); return; }
                 if (e.key !== 'Escape') return;
@@ -11224,6 +11245,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 else if (randomOpen.value) randomOpen.value = false;
                 else if (editForm.value.anime) closeEditor();
                 else if (notifOpen.value) notifOpen.value = false;
+                else if (invOpen.value) invOpen.value = false;
                 else if (friendsOpen.value) friendsOpen.value = false;
                 else if (selectMode.value) toggleSelectMode();
                 else if (quickMenuFor.value) quickMenuFor.value = null;
@@ -11269,7 +11291,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             installPrompt, installApp, dismissInstall,
             trailerOf, trailerUrl, trailerExternal, playTrailer, closeTrailer,
 
-            notifications, notifOpen, unreadCount, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
+            notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
             selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
