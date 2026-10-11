@@ -3246,11 +3246,13 @@
                     <div class="min-w-0"><p class="font-mono text-[9px] font-bold tracking-[.16em] text-mute">SAVE TO</p><p class="text-[13px] font-semibold text-ink truncate">{{ plPicker.list ? plPicker.list.length + ' songs' : plPicker.song.title?.romaji }}</p></div>
                 </div>
                 <!-- v3.5 play it right after the song that's playing -->
+                <template v-if="pickerCanNext">
                 <button @click="pickerPlayNext" class="qa-row mx-1.5 !w-auto">
                     <span class="pl-pick-art pl-next"><i class="fa-solid fa-forward-step"></i></span>
                     <span class="min-w-0 flex-grow text-left"><span class="block truncate">{{ player.song ? 'Play next' : 'Play now' }}</span><span v-if="player.song" class="block text-[10px] text-mute truncate">after {{ player.song.title?.romaji }}<template v-if="player.next.length"> + {{ player.next.length }} more</template></span></span>
                 </button>
                 <div class="h-px bg-line mx-2 my-1"></div>
+                </template>
                 <!-- v3.1 like it from the + too -->
                 <button @click="pickerLike" class="qa-row mx-1.5 !w-auto" :class="{ 'bg-overlay': pickerLiked === (plPicker.list ? plPicker.list.length : 1) }" :title="!plPicker.list && pickerLiked ? 'Unlike' : 'Like'">
                     <span class="pl-pick-art pl-like"><i class="fa-solid fa-heart"></i></span>
@@ -4703,6 +4705,8 @@
                         <p class="font-mono text-[11px] text-sub mt-0.5"><template v-if="sheetAnime.type === 'SONG'">▶ {{ soloEntry(sheetAnime.id)?.progress || 0 }} plays</template><template v-else>{{ soloEntry(sheetAnime.id)?.progress || 0 }}/{{ sheetAnime.episodes || '?' }} {{ UNIT.unit.toLowerCase() }}</template><span v-if="soloEntry(sheetAnime.id)"> · {{ STATUS_LABELS[soloEntry(sheetAnime.id).status] }}</span></p>
                     </div>
                 </div>
+                <!-- v3.5 songs: play it after the one that's playing -->
+                <button v-if="sheetAnime.type === 'SONG'" @click="sheetAction('NEXT')" class="w-full flex items-center justify-center gap-2 py-3.5 mb-2 rounded-2xl bg-raised text-ink font-semibold active:scale-[.98] transition-transform"><i class="fa-solid fa-forward-step text-sm text-volt"></i> {{ player.song ? 'Play next' : 'Play now' }}</button>
                 <button @click="sheetAction('EP')" class="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-volt text-onvolt font-bold active:scale-[.98] transition-transform"><span class="font-mono">+1</span> {{ UNIT.ep }}</button>
                 <div class="grid grid-cols-3 gap-2 mt-2">
                     <button v-for="s in ['PLANNING','WATCHING','COMPLETED']" :key="s" @click="sheetAction(s)" :class="soloEntry(sheetAnime.id)?.status === s ? 'bg-overlay ring-1 ring-line2 text-ink' : 'bg-raised text-sub'" class="flex flex-col items-center gap-2 py-3.5 rounded-2xl active:scale-95 transition-transform">
