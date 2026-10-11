@@ -1353,3 +1353,16 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   upload must be by one of the song's artists (all of them count, not only the first) and an official track must be
   as long as the song (± 15 s; music videos ± 35 s). If nothing fits, the 30-second preview plays instead.
 - The search also names all the artists, and the remembered picks from before are forgotten (they could be wrong ones).
+
+## v1.2 — every song you play counts
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.2**.
+
+- Plays only counted for songs on your list; songs you just played (from search, charts…) kept their count in that
+  browser, so profiles showed **0 songs / 0 plays**, for you and for friends. Now a song you listen to for 30 seconds
+  goes on your list as **Played** with its plays (no status: it's not in In Love / Liked / Disliked and not on the
+  activity feed). Your profile's Songs and Plays count them, and friends see them.
+- Plays the browser kept from before are moved onto your list a few seconds after the page opens (on the browser you
+  played them in; the song's details come from your History).
+- **Lists → Songs → Played** shows them (not mixed into All). Liking a played song keeps its plays; un-liking a song
+  you've played keeps it as Played instead of taking it off your list.
