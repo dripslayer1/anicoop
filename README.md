@@ -1290,7 +1290,8 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
 
 **No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.5**.
 
-- The **+** on a song has **Play next** at the top: the song plays right after the one playing now. Pick more and they
+- **Play next** on any song: in the hover bar of a song card (next to ▶), in the phone menu of a song, and at the top
+  of the song + menu (not for the song that's already playing): the song plays right after the one playing now. Pick more and they
   play in the order you picked them, before the rest of the queue (also on shuffle). With several songs selected, all
   of them go in. When nothing is playing it says **Play now**.
 - The queue (the list button on the player) shows them under **Next up**: tap one to play it now, ✕ to take it out.
@@ -1312,3 +1313,21 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   take a long time or stop when AniList is busy, so the numbers didn't show. Now, 4 seconds after the page opens, only
   the movies without a number (and shows with a cut-short English name) are looked up, 50 per request, and saved.
   Titles that have no number (like the Conan vs. Kid compilations) are remembered and not asked again.
+
+## v1.0.1 (after v3.5.2: numbering starts over) — Play next on song cards
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.0.1**.
+
+- The part of v3.5 that put **Play next** in the song card's hover bar (⏭ after ▶) and at the top of the phone menu
+  didn't make it into the v3.5 merge; it's here now. The + menu opened on the song that's already playing no longer
+  offers Play next.
+
+## v1.0.2 — leave watching together any time
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.0.2**.
+
+- **Stop watching together** (games: playing) is in the **+** menu of the title's card when you're in a watch party on
+  it, in the phone menu, and the title page's leave button now says **Leave**. The title stays on your list; the
+  friends' pictures come off it. No more taking it off your list and adding it again.
+- Leaving while your invite isn't answered yet (nobody else joined): the open invites are taken back too, so nobody can
+  join a party that has no one in it.

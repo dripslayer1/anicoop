@@ -1999,6 +1999,10 @@ const plPicker = reactive({ open: false, song: null, list: null, anchor: null, x
 // v1.5 your Steam achievements per game (Steam app id → { done, total }): filled by the profile total and by game pages,
 // shown on your game posters
 const achByApp = reactive({});
+// v3.5 the player lives in the app's setup; song menus outside it (the card's hover bar) reach "Play next" through here
+const songHooks = { playNext: null };
+// v1.0.2 the same for watch together: the card's + menu can tell you're in a party on a title and leave it
+const partyHooks = { inParty: null, leave: null };
 const openPlPicker = (song, e) => {
     const list = Array.isArray(song) ? song.filter(Boolean) : null;
     if (list ? !list.length : !song) return;
@@ -2059,6 +2063,7 @@ const QuickAdd = {
         const songItems = computed(() => {
             const e = props.entry, list = [];
             if (props.canPlay) list.push({ k: 'PLAY', icon: 'fa-play', label: 'Play', play: true });
+            list.push({ k: 'NEXT', icon: 'fa-forward-step', label: 'Play next' });   // v3.5
             ['WATCHING', 'COMPLETED', 'DROPPED'].forEach(st => list.push({ k: st, icon: SONG_ICONS[st], label: STATUS_LABELS[st], color: STATUS_COLORS[st], on: e?.status === st }));
             list.push({ k: 'PLAYLIST', icon: 'fa-circle-plus', label: 'Add to playlist…' });
             list.push({ k: 'EDIT', icon: 'fa-ellipsis', label: 'Edit & more…' });
@@ -2067,6 +2072,8 @@ const QuickAdd = {
         });
         const pick = (k, ev) => {
             if (k === 'PLAY') emit('play');
+            else if (k === 'NEXT') songHooks.playNext?.([props.anime]);
+            else if (k === 'LEAVE') partyHooks.leave?.(props.anime);
             else if (k === 'PLAYLIST') openPlPicker(props.anime, ev);
             else if (k === 'EDIT') emit('edit');
             else emit('action', k);
@@ -2077,7 +2084,8 @@ const QuickAdd = {
         const labelOf = (s) => (LABEL_SETS[props.anime?.type] || LABEL_SETS.ANIME).labels[s] || s;
         const marks = computed(() => { const t = props.anime?.type || 'ANIME'; return [...(REWISH_TYPES.includes(t) ? ['REWISH'] : []), ...(ROTATION_TYPES.includes(t) ? ['ROTATION'] : [])]; });
         const MARK_ICONS = { REWISH: 'fa-rotate-right', ROTATION: 'fa-arrows-spin' };
-        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, FLAG_OF, MARK_ICONS, REPEAT_TYPES, PARTY_TYPES, isRestart, btn, menu, pos, enter, leave, shut, isSong, songItems, pick, labelOf, marks };
+        const inParty = computed(() => !!props.anime?.id && !!partyHooks.inParty?.(props.anime.id));
+        return { STATUS_COLORS, STATUS_LABELS, UNIT, fmtChapter, lastChapterOf, MAX_REPEATS, FLAG_OF, MARK_ICONS, REPEAT_TYPES, PARTY_TYPES, isRestart, btn, menu, pos, enter, leave, shut, isSong, songItems, pick, labelOf, marks, inParty };
     },
     unmounted() { this.shut(); },
     template: `
@@ -2116,6 +2124,7 @@ const QuickAdd = {
                     </button>
                     <div class="h-px bg-line my-1 mx-1"></div>
                     <button v-if="PARTY_TYPES.includes(anime.type || 'ANIME')" @click="pick('PARTY')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-user-plus text-[11px] w-2.5"></i> {{ anime.type === 'GAME' ? 'Play with friends…' : 'Watch with friends…' }}</button>
+                    <button v-if="inParty" @click="pick('LEAVE')" class="qa-row text-sub hover:text-ink" title="It stays on your list"><i class="fa-solid fa-right-from-bracket text-[11px] w-2.5"></i> {{ anime.type === 'GAME' ? 'Stop playing together' : 'Stop watching together' }}</button>
                     <button @click="pick('EDIT')" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-pen text-[11px] w-2.5"></i> Edit & more…</button>
                     <button v-if="onList" @click="pick('REMOVE')" class="qa-row text-rose-300 hover:!bg-rose-500/10"><i class="fa-solid fa-trash-can text-[11px] w-2.5"></i> Remove from all</button>
                 </div>
@@ -3626,21 +3635,30 @@ createApp({
         // your usual groups on your profile: tap one to see what you watch with them
         const openGroupList = (ids) => { listWith.value = [...ids]; strictSolo.value = false; listFilterStatus.value = 'ALL'; openTracker('solo'); };
         watch(activeTab, (t) => { if (t === 'coop') activeTab.value = 'solo'; });   // (an old history entry from the squads page)
-        const cancelInvite = async (partyId, userId) => {
+        const cancelInvite = async (partyId, userId, quiet = false) => {
             const p = parties.value.find(x => x.id === partyId); if (!p) return;
             const { error } = await sb.rpc('party_cancel', { pid: p.id, member: userId });
             if (error) { showToast('Could not take it back: ' + error.message, 'error'); return; }
             p.members = p.members.filter(m => !(m.user_id === userId && m.state === 'invited'));
-            showToast(`Took back the invite for ${personOf(userId).username}`);
+            if (!quiet) showToast(`Took back the invite for ${personOf(userId).username}`);
         };
-        // leave = you're off the title's tags (it stays on your list)
+        // leave = you're off the title's tags (it stays on your list). v1.0.2: any time, also while your invite isn't
+        // answered yet: when nobody else has joined, the open invites are taken back first (left alone, the friend could
+        // still say yes to a party with nobody in it; party_cancel only works while you're still in it)
         const leaveParty = async (a) => {
             const ps = (partiesByMedia.value.get(a.id) || []);
             if (!ps.length) return;
-            if (!(await askConfirm({ title: `Stop watching ${titleOf(a)} together?`, body: 'It stays on your list; your friends’ pictures come off it and they carry on without you.', ok: 'Stop watching together', danger: false }))) return;
-            for (const p of ps) await partyRespond(p, 'left');
-            showToast(`${titleOf(a)} is just yours now`);
+            const me = uid(), game = a.type === 'GAME';
+            const lone = ps.filter(p => !p.members.some(m => m.user_id !== me && m.state === 'joined') && p.members.some(m => m.state === 'invited'));
+            const body = 'It stays on your list; your friends’ pictures come off it' + (lone.length ? ' and the invites nobody answered yet are taken back.' : ' and they carry on without you.');
+            if (!(await askConfirm({ title: `Stop ${game ? 'playing' : 'watching'} ${titleOf(a)} together?`, body, ok: game ? 'Stop playing together' : 'Stop watching together', danger: false }))) return;
+            for (const p of lone) for (const m of p.members.filter(x => x.state === 'invited')) await cancelInvite(p.id, m.user_id, true);
+            let ok = true;
+            for (const p of ps) ok = (await partyRespond(p, 'left')) && ok;
+            if (ok) showToast(`${titleOf(a)} is just yours now`);
         };
+        partyHooks.inParty = (id) => (partiesByMedia.value.get(id) || []).length > 0;
+        partyHooks.leave = leaveParty;
         // the people box on a title's page (everyone who was ever in it: dropped and left too)
         const PARTY_STATE_LABEL = { joined: 'Watching with you', invited: 'Invited', dropped: 'Dropped', left: 'Left' };
         const detailParty = computed(() => {
@@ -5053,6 +5071,8 @@ createApp({
         };
         // v3.4 "In Love" (your favourite songs) from the + too, so a new song doesn't need Liked first and then the Lists page;
         // one song: In Love ⇄ back to Liked
+        // (not for the song that's playing: opened from the player bar's +)
+        const pickerCanNext = computed(() => !!plPicker.list || !player.song || !sameSong(plPicker.song, player.song));
         const pickerPlayNext = () => { const songs = pickerSongs(); closePlPicker(); playNextSongs(songs); };
         const pickerLoved = computed(() => pickerSongs().filter(s => soloEntry(s.id)?.status === 'WATCHING').length);
         const pickerLove = async () => {
@@ -5365,6 +5385,7 @@ createApp({
             player.next.push(...add);
             showToast(add.length === 1 ? `“${add[0].title?.romaji || 'Song'}” plays next` : `${add.length} songs play next`);
         };
+        songHooks.playNext = playNextSongs;
         const playNextNow = (i) => { const [s] = player.next.splice(i, 1); if (!s) return; player.queue.splice(player.qi + 1, 0, s); backStack = backStack.map(x => x > player.qi ? x + 1 : x); playQueueAt(player.qi + 1); };
         const removeNext = (i) => { player.next.splice(i, 1); };
         const playQueueAt = (i) => { const s = player.queue[i]; if (!s) return; if (player.qi >= 0) backStack.push(player.qi); player.qi = i; startSong(s); };
@@ -6508,7 +6529,9 @@ createApp({
             const a = sheetAnime.value; if (!a) return;
             if (action === 'EDIT') { closeSheet(); openEditor(a); return; }
             if (action === 'PARTY') { closeSheet(); openPartyDraft(a); return; }
+            if (action === 'LEAVE') { closeSheet(); leaveParty(a); return; }   // v1.0.2
             if (action === 'REMOVE') { closeSheet(); removeEverywhere(a); return; }
+            if (action === 'NEXT') { closeSheet(); playNextSongs([a]); return; }   // v3.5
             quickSolo(a, action);
             if (action !== 'EP') closeSheet();
         };
@@ -7114,8 +7137,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.5.2';
+        const APP_VERSION = '1.0.2';
         const WHATS_NEW = {
+            '1.0.2': [
+                { icon: 'fa-right-from-bracket', t: 'Leave watching together any time', d: '“Stop watching together” is in the + menu of the title’s card (and the phone menu), and a labelled Leave button on its page. It stays on your list. If nobody said yes yet, your invites are taken back too.' },
+            ],
+            '1.0.1': [
+                { icon: 'fa-forward-step', t: 'Play next on song cards', d: 'Hover the + on any song card: ⏭ Play next is right after ▶. On a phone, tap the + and it’s at the top of the menu.' },
+            ],
             '3.5.2': [
                 { icon: 'fa-hashtag', t: 'Movie numbers, for real this time', d: 'Movies already on your list get their number a few seconds after the page opens, even on a big list.' },
             ],
@@ -7123,7 +7152,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 { icon: 'fa-hashtag', t: 'Movie numbers on your lists', d: 'Movies that were already on your list (like the Detective Conan movies) now get their number right away, instead of after the next daily list check.' },
             ],
             '3.5': [
-                { icon: 'fa-forward-step', t: 'Play next', d: 'Tap + on any song → “Play next”: it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
+                { icon: 'fa-forward-step', t: 'Play next', d: '“Play next” on any song (the ⏭ in a song card’s menu, or the + on a song row): it plays right after the current song. Add more and they play in that order, before the rest of the queue. It’s only for now and isn’t saved.' },
             ],
             '3.4': [
                 { icon: 'fa-hashtag', t: 'Movie numbers', d: 'Movies in a long series (like Detective Conan) show their number: “MOVIE 13” on the poster and on the title page.' },
@@ -11456,7 +11485,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, pickerCanNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
@@ -11480,7 +11509,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             listFilterStatus, listSearchQuery, filteredGroupedList, statusCounts, listFiltersOn, clearListFilters,
             groupSeasons, seriesOn, seriesState, listSeries, seriesSummary, retrySeries, compareQ, compareRows, compareSeries, compareCount,
             togetherCount, plMine, plPeople, plShared, plInvite, plInviteList, plInviteFriends, openPlInvite, togglePlMember, leavePlaylist, groupPicBusy, changeGroupPic, chatQ, chatFriendHits, chatNewFriends, chatOthers, openChatHit, REPEAT_TYPES,
-            listFormat, listFormats, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
+            listFormat, listFormats, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
             debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails,             profileStats, profileStatCards, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
