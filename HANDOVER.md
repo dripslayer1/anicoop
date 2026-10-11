@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.0.2'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.0.2'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -470,6 +470,7 @@ These are cumulative; the README has one section per version.
 - **v3.5.2** (no SQL): `fillNames` (4 s after sign-in): list titles that are MOVIE without `mn`, or have a cut-short English name without `title.full`, get `id format synonyms title` from AniList (50 per request, normal lane) and only those rows are saved (keeping `updated_at`). Ids asked once are kept in `anicoop_namefill_v1:<id>`.
 - **v1.0.1** (after v3.5.2; the owner restarted the numbering, the second time after v10.7.1 → v1.0) (no SQL): Play next in QuickAdd's song bar (`k: 'NEXT'` → module `songHooks.playNext`, set to `playNextSongs` in setup), the phone sheet (`sheetAction('NEXT')`), and `pickerCanNext` hides it in the picker for the song that's playing.
 - **v1.0.2** (no SQL): module `partyHooks` (`inParty(id)`, `leave(anime)`, set in setup) so QuickAdd shows "Stop watching together" (`pick('LEAVE')`); phone sheet `sheetAction('LEAVE')`; title page button labelled Leave. `leaveParty` first cancels open invites (`cancelInvite(..., quiet)`) of parties where nobody else is joined (party_cancel needs you still in it), then `party_respond('left')`.
+- **v1.1** (no SQL): lyrics (`lyr`, next to the player code): LRCLIB `/api/search` (track + artist, then q=), best by length (± 15 s of `durationMs` / YouTube length) → name → synced; `parseLrc` → `lyr.lines`; `lyrIdx` from `player.t` only in `yt` mode (previews show plain text); auto-scroll in `#lyr-box` pauses 4 s after you scroll; `lyrSeek` → `seekTo`. Cached per song id in memory (`lyrCache`).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

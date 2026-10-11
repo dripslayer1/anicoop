@@ -5445,6 +5445,57 @@ createApp({
         const toggleMute = () => { if (player.muted && player.vol <= 0.01) player.vol = lastVol; player.muted = !player.muted; applyVolume(); saveVol(); };
         const isPlaying = (s) => !!s && player.playing && sameSong(player.song, s);
         const closePlayer = () => { ++playTok; stopEngines(); try { ytP?.stopVideo?.(); } catch {} audio.removeAttribute('src'); clearInterval(ytTimer); Object.assign(player, { song: null, playing: false, loading: false, mode: null, video: false, queueOpen: false, hidden: false, queue: [], qi: -1, next: [] }); backStack = []; try { navigator.mediaSession.metadata = null; } catch {} };
+        // ---------- v1.1 lyrics, like Spotify: LRCLIB (lrclib.net, a free open lyrics database, no key) ----------
+        // Time-synced lyrics follow the song while the full song plays (YouTube): the line being sung lights up and the
+        // panel scrolls with it, and tapping a line jumps there. A 30-second preview starts somewhere in the middle of the
+        // song, so it gets the plain lyrics. Looked up once per song while the page is open.
+        const lyr = reactive({ open: false, id: null, loading: false, lines: [], plain: '', instrumental: false, none: false, err: '' });
+        const lyrCache = new Map();
+        const lyrTrack = (t) => String(t || '').replace(/\s*[([](feat|ft|with|prod)\.?\s[^)\]]*[)\]]/gi, '').replace(/\s+-\s+.*(remaster|version|edit|live|mono|stereo|mix).*$/i, '').trim();
+        const parseLrc = (txt) => String(txt || '').split('\n').flatMap(line => {
+            const tags = [...line.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)], text = line.replace(/\[[^\]]*\]/g, '').trim();
+            return tags.map(m => ({ t: Number(m[1]) * 60 + Number(m[2]), text }));
+        }).sort((x, y) => x.t - y.t);
+        const lrclib = async (params) => { const r = await fetch('https://lrclib.net/api/search?' + new URLSearchParams(params)); if (!r.ok) throw new Error('lyrics service ' + r.status); return r.json(); };
+        const findLyrics = async (s) => {
+            const artist = (s.artists || [])[0] || '', track = lyrTrack(s.title?.romaji);
+            if (!track) return null;
+            const dur = s.durationMs ? s.durationMs / 1000 : (player.mode === 'yt' && player.dur > 31 ? player.dur : 0);
+            let list = await lrclib({ track_name: track, artist_name: artist });
+            if (!list.length) list = await lrclib({ q: `${artist} ${track}` });
+            const want = normTitle(track), byName = (x) => normTitle(x.trackName) === want;
+            // the same length (± 15 s) first, else the same name; synced ones win a tie
+            let pool = dur ? list.filter(x => x.duration && Math.abs(x.duration - dur) <= 15) : list;
+            if (!pool.length) pool = list.filter(byName);
+            const score = (x) => (dur && x.duration ? Math.abs(x.duration - dur) : 0) + (x.syncedLyrics ? 0 : 4) + (byName(x) ? 0 : 6);
+            const best = [...pool].sort((x, y) => score(x) - score(y))[0];
+            return best ? { lines: best.syncedLyrics ? parseLrc(best.syncedLyrics) : [], plain: best.plainLyrics || '', instrumental: !!best.instrumental } : null;
+        };
+        const loadLyrics = async () => {
+            const s = player.song; if (!lyr.open || !s || lyr.id === s.id) return;
+            Object.assign(lyr, { id: s.id, loading: true, lines: [], plain: '', instrumental: false, none: false, err: '' });
+            try {
+                const got = lyrCache.has(s.id) ? lyrCache.get(s.id) : await findLyrics(s);
+                lyrCache.set(s.id, got);
+                if (lyr.id !== s.id) return;
+                if (!got) lyr.none = true; else Object.assign(lyr, got);
+            } catch (err) { if (lyr.id === s.id) { lyr.err = err.message || 'Could not load the lyrics'; lyr.id = null; } }
+            finally { if (lyr.id === s.id || lyr.id === null) lyr.loading = false; }
+        };
+        watch(() => [lyr.open, player.song?.id], loadLyrics);
+        const lyrSynced = computed(() => player.mode === 'yt' && lyr.lines.length > 0);
+        const lyrPlain = computed(() => (lyr.plain || lyr.lines.map(l => l.text).join('\n')).split('\n'));
+        const lyrIdx = computed(() => { if (!lyrSynced.value) return -1; const t = player.t + 0.25; let i = -1; for (let k = 0; k < lyr.lines.length && lyr.lines[k].t <= t; k++) i = k; return i; });
+        let lyrTouched = 0;   // you scrolled the lyrics yourself: they stop following for a few seconds
+        const lyrScrolled = () => { lyrTouched = Date.now(); };
+        watch(lyrIdx, (i) => nextTick(() => {
+            if (i < 0 || Date.now() - lyrTouched < 4000) return;
+            const box = document.getElementById('lyr-box'), el = document.getElementById('lyr-' + i);
+            if (box && el) box.scrollTo({ top: el.offsetTop - box.clientHeight * 0.4, behavior: 'smooth' });
+        }));
+        const lyrSeek = (l) => { if (lyrSynced.value) { lyrTouched = 0; seekTo(l.t); } };
+        const toggleLyrics = () => { lyr.open = !lyr.open; if (lyr.open) { player.queueOpen = false; player.video = false; } };
+        watch(() => player.song, (s) => { if (!s) lyr.open = false; });
         const removeFromQueue = (i) => { if (i === player.qi) return; player.queue.splice(i, 1); if (i < player.qi) player.qi--; backStack = backStack.filter(x => x !== i).map(x => x > i ? x - 1 : x); };
         // lock screen / keyboard media keys
         // ---- plays: a song counts as played after 30 seconds of listening (half of a 30-second preview) ----
@@ -5521,7 +5572,7 @@ createApp({
         // the bar takes room at the bottom: the page and every popup end above it, so it never covers a button
         watch(() => !!player.song && !player.hidden && !!currentUser.value, (on) => document.documentElement.classList.toggle('has-player', on), { immediate: true });
         // "hide" tucks the bar away (the song keeps playing); the small button in the bottom-left corner brings it back
-        const hidePlayer = () => { player.hidden = true; player.queueOpen = false; player.video = false; };
+        const hidePlayer = () => { player.hidden = true; player.queueOpen = false; player.video = false; lyr.open = false; };
         const showPlayer = () => { player.hidden = false; };
         watch(() => currentAppView.value === 'tracker', (on) => document.documentElement.classList.toggle('pbar-nav', on), { immediate: true });
         // on phones it sits right on top of the bottom tab bar, whatever that bar's real height is
@@ -7137,8 +7188,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.0.2';
+        const APP_VERSION = '1.1';
         const WHATS_NEW = {
+            '1.1': [
+                { icon: 'fa-microphone-lines', t: 'Lyrics', d: 'Tap the microphone on the player: the lyrics follow the song like on Spotify (the line being sung lights up; tap a line to jump there). 30-second previews show the plain lyrics.' },
+            ],
             '1.0.2': [
                 { icon: 'fa-right-from-bracket', t: 'Leave watching together any time', d: '“Stop watching together” is in the + menu of the title’s card (and the phone menu), and a labelled Leave button on its page. It stays on your list. If nobody said yes yet, your invites are taken back too.' },
             ],
@@ -11485,7 +11539,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         });
 
         return {
-            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, pickerLove, pickerLoved, pickerPlayNext, pickerCanNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
+            runToastAction, newEps, alertWatch, watchFromAlert, whatsNew, whatsNewItems, openWhatsNew, pickerLike, pickerLiked, lyr, lyrSynced, lyrPlain, lyrIdx, lyrScrolled, lyrSeek, toggleLyrics, pickerLove, pickerLoved, pickerPlayNext, pickerCanNext, playNextNow, removeNext, openSeason, seasonShowId, seasonIdOf, removeRun, formRestart, rateBox, saveRate, mediaNode, openShared, addShared, partyDraftGames, PARTY_SYNC, isRestart, cw, cwDown, cwMove, cwEnd, cwStyle, cwClick, cwReset, msgPops, openMsgPop, closeMsgPop, pingSound, alPull, pullAniList, safeHtml, whatsNewVersions, whatsNewStep, whatsNewNever, APP_VERSION, exportLists, shownIn, moreIn, repoScan, scanRepo, repoOk, srcStatus, extKind, extFor, extList, extSources, openExtensions, adultOn, playKind, KIND_LABEL, templatesFor,
             regionPrices, openRegionPrices, fmtUsd, plPicker, openPlPicker, closePlPicker, plPickerNew, pickerHas, pickerToggle, selectedSongs, availRows, openOnSource, tabAvail, playRelease, releasePlaying, plAdd, plAddMine, plAddToggle, music, musicLiked, musicRecent, openMusic,
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
