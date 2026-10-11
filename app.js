@@ -2663,7 +2663,7 @@ createApp({
             startPresence(); touchLastSeen();
             fetchFollows().then(() => setTimeout(checkFollowed, 6000));
             loadAniListLink(); loadMalLink();
-            setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
+            setTimeout(fillNames, 4000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
         };
         const clearUserData = () => {
             loadedUserId = null;
@@ -7114,8 +7114,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.5.1';
+        const APP_VERSION = '3.5.2';
         const WHATS_NEW = {
+            '3.5.2': [
+                { icon: 'fa-hashtag', t: 'Movie numbers, for real this time', d: 'Movies already on your list get their number a few seconds after the page opens, even on a big list.' },
+            ],
             '3.5.1': [
                 { icon: 'fa-hashtag', t: 'Movie numbers on your lists', d: 'Movies that were already on your list (like the Detective Conan movies) now get their number right away, instead of after the next daily list check.' },
             ],
@@ -11279,6 +11282,43 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             try { localStorage.setItem(HERO_KEY, JSON.stringify(pools)); } catch {}
             // fill any empty spot now; the rest refresh on the next visit
             if (heroPool.value.some(x => !x)) { const fresh = pickHero(pools); heroPool.value = heroPool.value.map((x, n) => x || fresh[n]); }
+        };
+
+        // ---------- v3.5.2 movie numbers / full English names for titles saved before v3.4 ----------
+        // The daily list check goes through the whole list in the background, so on a big list it can take long or stop
+        // when AniList is busy. This asks only for the movies without a number (and shows whose English name is cut
+        // short), one quick request per 50, and saves just those. Titles with no number are remembered, not asked again.
+        const fillNames = async () => {
+            const me = uid(); if (!me) return;
+            const TRIED_KEY = `anicoop_namefill_v1:${me}`;
+            const tried = new Set(readJSON(TRIED_KEY) || []);
+            const need = soloList.value.filter(e => e.anime?.id && isAniListType(e.anime.type) && !tried.has(e.anime.id)
+                && ((e.anime.format === 'MOVIE' && !e.anime.mn) || (fullEnglishOf(e.anime) && !e.anime.title?.full)));
+            if (!need.length) return;
+            const ids = [...new Set(need.map(e => e.anime.id))];
+            const got = new Map();
+            for (let i = 0; i < ids.length; i += 50) {
+                const chunk = ids.slice(i, i + 50);
+                try {
+                    const d = await anilist('query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { id format synonyms title { romaji english native } } } }', { ids: chunk });
+                    (d?.Page?.media || []).forEach(m => got.set(m.id, m));
+                    chunk.forEach(id => tried.add(id));
+                } catch (err) { console.warn('movie numbers: try again next time', err.message || err); break; }
+            }
+            try { localStorage.setItem(TRIED_KEY, JSON.stringify([...tried].slice(-3000))); } catch {}
+            const rows = [];
+            need.forEach(e => {
+                const m = got.get(e.anime.id); if (!m) return;
+                const anime = { ...e.anime, synonyms: m.synonyms || [], title: { ...e.anime.title, ...m.title } };
+                const mn = movieNoOf({ ...anime, format: e.anime.format || m.format }), full = fullEnglishOf(anime);
+                if (!mn && !full) return;
+                e.anime = { ...e.anime, ...(mn ? { mn } : {}), title: { ...e.anime.title, ...(full ? { full } : {}) } };   // on screen now
+                rows.push({ user_id: me, media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt });
+            });
+            if (!rows.length) return;
+            rows.forEach(r => ownWrites.set(r.media_id, Date.now()));
+            const { error } = await sb.from('list_entries').upsert(rows, { onConflict: 'user_id,media_id' });
+            if (error) { console.warn('movie numbers not saved:', error.message); rows.forEach(r => tried.delete(r.media_id)); try { localStorage.setItem(TRIED_KEY, JSON.stringify([...tried])); } catch {} }
         };
 
         // ---------- site data changes: once a day, compare the shows on your lists with AniList ----------
