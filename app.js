@@ -7122,8 +7122,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.5.2';
+        const APP_VERSION = '1.0.1';
         const WHATS_NEW = {
+            '1.0.1': [
+                { icon: 'fa-forward-step', t: 'Play next on song cards', d: 'Hover the + on any song card: ⏭ Play next is right after ▶. On a phone, tap the + and it’s at the top of the menu.' },
+            ],
             '3.5.2': [
                 { icon: 'fa-hashtag', t: 'Movie numbers, for real this time', d: 'Movies already on your list get their number a few seconds after the page opens, even on a big list.' },
             ],

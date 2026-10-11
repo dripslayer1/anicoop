@@ -1313,3 +1313,11 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   take a long time or stop when AniList is busy, so the numbers didn't show. Now, 4 seconds after the page opens, only
   the movies without a number (and shows with a cut-short English name) are looked up, 50 per request, and saved.
   Titles that have no number (like the Conan vs. Kid compilations) are remembered and not asked again.
+
+## v1.0.1 (after v3.5.2: numbering starts over) — Play next on song cards
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.0.1**.
+
+- The part of v3.5 that put **Play next** in the song card's hover bar (⏭ after ▶) and at the top of the phone menu
+  didn't make it into the v3.5 merge; it's here now. The + menu opened on the song that's already playing no longer
+  offers Play next.
