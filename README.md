@@ -1303,3 +1303,12 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
 - Titles saved on your list before v3.4 didn't have AniList's other names, so their movie number (and full English
   name) only came with the daily list check, the next day. Now that check runs once right away after the update
   (about 10 seconds after the page loads), then daily as before.
+
+## v3.5.2 — movie numbers on a big list
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.5.2**.
+
+- v3.5.1 relied on the daily list check, which goes through your whole list in the background; on a big list it can
+  take a long time or stop when AniList is busy, so the numbers didn't show. Now, 4 seconds after the page opens, only
+  the movies without a number (and shows with a cut-short English name) are looked up, 50 per request, and saved.
+  Titles that have no number (like the Conan vs. Kid compilations) are remembered and not asked again.
