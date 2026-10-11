@@ -1260,3 +1260,13 @@ What wasn't changed (small, by design, or needs your dashboard):
 - The bell no longer lists those invites (and doesn't count them), so they can't get buried under episode alerts and
   likes. If invites are waiting, the bell panel has a link to them. The Friends button no longer has the request count
   (it moved to ✉); the requests are still in the Friends panel too.
+
+## v3.3 — search and filters on the anime countdown
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v3.3**.
+
+- **Search bar** on Anime countdown: any airing or upcoming anime by name (English, romaji or other names, it's an
+  AniList search), with its countdown or start date. What's already on the page shows straight away.
+- **Filters** under it: your list status (All anime, On my list, Watching, Plan to watch, On hold, Repeating,
+  Completed, Dropped, Not on my list), genre and type (TV, movie, ONA…). They work on the columns and on search results.
+  The old "Only my list" switch is now "On my list" in the status filter.

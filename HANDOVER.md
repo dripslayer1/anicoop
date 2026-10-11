@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '3.2'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '3.3'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '3.2'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '3.3'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -463,6 +463,7 @@ These are cumulative; the README has one section per version.
 - **v3.0** (no SQL): `ADULT_SITE` / `adultLink` / `linkOk` (next to `streamLinks`): `officialLinks` and `pickService` (the automatic Watch link, also for links saved in `autoLinks` before) skip adult streaming sites unless `adultAllowed`. Add a site to the ADULT_SITE pattern if another one turns up.
 - **v3.1** (no SQL): the playlist picker (`plPicker`, the song +) starts with "Liked songs": `pickerLike` / `pickerLiked` — one song: COMPLETED via quickSolo, or `uncheckStatus` if it's already Liked / In love; several: soloNext('COMPLETED') for the ones not liked, one upsertSolo.
 - **v3.2** (no SQL): invites panel (`invOpen`, `toggleInvites`, `invCount` = partyInvites + pendingRequests + buddyRequests, `invPulse`). `INVITE_KINDS` (follow, buddy_request, party_invite) are left out of the bell (`bellNotifs`, `unreadCount`) and marked read when the invites panel opens. Add a kind to INVITE_KINDS if a new kind of invite comes along.
+- **v3.3** (no SQL): countdown search (`cd.q` → `cdQuery`, debounced `cdSearch`: AniList search, RELEASING + NOT_YET_RELEASED, merged with `cdLocal` matches; `cdCols` becomes one "search" column, `.cd-found` grid) and filters (`cd.status` / `cd.genre` / `cd.format`, `cdKeep`). `cd.onlyMine` is gone: status "MINE" or a status in `CD_MINE` makes Airing soon use `cd.mine`.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

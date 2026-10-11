@@ -7050,8 +7050,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '3.2';
+        const APP_VERSION = '3.3';
         const WHATS_NEW = {
+            '3.3': [
+                { icon: 'fa-magnifying-glass', t: 'Search the countdown', d: 'Anime countdown has a search bar: type any airing or upcoming anime (English or Japanese name) to see when its next episode comes out.' },
+                { icon: 'fa-filter', t: 'Countdown filters', d: 'Filter the countdown by your list status (Plan to watch, Watching, not on your list…), genre and type (TV, movie…). “Only my list” is now “On my list” in the status filter.' },
+            ],
             '3.2': [
                 { icon: 'fa-envelope', t: 'Invites have their own icon', d: 'Friend requests, watch buddy requests and invites to watch or play something together now go to the ✉ next to the bell, with their own count, so they don’t get lost between episode alerts and likes. Answer them right there.' },
             ],
@@ -9151,7 +9155,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v10.1 anime countdown (AniList airing schedule) ----------
         // Three columns: trending shows airing now, upcoming shows (not started yet), and every episode airing next.
         // "Only my list" shows the ones on your lists. The timers tick every second while the page is open.
-        const cd = reactive({ trending: [], upcoming: [], soon: [], mine: [], loading: false, error: '', at: 0, onlyMine: false, col: 'soon' });
+        const cd = reactive({ trending: [], upcoming: [], soon: [], mine: [], loading: false, error: '', at: 0, col: 'soon', q: '', found: [], searching: false, status: '', genre: '', format: '' });
         const cdNow = ref(Date.now());
         let cdTimer = null;
         const openCountdown = () => navigate(() => {
@@ -9194,13 +9198,54 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             loadCountdown();
             cdTimer = setInterval(() => { cdNow.value = Date.now(); if (cd.soon.length && cd.soon[0].at < Date.now() - 60e3) loadCountdown(true); }, 1000);
         }, { immediate: true });
-        const myIdsSet = computed(() => new Set(uniqueItems.value.map(i => i.anime?.id)));
+        // v3.3 search: any airing or upcoming anime by name (AniList, so English, romaji and other names all work), with its
+        // countdown. What's already on the page shows straight away while AniList answers.
+        const cdQuery = computed(() => cd.q.trim().length >= 2 ? cd.q.trim() : '');
+        const cdHas = (r, q) => [r.anime.title?.english, r.anime.title?.romaji, r.anime.title?.native].some(t => t && t.toLowerCase().includes(q));
+        const cdLocal = (q) => {
+            const seen = new Set(), l = q.toLowerCase();
+            return [...cd.soon, ...cd.mine, ...cd.trending, ...cd.upcoming].filter(r => cdHas(r, l) && !seen.has(r.anime.id) && seen.add(r.anime.id));
+        };
+        const cdOrder = (r) => r.at || (r.start?.year ? new Date(r.start.year, (r.start.month || 12) - 1, r.start.day || 28).getTime() + 1e13 : 9e15);
+        let cdReq = 0;
+        const cdSearch = debounce(async (q) => {
+            const req = ++cdReq;
+            try {
+                const d = await anilist(`query ($q: String) { Page(perPage: 20) { media(search: $q, type: ANIME, status_in: [RELEASING, NOT_YET_RELEASED], sort: [SEARCH_MATCH], isAdult: false) { ${MEDIA_FIELDS} startDate { year month day } } } }`, { q });
+                if (req !== cdReq) return;
+                const rows = (d?.Page?.media || []).filter(adultOk).map(m => ({ ...cdRow(m, m.nextAiringEpisode?.episode, m.nextAiringEpisode?.airingAt), start: m.startDate }));
+                const ids = new Set(rows.map(r => r.anime.id));
+                cd.found = [...rows, ...cdLocal(q).filter(r => !ids.has(r.anime.id))].sort((x, y) => cdOrder(x) - cdOrder(y));
+            } catch (err) { if (req === cdReq) showToast('Search failed: ' + (err.message || err), 'error'); }
+            finally { if (req === cdReq) cd.searching = false; }
+        }, 400);
+        watch(cdQuery, (q) => {
+            if (!q) { cdReq++; cd.found = []; cd.searching = false; return; }
+            cd.found = cdLocal(q).sort((x, y) => cdOrder(x) - cdOrder(y)); cd.searching = true; cdSearch(q);
+        });
+        // v3.3 filters: your list status (Plan to watch, Watching…, on / not on your list), genre and type
+        const CD_MINE = ['WATCHING', 'PLANNING', 'REPEATING', 'PAUSED'];   // the statuses loadCountdownMine looks up
+        const cdStatusOpts = computed(() => [{ v: '', l: 'All anime' }, { v: 'MINE', l: 'On my list' },
+            ...['WATCHING', 'PLANNING', 'PAUSED', 'REPEATING', 'COMPLETED', 'DROPPED'].map(s => ({ v: s, l: STATUS_LABELS[s] })), { v: 'NOT', l: 'Not on my list' }]);
+        const cdAll = computed(() => [...cd.trending, ...cd.upcoming, ...cd.soon, ...cd.mine, ...cd.found]);
+        const cdGenres = computed(() => [...new Set([...cdAll.value.flatMap(r => r.anime.genres || []), cd.genre].filter(Boolean))].sort());
+        const cdFormats = computed(() => [...new Set([...cdAll.value.map(r => r.anime.format), cd.format].filter(Boolean))].map(k => ({ k, l: FORMAT_LABELS[k] || k })));
+        const cdFiltersOn = computed(() => !!(cd.status || cd.genre || cd.format));
+        const clearCdFilters = () => { cd.status = ''; cd.genre = ''; cd.format = ''; };
+        const cdKeep = (r) => {
+            const st = myEntry(r.anime.id)?.status, on = !!st && st !== 'NONE';
+            if (cd.status === 'MINE' ? !on : cd.status === 'NOT' ? on : cd.status && st !== cd.status) return false;
+            if (cd.genre && !(r.anime.genres || []).includes(cd.genre)) return false;
+            return !cd.format || r.anime.format === cd.format;
+        };
         const cdCols = computed(() => {
-            const mine = (l) => cd.onlyMine ? l.filter(r => myIdsSet.value.has(r.anime.id)) : l;
+            const f = (l) => l.filter(cdKeep);
+            if (cdQuery.value) return [{ id: 'search', title: `Results for “${cdQuery.value}”`, icon: 'fa-magnifying-glass', rows: f(cd.found) }];
             return [
-                { id: 'trending', title: 'Trending anime', icon: 'fa-fire', rows: mine(cd.trending) },
-                { id: 'upcoming', title: 'Upcoming anime', icon: 'fa-calendar-plus', rows: mine(cd.upcoming) },
-                { id: 'soon', title: 'Airing soon', icon: 'fa-clock', rows: cd.onlyMine ? cd.mine : cd.soon },
+                { id: 'trending', title: 'Trending anime', icon: 'fa-fire', rows: f(cd.trending) },
+                { id: 'upcoming', title: 'Upcoming anime', icon: 'fa-calendar-plus', rows: f(cd.upcoming) },
+                // (your own airing shows are looked up separately, so they're all here, not only the next 40 episodes)
+                { id: 'soon', title: 'Airing soon', icon: 'fa-clock', rows: f(cd.status === 'MINE' || CD_MINE.includes(cd.status) ? cd.mine : cd.soon) },
             ];
         });
         const cdParts = (at) => {
@@ -11294,7 +11339,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdQuery, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,

@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=3.2">
+    <link rel="stylesheet" href="app.css?v=3.3">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=3.2" defer></script>
+    <script src="app.js?v=3.3" defer></script>
 </head>
 <body>
 
@@ -1574,22 +1574,34 @@
                     <p class="kicker">// airing schedule · times in your time zone</p>
                     <div class="flex flex-wrap items-end justify-between gap-3 mt-2">
                         <h1 class="font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Anime countdown</h1>
-                        <div class="flex items-center gap-2">
-                            <button @click="cd.onlyMine = !cd.onlyMine" class="toggle !h-10" :class="{ 'is-on': cd.onlyMine }"><span class="knob"></span>Only my list</button>
-                            <button @click="loadCountdown(true)" class="icon-btn !w-10 !h-10" title="Refresh"><i class="fa-solid fa-rotate-right text-xs" :class="{ 'fa-spin': cd.loading }"></i></button>
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                            <!-- v3.3 search any airing / upcoming anime -->
+                            <label class="cd-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input v-model="cd.q" type="search" placeholder="Search airing anime…" aria-label="Search airing and upcoming anime" @keydown.esc="cd.q = ''">
+                                <button v-if="cd.q" @click="cd.q = ''" type="button" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+                            </label>
+                            <button @click="loadCountdown(true)" class="icon-btn !w-10 !h-10 shrink-0" title="Refresh"><i class="fa-solid fa-rotate-right text-xs" :class="{ 'fa-spin': cd.loading }"></i></button>
                         </div>
+                    </div>
+                    <!-- v3.3 filters -->
+                    <div class="cd-filters mt-5">
+                        <div class="chip-wrap"><select v-model="cd.status" :class="{ 'is-on': cd.status }" class="chip w-full" aria-label="Your list status"><option v-for="o in cdStatusOpts" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div class="chip-wrap"><select v-model="cd.genre" :class="{ 'is-on': cd.genre }" class="chip w-full" aria-label="Genre"><option value="">All genres</option><option v-for="g in cdGenres" :key="g" :value="g">{{ g }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <div class="chip-wrap"><select v-model="cd.format" :class="{ 'is-on': cd.format }" class="chip w-full" aria-label="Type"><option value="">All types</option><option v-for="x in cdFormats" :key="x.k" :value="x.k">{{ x.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        <button v-if="cdFiltersOn" @click="clearCdFilters" class="btn-ghost !h-10 !py-0 !px-3 !text-xs shrink-0"><i class="fa-solid fa-xmark"></i> Clear</button>
                     </div>
                     <p v-if="cd.error" class="mt-6 panel !rounded-2xl px-4 py-3 text-sm text-rose-300"><i class="fa-solid fa-circle-exclamation mr-2"></i>{{ cd.error }}</p>
                     <!-- phones: one column at a time -->
-                    <div class="seg w-full mt-6 lg:hidden">
+                    <div v-if="!cdQuery" class="seg w-full mt-6 lg:hidden">
                         <button v-for="c in cdCols" :key="c.id" @click="cd.col = c.id" :class="{ 'is-on': cd.col === c.id }" class="seg-btn flex-1"><i class="fa-solid mr-1.5" :class="c.icon"></i>{{ c.title.replace(' anime', '') }}</button>
                     </div>
-                    <div class="cd-cols mt-6">
-                        <section v-for="c in cdCols" :key="c.id" class="cd-col" :class="{ 'is-on': cd.col === c.id }">
-                            <h2 class="font-display font-semibold text-ink text-xl mb-4 hidden lg:flex items-center gap-2"><i class="fa-solid text-lilac text-base" :class="c.icon"></i>{{ c.title }}</h2>
-                            <div v-if="cd.loading && !c.rows.length" class="space-y-3"><div v-for="n in 4" :key="n" class="h-40 rounded-2xl skeleton"></div></div>
-                            <p v-else-if="!c.rows.length" class="panel !rounded-2xl p-6 text-center text-sm text-mute">{{ cd.onlyMine ? 'Nothing from your lists here.' : 'Nothing here right now.' }}</p>
-                            <div class="space-y-3">
+                    <div class="cd-cols mt-6" :class="{ 'is-search': cdQuery }">
+                        <section v-for="c in cdCols" :key="c.id" class="cd-col" :class="{ 'is-on': cd.col === c.id || c.id === 'search' }">
+                            <h2 class="font-display font-semibold text-ink text-xl mb-4 items-center gap-2" :class="c.id === 'search' ? 'flex' : 'hidden lg:flex'"><i class="fa-solid text-lilac text-base" :class="c.icon"></i>{{ c.title }}</h2>
+                            <div v-if="(c.id === 'search' ? cd.searching : cd.loading) && !c.rows.length" :class="c.id === 'search' ? 'cd-found' : 'space-y-3'"><div v-for="n in 4" :key="n" class="h-40 rounded-2xl skeleton"></div></div>
+                            <p v-else-if="!c.rows.length" class="panel !rounded-2xl p-6 text-center text-sm text-mute">{{ cdFiltersOn ? 'Nothing here matches these filters.' : c.id === 'search' ? 'No airing or upcoming anime matches that. (Anime that already finished have no countdown.)' : 'Nothing here right now.' }}</p>
+                            <div :class="c.id === 'search' ? 'cd-found' : 'space-y-3'">
                                 <button v-for="r in c.rows" :key="c.id + r.anime.id + '-' + r.ep" @click="fetchAnimeDetails(r.anime)" class="cd-card">
                                     <img :src="r.anime.coverImage?.large" alt="" loading="lazy" decoding="async">
                                     <span class="cd-body">
