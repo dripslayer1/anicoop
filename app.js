@@ -5133,7 +5133,7 @@ createApp({
         // Full songs: each song is looked up on YouTube and played in YouTube's own player, kept out of sight (sound only;
         // "Video" shows it). Nothing is downloaded or converted. If YouTube has no match (or the owner blocks playing it
         // outside YouTube), Apple's 30-second preview plays instead. Volume, shuffle, repeat and "full songs" are remembered.
-        const VOL_KEY = 'anicoop_song_volume', PLAYER_KEY = 'anicoop_player_v1', YT_SONGS_KEY = 'anicoop_yt_songs_v1';
+        const VOL_KEY = 'anicoop_song_volume', PLAYER_KEY = 'anicoop_player_v1', YT_SONGS_KEY = 'anicoop_yt_songs_v2';   // v1.1.1 (v1 could hold wrong picks)
         const pPrefs = readJSON(PLAYER_KEY) || {};
         const player = reactive({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
@@ -5235,22 +5235,34 @@ createApp({
         const forgetYt = (s) => { delete ytSongs[songYtKey(s)]; saveYtSongs(); };
         const BAD_TAKE = /\b(live|cover|karaoke|instrumental|remix|sped ?up|slowed|reverb|nightcore|8d|mashup|reaction|tutorial|lesson|piano|acoustic|extended|1 ?hour|loop)\b/i;
         // score every result; YouTube Music's official audio tracks ("atv") score highest
+        // v1.1.1 stricter: a song with a common name ("Bounce") used to get another artist's song with the same name. Now
+        // the upload must be by one of the song's artists (any of them, not only the first), and an official track must
+        // be as long as the song (± 15 s; videos ± 35 s for intros). Nothing that fits = the 30-second preview, not a
+        // wrong song. (Only an exact name at the exact length passes without an artist: names written differently.)
         const rankSongVideos = (list, s) => {
-            const title = normTitle(String(s.title?.romaji || '').replace(/\s*[([].*?[)\]]/g, '')); const artist = normTitle((s.artists || [])[0] || '');
+            const title = normTitle(String(s.title?.romaji || '').replace(/\s*[([].*?[)\]]/g, ''));
+            const artists = (s.artists || []).map(normTitle).filter(Boolean);
             const want = s.durationMs ? s.durationMs / 1000 : null; const songText = normTitle(s.title?.romaji);
+            const squash = (x) => x.replace(/ /g, '');
+            const has = (txt) => artists.some(ar => txt.includes(ar) || squash(txt).includes(squash(ar)));
             return (list || []).map(v => {
                 if (!v.secs || v.secs > 20 * 60) return null;
                 const vt = normTitle(v.title), ch = normTitle(v.channel);
+                const d = want ? Math.abs(v.secs - want) : null;
+                if (d != null && d > (v.atv ? 15 : 35)) return null;   // a different song (or version)
                 let sc = 0;
                 if (title && vt.includes(title)) sc += 30; else if (title && title.split(' ').filter(w => w.length > 2).every(w => vt.includes(w))) sc += 15; else sc -= 40;
                 if (v.atv) sc += 45;
-                if (/ topic$/.test(ch) && artist && ch.startsWith(artist)) sc += 45;
-                else if (artist && (ch.includes(artist) || ch.replace(/ /g, '').includes(artist.replace(/ /g, '')))) sc += 25;
-                else if (artist && vt.includes(artist)) sc += 10;
+                let by = 0;
+                if (/ topic$/.test(ch) && artists.some(ar => ch.startsWith(ar))) by = 45;
+                else if (has(ch)) by = 25;
+                else if (has(vt)) by = 10;
+                if (!by && artists.length && !(d != null && d <= 3 && vt === title)) return null;   // someone else's song
+                sc += by;
                 if (v.badge === 'artist') sc += 10;
                 if (/\bofficial audio\b/i.test(v.title)) sc += 8;
                 const bad = BAD_TAKE.exec(v.title); if (bad && !songText.includes(normTitle(bad[0]))) sc -= 45;
-                if (want) { const d = Math.abs(v.secs - want); sc += d <= 3 ? 25 : d <= 10 ? 12 : d <= 30 ? 0 : -25; }
+                if (d != null) sc += d <= 3 ? 25 : d <= 10 ? 12 : 0;
                 return sc >= 20 ? { id: v.id, sc } : null;
             }).filter(Boolean).sort((x, y) => y.sc - x.sc);
         };
@@ -5270,7 +5282,8 @@ createApp({
         const ytCandidatesRaw = async (s) => {
             const artist = (s.artists || [])[0] || '', title = s.title?.romaji || '';
             let found = [], err = null;
-            try { found = rankSongVideos(await ytmSearch(`${artist} ${title}`), s); } catch (e) { err = e; }
+            const all = (s.artists || []).slice(0, 3).join(' ') || artist;
+            try { found = rankSongVideos(await ytmSearch(`${all} ${title}`), s); } catch (e) { err = e; }
             if (found.length < 3) { try { found = [...found, ...rankSongVideos(await ytSearch(`${artist} - ${title}`), s)]; } catch (e) { err = err || e; } }
             const known = ytSongs[songYtKey(s)];
             const ids = [...new Set([...(known ? [known] : []), ...found.map(x => x.id)])];
@@ -7188,8 +7201,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.1';
+        const APP_VERSION = '1.1.1';
         const WHATS_NEW = {
+            '1.1.1': [
+                { icon: 'fa-music', t: 'The right song plays', d: 'Songs with a common name (like “Bounce”) could play another artist’s song. Now the full song has to be by the right artist and as long as the song; if YouTube doesn’t have it, the 30-second preview plays instead.' },
+            ],
             '1.1': [
                 { icon: 'fa-microphone-lines', t: 'Lyrics', d: 'Tap the microphone on the player: the lyrics follow the song like on Spotify (the line being sung lights up; tap a line to jump there). 30-second previews show the plain lyrics.' },
             ],
