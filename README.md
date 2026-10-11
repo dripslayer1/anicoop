@@ -1331,3 +1331,15 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   friends' pictures come off it. No more taking it off your list and adding it again.
 - Leaving while your invite isn't answered yet (nobody else joined): the open invites are taken back too, so nobody can
   join a party that has no one in it.
+
+## v1.1 — lyrics
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.1**.
+
+- A **microphone** button on the player opens the lyrics, from **LRCLIB** (lrclib.net, a free, open, community-made
+  lyrics database; no key needed). While the full song plays, time-synced lyrics follow it like on Spotify: the line
+  being sung lights up, the panel scrolls along (scroll yourself and it waits a few seconds), tap a line to jump there.
+- 30-second previews start somewhere in the middle of the song, so they show the plain lyrics. Instrumentals say so;
+  songs LRCLIB doesn't have say "No lyrics found".
+- Lyrics are copyrighted by their writers/publishers; LRCLIB is community-sourced. Fine for a private friends' site,
+  something to keep in mind if anicoop ever goes big or commercial.

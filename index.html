@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.0.2">
+    <link rel="stylesheet" href="app.css?v=1.1">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.0.2" defer></script>
+    <script src="app.js?v=1.1" defer></script>
 </head>
 <body>
 
@@ -3136,7 +3136,9 @@
                 <button @click="srcBadge" class="pbar-src" :class="{ on: player.mode === 'yt', warn: player.full && player.mode === 'preview' }" :title="player.mode === 'yt' ? 'Full song from YouTube Music (click for 30-second previews only)' : player.full && player.mode === 'preview' ? '30-second preview: ' + (player.why || 'the full song didn’t play') + '. Click to try the full song again.' : 'Previews only (click for full songs)'">{{ player.mode === 'yt' ? 'Full' : player.mode === 'preview' ? '0:30' : player.full ? 'Full' : '0:30' }}</button>
                 <button @click="openMusic()" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: music.open }" title="Music: search, playlists, liked"><i class="fa-solid fa-music"></i></button>
                 <button @click="openPlPicker(player.song, $event)" class="pbar-btn pbar-opt pbar-q-btn" title="Add to playlist"><i class="fa-solid fa-circle-plus"></i></button>
-                <button v-if="player.mode === 'yt'" @click="player.video = !player.video" class="pbar-btn pbar-opt" :class="{ on: player.video }" :title="player.video ? 'Hide the video' : 'Show the video'"><i class="fa-solid fa-film"></i></button>
+                <!-- v1.1 lyrics -->
+                <button @click="toggleLyrics" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: lyr.open }" title="Lyrics" :aria-pressed="lyr.open"><i class="fa-solid fa-microphone-lines"></i></button>
+                <button v-if="player.mode === 'yt'" @click="player.video = !player.video; player.video && (lyr.open = false)" class="pbar-btn pbar-opt" :class="{ on: player.video }" :title="player.video ? 'Hide the video' : 'Show the video'"><i class="fa-solid fa-film"></i></button>
                 <div class="relative">
                     <button @click="player.queueOpen = !player.queueOpen" class="pbar-btn pbar-opt pbar-q-btn" :class="{ on: player.queueOpen }" title="Queue"><i class="fa-solid fa-list-ul"></i></button>
                     <transition name="pop"><div v-if="player.queueOpen" class="pbar-queue">
@@ -3169,6 +3171,30 @@
                 <button @click="hidePlayer" class="pbar-btn" title="Hide the player (the music keeps playing)"><i class="fa-solid fa-chevron-down"></i></button>
             </div>
         </div></transition>
+        <!-- v1.1 lyrics panel (LRCLIB) -->
+        <transition name="pop">
+            <div v-if="lyr.open && player.song && !player.hidden" class="lyr-panel" role="dialog" aria-label="Lyrics">
+                <div class="lyr-head">
+                    <img v-if="player.song.coverImage?.large" :src="player.song.coverImage.large" alt="" class="w-10 h-10 rounded-lg object-cover shrink-0">
+                    <div class="min-w-0 flex-grow"><p class="text-sm font-semibold text-ink truncate">{{ player.song.title?.romaji }}</p><p class="text-xs text-sub truncate">{{ (player.song.artists || []).join(', ') }}</p></div>
+                    <button @click="lyr.open = false" class="vol-btn !w-8 !h-8 shrink-0" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="lyr-box" class="lyr-box" @wheel.passive="lyrScrolled" @touchmove.passive="lyrScrolled">
+                    <p v-if="lyr.loading" class="lyr-note"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Looking for the lyrics…</p>
+                    <p v-else-if="lyr.err" class="lyr-note">{{ lyr.err }}</p>
+                    <p v-else-if="lyr.instrumental" class="lyr-note"><i class="fa-solid fa-guitar mr-2"></i>Instrumental: no lyrics</p>
+                    <p v-else-if="lyr.none || (!lyr.lines.length && !lyr.plain)" class="lyr-note">No lyrics found for this song.</p>
+                    <template v-else-if="lyrSynced">
+                        <button v-for="(l, i) in lyr.lines" :id="'lyr-' + i" :key="i" @click="lyrSeek(l)" class="lyr-line" :class="{ on: i === lyrIdx, past: i < lyrIdx }">{{ l.text || '♪' }}</button>
+                    </template>
+                    <template v-else>
+                        <p v-if="lyr.lines.length && player.mode === 'preview'" class="lyr-hint">The 30-second preview starts in the middle of the song, so the lyrics don’t follow it. With the full song they do.</p>
+                        <p v-for="(l, i) in lyrPlain" :key="i" class="lyr-line lyr-static">{{ l || ' ' }}</p>
+                    </template>
+                    <p v-if="!lyr.loading && (lyr.lines.length || lyr.plain)" class="lyr-src">Lyrics from LRCLIB</p>
+                </div>
+            </div>
+        </transition>
         <!-- the music panel: search songs, your playlists, liked and recent songs, from anywhere (even while reading) -->
         <transition name="music">
             <div v-if="music.open && currentUser && songsOn" class="music-panel" role="dialog" aria-label="Music">
