@@ -1343,3 +1343,13 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   songs LRCLIB doesn't have say "No lyrics found".
 - Lyrics are copyrighted by their writers/publishers; LRCLIB is community-sourced. Fine for a private friends' site,
   something to keep in mind if anicoop ever goes big or commercial.
+
+## v1.1.1 — the right song plays
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.1.1**.
+
+- A song with a common name ("Bounce" by JabariOnTheBeat & Sewerperson) could play another artist's "Bounce": the
+  full-song search scored the name and "official track" highly even when the artist didn't match. Now the YouTube
+  upload must be by one of the song's artists (all of them count, not only the first) and an official track must be
+  as long as the song (± 15 s; music videos ± 35 s). If nothing fits, the 30-second preview plays instead.
+- The search also names all the artists, and the remembered picks from before are forgotten (they could be wrong ones).
