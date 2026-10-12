@@ -304,7 +304,7 @@ const timeAgo = (iso) => {
 };
 const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0 });
 // rewatch counters (media_data.rep, one number per repeat) and the hidden "lil bro" flag live inside media_data, so they need no new column
-const listRow = (r) => ({ anime: normMedia(r.media_data), dbType: r.media_type || null, status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
+const listRow = (r) => ({ anime: normMedia(r.media_type === 'ADULT' || r.media_type === 'ADULT_ANIME' ? { ...r.media_data, isAdult: true } : r.media_data), dbType: r.media_type || null, status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
     startedOver: !!r.media_data?.so, rewatchedEps: Math.max(0, Number(r.media_data?.rx) || 0),
     repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
 // the fields every list/browse query asks AniList for
@@ -6209,7 +6209,8 @@ createApp({
         };
         // v10 their 18+ titles stay out of sight for people without 18+ access (list, rankings, stats, comparison)
         watch(() => viewedUser.value && !viewedUser.value.loading && !adultAllowed.value ? viewedUser.value.all : null, (all) => { if (all?.length) checkAdultIds(all.map(i => i.anime?.id)); });
-        watch(() => [adultAllowed.value, Object.keys(adultIds).length], () => { const v = viewedUser.value; if (v?.all) v.entries = v.all.filter(adultOkItem); });
+        watch(() => [adultAllowed.value, trackOnly.value, Object.keys(adultIds).length], () => { const v = viewedUser.value; if (v?.all) v.entries = v.all.filter(adultOkItem); });
+        watch(() => [viewUserId.value, adultListOk.value], ([id]) => { if (id) checkBuddy18(id); });
         watch(viewUserId, (id) => { if (id) { loadViewedUser(id); fetchRankOrders(id, viewedRankOrders); Object.keys(rankShown).filter(k => k.startsWith('them:')).forEach(k => delete rankShown[k]); } else viewedUser.value = null; });
         // friend stats come from the server so each stat can be hidden per person (Settings → Privacy)
         const STAT_FROM_SERVER = { days: 'days', ANIME: 'anime', MANGA: 'manga', eps: 'eps', chapters: 'chapters', completed: 'completed', mean: 'mean' };
@@ -7282,7 +7283,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.4.2';
+        const APP_VERSION = '1.4.3';
         const WHATS_NEW = {
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
@@ -10964,7 +10965,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // v2.3 a watch buddy is for one section: only that section's Plan to watch syncs (a different buddy per section is
         // fine). Links made before v2.3 have no section: they sync every section ("All sections").
         const BUDDY_SECTIONS = [{ t: 'ANIME', l: 'Anime' }, { t: 'MANGA', l: 'Manga' }, { t: 'TV', l: 'Movies & TV' }, { t: 'GAME', l: 'Games' }];
-        const buddyLabel = (t) => t ? (BUDDY_SECTIONS.find(s => s.t === t)?.l || t) : 'All sections';
+        const BUDDY_18 = { t: 'ADULT', l: '18+' };   // (v1.4.3 shown only when you both have 18+ access; the database checks it too)
+        const buddy18 = reactive({});   // friend id → true when an 18+ watch buddy is possible with them
+        const checkBuddy18 = async (userId) => {
+            if (!userId || !adultListOk.value || userId in buddy18) return;
+            const { data } = await sb.rpc('buddy18_ok', { other: userId }).then(r => r, () => ({ data: false }));
+            buddy18[userId] = data === true;
+        };
+        const buddyLabel = (t) => t ? (t === 'ADULT' ? BUDDY_18.l : BUDDY_SECTIONS.find(s => s.t === t)?.l || t) : 'All sections';
         const buddyOther = (b) => b.requester === uid() ? b.addressee : b.requester;
         const buddyStateOf = (b) => !b ? 'none' : b.status === 'accepted' ? 'buddies' : b.requester === uid() ? 'sent' : 'incoming';
         const buddyRowsWith = (userId) => buddies.value.filter(b => buddyOther(b) === userId);
@@ -10973,8 +10981,10 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // one entry per section on a friend's profile (just "All sections" while an old everything-link is there)
         const buddySectionsFor = (userId) => {
             const rows = buddyRowsWith(userId), all = rows.find(b => !b.media_type);
-            if (all) return [{ t: null, l: buddyLabel(null), row: all, st: buddyStateOf(all) }];
-            return BUDDY_SECTIONS.map(s => { const row = rows.find(b => b.media_type === s.t) || null; return { ...s, row, st: buddyStateOf(row) }; });
+            const a18 = rows.find(b => b.media_type === 'ADULT') || null;
+            const adult = adultListOk.value && (a18 || buddy18[userId]) ? [{ ...BUDDY_18, row: a18, st: buddyStateOf(a18) }] : [];
+            if (all) return [{ t: null, l: buddyLabel(null), row: all, st: buddyStateOf(all) }, ...adult];
+            return [...BUDDY_SECTIONS.map(s => { const row = rows.find(b => b.media_type === s.t) || null; return { ...s, row, st: buddyStateOf(row) }; }), ...adult];
         };
         const buddyRequests = computed(() => buddies.value.filter(b => b.status === 'pending' && b.addressee === uid()));
         const askBuddy = async (userId, t) => {
