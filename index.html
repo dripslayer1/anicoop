@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.4.3">
+    <link rel="stylesheet" href="app.css?v=1.5.0">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.4.3" defer></script>
+    <script src="app.js?v=1.5.0" defer></script>
 </head>
 <body>
 
@@ -695,6 +695,11 @@
                                     <a :href="'https://www.themoviedb.org/' + (selectedAnime.format === 'MOVIE' ? 'movie/' : 'tv/') + selectedAnime.extId" target="_blank" rel="noopener" class="watch-link" style="--c: #0d253f"><i class="fa-solid fa-film text-[10px]"></i>TMDB</a>
                                 </div>
                             </template>
+                            <!-- v1.5 a title that isn't on AniList: its info comes from MangaUpdates -->
+                            <div v-if="selectedAnime.muUrl" class="mt-6 flex flex-wrap items-center gap-2 max-w-3xl">
+                                <a :href="selectedAnime.muUrl" target="_blank" rel="noopener" class="watch-link" style="--c: #f97316"><i class="fa-solid fa-book text-[10px]"></i>MangaUpdates</a>
+                                <span class="text-[11px] text-mute">Not on AniList: the info here comes from MangaUpdates</span>
+                            </div>
 
                             <!-- songs: Spotify player (full song if you're signed in to Spotify in this browser, otherwise a preview) -->
                             <template v-if="selectedAnime.type === 'SONG'">

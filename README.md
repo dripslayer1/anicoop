@@ -1442,3 +1442,15 @@ change. Hard-refresh: the footer says **v1.4.3**. No What's new pop-up.
 - A friend's profile opened before your Track 18+ access had loaded now shows their 18+ list once it loads.
 - **18+ watch buddy:** on a friend's profile, next to Anime / Manga / Movies & TV / Games, an **🔥 18+** button when you
   both have 18+ access (full or Track 18+). It syncs only 18+ Plan to read / watch; other buddies still never get 18+.
+
+## v1.5.0 — manga that aren't on AniList (MangaUpdates)
+
+1. **SQL: run `supabase/v1.5-mangaupdates.sql`** (also in `supabase_setup.sql`).
+2. **Edge Function: deploy the updated `igdb` function** (new `mu` endpoint; no new secrets, MangaUpdates' API is public).
+3. Hard-refresh: the footer says **v1.5.0**.
+
+- A manga / manhwa name search in Browse (page 1, no other filters) also asks MangaUpdates; close matches AniList didn't
+  return come after AniList's results. They open on their own title page (info + a MangaUpdates link) and go on lists
+  like any title. 18+ ones follow the usual 18+ rules (only in an 18+ search, only for people allowed).
+- List id = 1100000000 + a number from the `mu_titles` table (same for everyone), so friends' lists and Compare match.
+- AniList / MyAnimeList sync, the daily list check and episode alerts skip them (they aren't AniList titles).
