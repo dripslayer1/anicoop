@@ -1419,3 +1419,13 @@ Function change. Hard-refresh: the footer says **v1.4.1**. No What's new pop-up.
 - 18+ **anime** count too: saved as 'ADULT_ANIME', which only people with **full** 18+ access receive (Track 18+ manga
   stays manga only). They follow the Anime list's privacy.
 - A friend's **18+** list (and Compare / ranking) holds 18+ anime + manga, with **All / Anime / Manga / Manhwa** filters.
+
+## v1.4.2 — Track 18+ covers 18+ anime too
+
+**SQL: run `supabase/v1.4.2-adult-list.sql`** (safe after v1.4 / v1.4.1; also in `supabase_setup.sql`). No Edge
+Function change. Hard-refresh: the footer says **v1.4.2**. No What's new pop-up.
+
+- "Track 18+ manga" is now **Track 18+**: the same people can add, rate, compare and see **18+ anime** too, but not
+  watch them (no Watch button, watch link, episodes or streaming links on those titles; "Watching locked · track only").
+- In Browse, **Anime → 18+ only** works like Manga: "Search for your anime", then the one best match.
+- The database sends them 18+ anime rows ('ADULT_ANIME') too; profile Completed / Mean include them for them.

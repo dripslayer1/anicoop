@@ -2553,9 +2553,10 @@ createApp({
         // in Browse they only show up when you search for one by name (the best match, or the top 3).
         const adultTrack = reactive({ users: [], missing: false });
         const trackOnly = computed(() => !adultAllowed.value && !!uid() && adultTrack.users.includes(uid()));
-        const adultOk = (a) => adultAllowed.value || !isAdultMedia(a) || (trackOnly.value && a?.type === 'MANGA');
+        const TRACK_TYPES = ['MANGA', 'ANIME'];   // (v1.4.2 Track 18+ covers 18+ anime too: track them, not watch them)
+        const adultOk = (a) => adultAllowed.value || !isAdultMedia(a) || (trackOnly.value && TRACK_TYPES.includes(a?.type || 'ANIME'));
         // reading an 18+ manga needs the full 18+ access (track-only people get here, everyone else never sees one)
-        const readLocked = (m) => !!m && m.type === 'MANGA' && !adultAllowed.value && isAdultMedia(m);
+        const readLocked = (m) => !!m && TRACK_TYPES.includes(m.type || 'ANIME') && !adultAllowed.value && isAdultMedia(m);   // (anime: no watching)
         // v1.4 the 18+ list: 18+ manga / manhwa / manhua are their own list (not in Manga), saved in the database as type
         // 'ADULT' so the database itself only sends them to people with 18+ access or "Track 18+ manga" (and their owner).
         // In the page they stay manga (anime.type 'MANGA'); listType() is what decides which list they're in.
@@ -2574,7 +2575,7 @@ createApp({
         const statAdult = reactive({ ANIME: false, MANGA: false });
         const adultOkItem = (i) => adultOk(i?.anime);
         // a post / list update about an 18+ title (marked when it's made from v10 on; older ones: AniList is asked)
-        const activityOk = (a) => adultAllowed.value || (trackOnly.value && a?.media_type === 'MANGA') || !(a?.extra?.adult || (a?.media_id && adultIds[a.media_id] === true) || (a?.extra?.pick && isAdultMedia(a.extra.pick)));
+        const activityOk = (a) => adultAllowed.value || (trackOnly.value && TRACK_TYPES.includes(a?.media_type || 'ANIME')) || !(a?.extra?.adult || (a?.media_id && adultIds[a.media_id] === true) || (a?.extra?.pick && isAdultMedia(a.extra.pick)));
         let adultAsking = false;
         const checkAdultIds = async (ids, force = false) => {
             if ((adultAllowed.value && !force) || adultAsking) return;
@@ -6840,7 +6841,7 @@ createApp({
         // back a bar asks how many episodes you watched, then counts them like the +1 button does (rewatches included).
         const WATCH_ASK_KEY = 'anicoop_watch_ask_v1';
         const WL_TYPES = ['ANIME', 'TV'];
-        const hasWatchLink = (a) => WL_TYPES.includes(a?.type || 'ANIME');
+        const hasWatchLink = (a) => WL_TYPES.includes(a?.type || 'ANIME') && !readLocked(a);   // (v1.4.2 not for track-only 18+)
         const watchLinkOf = (id) => soloEntry(id)?.watchLink || '';
         const wlEdit = reactive({ id: null, text: '' });
         // (v10.6 a link may hold {ep}: it becomes the episode you're on, e.g. …/episode-{ep} → …/episode-5)
@@ -7053,6 +7054,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // v10.4 the big Watch buttons on an anime / TV page: your saved link (manga keeps its reader)
         const watchMine = (a) => {
             if (!a) return;
+            if (readLocked(a)) { showToast('Watching 18+ isn’t on for your account: you can track it, not watch it', 'error'); return; }   // v1.4.2
             if (linkInfo(a)) { openMyLink(a); return; }
             showToast('You don’t have a watch link saved for this yet. Add one in “My watch link”', 'error');
             if (!currentUser.value) return;
@@ -7061,7 +7063,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         // v10.4 the official streaming sites AniList lists for an anime (Crunchyroll, Netflix, HIDIVE…)
         const officialLinks = computed(() => {
-            const a = selectedAnime.value; if (!a || a.type !== 'ANIME') return [];
+            const a = selectedAnime.value; if (!a || a.type !== 'ANIME' || readLocked(a)) return [];
             const seen = new Set();
             return (a.externalLinks || []).filter(l => l.type === 'STREAMING' && /^https?:\/\//.test(l.url || '') && linkOk(l) && !seen.has(l.site) && seen.add(l.site))
                 .sort((x, y) => (/crunchyroll/i.test(y.site) ? 1 : 0) - (/crunchyroll/i.test(x.site) ? 1 : 0));
@@ -7280,7 +7282,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.4.1';
+        const APP_VERSION = '1.4.2';
         const WHATS_NEW = {
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
@@ -7809,7 +7811,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             try {
                 const data = await anilist(query, { id });
                 if (requestId !== detailRequestId || !data?.Media) return;
-                if (data.Media.isAdult && !adultAllowed.value && !(trackOnly.value && data.Media.type === 'MANGA')) { showToast('18+ content is turned off for your account', 'error'); return; }
+                if (data.Media.isAdult && !adultAllowed.value && !(trackOnly.value && TRACK_TYPES.includes(data.Media.type))) { showToast('18+ content is turned off for your account', 'error'); return; }
                 const media = normMedia(data.Media);
                 detailCache.set(id, media);
                 if (push) navigate(() => showDetails(media)); else showDetails(media);
@@ -7876,6 +7878,15 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (!hit) return n.includes(q) ? 40 : 0;
             return (hit === qWords.length ? 55 : 45 * hit / qWords.length) - Math.min(10, Math.max(0, nWords.size - hit));
         };
+        // (v1.4.2 18+ anime: AniList's own search, 18+ only, then the same scoring; one title)
+        const trackSearchAnime = async (f, { low = false } = {}) => {
+            const q = f.search.trim(); if (!q) return { items: [], hasNextPage: false };
+            const d = await anilist(`query ($q: String) { Page(perPage: 25) { media(search: $q, type: ANIME, isAdult: true, sort: [SEARCH_MATCH]) { ${MEDIA_FIELDS} } } }`, { q }, { low });
+            const want = normTitle(q), qWords = want.split(' ').filter(Boolean);
+            const scored = (d?.Page?.media || []).map((m, i) => ({ m, sc: Math.max(0, ...[m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || [])].filter(Boolean).map(n => nameScore(n, want, qWords))) - i * 0.2 }))
+                .filter(x => x.sc > 0).sort((x, y) => y.sc - x.sc);
+            return { items: scored.length ? [normMedia(scored[0].m)] : [], hasNextPage: false };
+        };
         const trackSearch = async (f, { low = false } = {}) => {
             const q = f.search.trim(); if (!q) return { items: [], hasNextPage: false };
             const p = new URLSearchParams({ limit: 40, title: q });
@@ -7898,7 +7909,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             }).filter(x => x.sc > 0).sort((x, y) => y.sc - x.sc);
             return { items: scored.length ? [normMedia(scored[0].m)] : [], hasNextPage: false };
         };
-        const trackSearchOnly = computed(() => trackOnly.value && section.value === 'manga' && !!filters.value.isAdult);
+        const trackSearchOnly = computed(() => trackOnly.value && (section.value === 'manga' || section.value === 'anime') && !!filters.value.isAdult);
         const browseFetch = async (type, f, page, { low = false } = {}) => {
             if (type === 'GAME') return gameApi.browse(f, page, gameOpts(), { low });
             if (type === 'TV') return tvApi.browse(f, page, { ...gameOpts(), hidden: hiddenOf('TV') });
@@ -7906,6 +7917,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const isManga = type === 'MANGA';
             if (isManga && f.isAdult && adultAllowed.value) return adultMangaBrowse(f, page, { low });
             if (isManga && f.isAdult && trackOnly.value) return trackSearch(f, { low });   // v1.3
+            if (type === 'ANIME' && f.isAdult && trackOnly.value) return trackSearchAnime(f, { low });   // v1.4.2
             const varsDef = ['$page: Int'];
             const mediaArgs = [`type: ${type}`, `isAdult: ${f.isAdult && adultAllowed.value ? 'true' : 'false'}`];   // 18+ only if the owner allows you
             const variables = { page };
@@ -9717,7 +9729,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         const saveAdultTrack = async () => {
             const { data, error } = await sb.from('app_config').update({ value: { users: adultTrack.users }, updated_at: new Date().toISOString() }).eq('key', 'adult_track').select('key');
-            if (error || !data?.length) showToast('Could not save: ' + (error?.message || 'run the v1.3 SQL in Supabase first (see README)'), 'error'); else showToast('Track 18+ manga updated');
+            if (error || !data?.length) showToast('Could not save: ' + (error?.message || 'run the v1.3 SQL in Supabase first (see README)'), 'error'); else showToast('Track 18+ updated');
         };
         const toggleTrackUser = (id) => { const i = adultTrack.users.indexOf(id); if (i === -1) adultTrack.users.push(id); else adultTrack.users.splice(i, 1); saveAdultTrack(); };
         const trackSearchName = ref('');

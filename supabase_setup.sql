@@ -1949,7 +1949,7 @@ returns boolean language sql stable security definer set search_path = public as
   select owner = auth.uid() or (
     are_friends(auth.uid(), owner)
     and (coalesce(mtype, '') <> 'ADULT' or adult_allowed() or adult_track_allowed())
-    and (coalesce(mtype, '') <> 'ADULT_ANIME' or adult_allowed())
+    and (coalesce(mtype, '') <> 'ADULT_ANIME' or adult_allowed() or adult_track_allowed())
     and not exists (
       select 1 from list_privacy p
       where p.user_id = owner and p.media_type = case when mtype = 'ADULT' then 'MANGA' when mtype = 'ADULT_ANIME' then 'ANIME' else coalesce(mtype, 'ANIME') end
@@ -1963,7 +1963,7 @@ declare e record; days int; ah boolean; mh boolean; sees boolean; sees_a boolean
 begin
   if auth.uid() is null then return null; end if;
   sees := owner = auth.uid() or adult_allowed() or adult_track_allowed();   -- 18+ manga
-  sees_a := owner = auth.uid() or adult_allowed();                           -- 18+ anime
+  sees_a := owner = auth.uid() or adult_allowed() or adult_track_allowed();   -- 18+ anime (v1.4.2 Track 18+ too)
   select count(*) filter (where media_type = 'ANIME') as anime,
          count(*) filter (where media_type = 'MANGA') as manga,
          coalesce(sum(case when status = 'COMPLETED' then coalesce(nullif(media_data ->> 'episodes', '')::int, progress) else progress end) filter (where media_type = 'ANIME'), 0) as eps,
