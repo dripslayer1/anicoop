@@ -7299,9 +7299,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             '3.1': [
                 { icon: 'fa-heart', t: 'Like from the +', d: 'The + on a song now starts with “Liked songs”: tap it to like the song (tap again to unlike), or pick a playlist like before.' },
             ],
-            '3.0': [
-                { icon: 'fa-eye-slash', t: 'Adult streaming sites hidden', d: 'Streaming sites for adult anime (like OceanVeil) only show up for people with 18+ access, on title pages and as the automatic Watch link.' },
-            ],
             '2.9': [
                 { icon: 'fa-layer-group', t: 'TV seasons as their own titles', d: 'Searching a show lists its seasons too, and the Seasons row on its page opens each one: track Season 1, Season 2… with their own status, episodes and score.' },
             ],
