@@ -2547,10 +2547,17 @@ createApp({
         const ADULT_IDS_KEY = 'anicoop_adult_ids_v1';
         const adultIds = reactive(readJSON(ADULT_IDS_KEY) || {});   // AniList id → true (18+) / false
         const isAdultMedia = (a) => !!a && (a.isAdult === true || a.adult === true || (a.genres || []).includes('Hentai') || adultIds[a.id] === true);
-        const adultOk = (a) => adultAllowed.value || !isAdultMedia(a);
+        // v1.3 "Track 18+ manga" (only the owner gives it; app_config 'adult_track'): a small version of 18+ access. 18+ titles
+        // of the Manga section (manga, manhwa, manhua) can be tracked, rated, compared, shared… but not read in anicoop, and
+        // in Browse they only show up when you search for one by name (the best match, or the top 3).
+        const adultTrack = reactive({ users: [], missing: false });
+        const trackOnly = computed(() => !adultAllowed.value && !!uid() && adultTrack.users.includes(uid()));
+        const adultOk = (a) => adultAllowed.value || !isAdultMedia(a) || (trackOnly.value && a?.type === 'MANGA');
+        // reading an 18+ manga needs the full 18+ access (track-only people get here, everyone else never sees one)
+        const readLocked = (m) => !!m && m.type === 'MANGA' && !adultAllowed.value && isAdultMedia(m);
         const adultOkItem = (i) => adultOk(i?.anime);
         // a post / list update about an 18+ title (marked when it's made from v10 on; older ones: AniList is asked)
-        const activityOk = (a) => adultAllowed.value || !(a?.extra?.adult || (a?.media_id && adultIds[a.media_id] === true) || (a?.extra?.pick && isAdultMedia(a.extra.pick)));
+        const activityOk = (a) => adultAllowed.value || (trackOnly.value && a?.media_type === 'MANGA') || !(a?.extra?.adult || (a?.media_id && adultIds[a.media_id] === true) || (a?.extra?.pick && isAdultMedia(a.extra.pick)));
         let adultAsking = false;
         const checkAdultIds = async (ids) => {
             if (adultAllowed.value || adultAsking) return;
@@ -7231,7 +7238,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.2';
+        const APP_VERSION = '1.3';
         const WHATS_NEW = {
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
@@ -7379,7 +7386,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             };
             setTimeout(tryShow, 2500);
         };
-        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.v = APP_VERSION; whatsNew.auto = false; whatsNew.open = true; };
+        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.v = WHATS_NEW[APP_VERSION] ? APP_VERSION : whatsNewVersions[0];   // (v1.3 had no note)
+            whatsNew.auto = false; whatsNew.open = true; };
         // ---------- v1.5 download your lists: a backup file (everything) or a spreadsheet (one row per title) ----------
         const downloadFile = (name, text, type) => {
             const url = URL.createObjectURL(new Blob([text], { type }));
@@ -7762,7 +7770,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             try {
                 const data = await anilist(query, { id });
                 if (requestId !== detailRequestId || !data?.Media) return;
-                if (data.Media.isAdult && !adultAllowed.value) { showToast('18+ content is turned off for your account', 'error'); return; }
+                if (data.Media.isAdult && !adultAllowed.value && !(trackOnly.value && data.Media.type === 'MANGA')) { showToast('18+ content is turned off for your account', 'error'); return; }
                 const media = normMedia(data.Media);
                 detailCache.set(id, media);
                 if (push) navigate(() => showDetails(media)); else showDetails(media);
@@ -7814,12 +7822,23 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 && (!f.format || m.format === f.format)).map(normMedia);
             return { items, hasNextPage: (md.offset || 0) + per < Math.min(md.total || 0, 9900) };
         };
+        // v1.3 track-only 18+ manga: nothing until you search; then the one title that matches your search exactly (any of
+        // its names), else the 3 best matches
+        const trackSearch = async (f, { low = false } = {}) => {
+            const q = f.search.trim(); if (!q) return { items: [], hasNextPage: false };
+            const { items } = await adultMangaBrowse(f, 1, { low });
+            const want = normTitle(q);
+            const exact = items.find(m => [m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || [])].some(t => t && normTitle(t) === want));
+            return { items: exact ? [exact] : items.slice(0, 3), hasNextPage: false };
+        };
+        const trackSearchOnly = computed(() => trackOnly.value && section.value === 'manga' && !!filters.value.isAdult);
         const browseFetch = async (type, f, page, { low = false } = {}) => {
             if (type === 'GAME') return gameApi.browse(f, page, gameOpts(), { low });
             if (type === 'TV') return tvApi.browse(f, page, { ...gameOpts(), hidden: hiddenOf('TV') });
             if (type === 'SONG') return songApi.browse(f, page);
             const isManga = type === 'MANGA';
             if (isManga && f.isAdult && adultAllowed.value) return adultMangaBrowse(f, page, { low });
+            if (isManga && f.isAdult && trackOnly.value) return trackSearch(f, { low });   // v1.3
             const varsDef = ['$page: Int'];
             const mediaArgs = [`type: ${type}`, `isAdult: ${f.isAdult && adultAllowed.value ? 'true' : 'false'}`];   // 18+ only if the owner allows you
             const variables = { page };
@@ -7956,7 +7975,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const BROWSE_KEY = 'anicoop_browse_v1';
         const BROWSE_FRESH = 3 * 60 * 1000;          // younger than this: no refresh at all
         const browseCache = new Map(Object.entries(readJSON(BROWSE_KEY) || {}).filter(([, v]) => Date.now() - v.at < 24 * 3600 * 1000 && v.items?.length));
-        const browseKey = (type, f) => [type, f.search.trim().toLowerCase(), f.genre, f.tag, f.year, f.season, f.status, f.format, f.country, f.platform, f.coop, f.sort, f.hideExplicit, f.isAdult && adultAllowed.value, JSON.stringify(hiddenOf(type))].join('|');
+        const browseKey = (type, f) => [type, f.search.trim().toLowerCase(), f.genre, f.tag, f.year, f.season, f.status, f.format, f.country, f.platform, f.coop, f.sort, f.hideExplicit, f.isAdult && (adultAllowed.value || trackOnly.value), JSON.stringify(hiddenOf(type))].join('|');
         const saveBrowse = debounce(() => {
             const keep = {}; browseCache.forEach((v, k) => { if (v.def) keep[k] = { ...v, items: v.items.map(slimAnime) }; });
             try { localStorage.setItem(BROWSE_KEY, JSON.stringify(keep)); } catch {}
@@ -8707,7 +8726,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         // 18+ sources only show (and install) while the 18+ filter is switched on
         const adultOn = computed(() => adultAllowed.value && !!filters.value.isAdult);
-        const playKind = computed(() => MEDIA_KIND[selectedAnime.value?.type] || null);
+        const playKind = computed(() => readLocked(selectedAnime.value) ? null : (MEDIA_KIND[selectedAnime.value?.type] || null));   // (v1.3 no Read for track-only 18+)
         // ---- website sources: add / remove / install from a repository ----
         const siteSources = computed(() => PREFS.sources || []);
         const kindOf = (s) => s?.kind || 'manga';
@@ -9185,6 +9204,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             flashT = setTimeout(() => { rd.flash = null; }, 2600);
         };
         const openChapter = async (c, manga = selectedAnime.value, { auto = false } = {}) => {
+            if (readLocked(manga)) { showToast('Reading 18+ isn’t on for your account: you can track it, not read it', 'error'); return; }   // v1.3
             if (!canReadInApp(c)) { cantReadHere(c); return; }
             addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
             freeBlobs();
@@ -9614,12 +9634,33 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const call = (fn) => sb.rpc(fn).then(r => r.error ? null : r.data, () => null);
             const [allowed, owner, any] = await Promise.all([call('adult_allowed'), call('is_app_owner'), call('has_owner'), loadSongsCfg()]);
             adultAllowed.value = allowed === true; isOwner.value = owner === true; hasOwner.value = any !== false; songsCfg.ready = true;
-            if (!adultAllowed.value && filters.value.isAdult) filters.value.isAdult = false;
+            await loadAdultTrack();
+            if (!adultAllowed.value && !trackOnly.value && filters.value.isAdult) filters.value.isAdult = false;
             if (isOwner.value || can('manage_18')) {
                 const { data } = await sb.from('app_config').select('value').eq('key', 'adult').maybeSingle();
                 Object.assign(adultConfig, { everyone: !!data?.value?.everyone, users: [...(data?.value?.users || [])] });
                 ensureProfiles(adultConfig.users);
             }
+        };
+        // v1.3 who may track 18+ manga (readable by everyone signed in, only the owner can change it)
+        const loadAdultTrack = async () => {
+            const { data, error } = await sb.from('app_config').select('value').eq('key', 'adult_track').maybeSingle().then(r => r, () => ({ data: null, error: true }));
+            Object.assign(adultTrack, { users: [...(data?.value?.users || [])], missing: !error && !data });
+            if (isOwner.value) ensureProfiles(adultTrack.users);
+        };
+        const saveAdultTrack = async () => {
+            const { data, error } = await sb.from('app_config').update({ value: { users: adultTrack.users }, updated_at: new Date().toISOString() }).eq('key', 'adult_track').select('key');
+            if (error || !data?.length) showToast('Could not save: ' + (error?.message || 'run the v1.3 SQL in Supabase first (see README)'), 'error'); else showToast('Track 18+ manga updated');
+        };
+        const toggleTrackUser = (id) => { const i = adultTrack.users.indexOf(id); if (i === -1) adultTrack.users.push(id); else adultTrack.users.splice(i, 1); saveAdultTrack(); };
+        const trackSearchName = ref('');
+        const addTrackUserByName = async () => {
+            const name = trackSearchName.value.trim().replace(/^@/, ''); if (!name) return;
+            const { data } = await sb.from('profiles').select('id, username, avatar_url, accent').ilike('username', escapeLike(name)).maybeSingle();
+            if (!data) { showToast('No user with that username', 'error'); return; }
+            if (!profileById.value.has(data.id)) extraProfiles.value = [...extraProfiles.value, data];
+            if (!adultTrack.users.includes(data.id)) toggleTrackUser(data.id);
+            trackSearchName.value = '';
         };
         const claimOwner = async () => {
             const { data, error } = await sb.rpc('claim_owner');
@@ -11630,7 +11671,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdQuery, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
-            adultAllowed, isOwner, hasOwner, adultConfig, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
+            adultAllowed, isOwner, hasOwner, adultConfig, adultTrack, trackOnly, readLocked, trackSearchOnly, toggleTrackUser, trackSearchName, addTrackUserByName, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
             gifTab, isGifSaved, toggleSaveGif, gifMore, STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
             incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
             msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, emoji, EMOJI_GROUPS, emojiShown, insertEmoji, noteCaret, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,

@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.2">
+    <link rel="stylesheet" href="app.css?v=1.3">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.2" defer></script>
+    <script src="app.js?v=1.3" defer></script>
 </head>
 <body>
 
@@ -659,6 +659,7 @@
                                 <!-- Read / Watch: opens the window with your sources and every chapter / episode -->
                                 <!-- v10.4 anime / TV: the Watch buttons use your saved link. On a computer the banner has it, so this one is
                                      for manga, and for anime / TV only on phones (the banner button is hidden there) -->
+                                <span v-if="readLocked(selectedAnime)" class="play-cta !bg-raised !text-sub !cursor-default" title="You can track this title, not read it"><i class="fa-solid fa-lock"></i> Reading locked · track only</span>
                                 <button v-if="playKind === 'manga'" @click="openWatch" class="play-cta"><i class="fa-solid" :class="playKind === 'manga' ? 'fa-book-open' : 'fa-play'"></i> {{ playKind === 'manga' ? 'Read' : 'Watch' }}<span v-if="wpStarted" class="opacity-70 font-semibold">· continue</span></button>
                                 <button v-else-if="playKind" @click="watchMine(selectedAnime)" class="play-cta md:!hidden"><i class="fa-solid fa-play"></i> {{ isMovie || !linkInfo(selectedAnime) || wlAtEnd(selectedAnime) ? 'Watch' : 'Watch ep ' + nextEpOf(selectedAnime.id) }}<span v-if="!linkInfo(selectedAnime)" class="opacity-70 font-semibold">· no link saved</span></button>
                                 <!-- v1.1 games on Steam: Steam opens and starts it (or offers to install it) -->
@@ -1814,7 +1815,7 @@
                             <button @click="filters.hideMyAnime = !filters.hideMyAnime" :class="{ 'is-on': filters.hideMyAnime }" class="toggle"><span class="knob"></span>Hide mine</button>
                             <button v-if="section === 'songs'" @click="filters.hideExplicit = !filters.hideExplicit" :class="{ 'is-on': filters.hideExplicit }" class="toggle"><span class="knob"></span>No explicit</button>
                             <div v-if="section === 'games' || section === 'movies'" class="chip-wrap"><select v-model="filters.sort" :class="{ 'is-on': filters.sort }" class="chip"><option v-for="s in GAME_SORTS.filter(s => section === 'games' || !s.v.startsWith('price'))" :key="s.v" :value="s.v">{{ s.v ? s.l : 'Sort: popular' }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
-                            <button v-if="adultAllowed && section !== 'songs'" @click="filters.isAdult = !filters.isAdult" :class="{ 'is-on': filters.isAdult }" class="toggle"><span class="knob"></span>18+ only</button>
+                            <button v-if="(adultAllowed || (trackOnly && section === 'manga')) && section !== 'songs'" @click="filters.isAdult = !filters.isAdult" :class="{ 'is-on': filters.isAdult }" class="toggle" :title="trackOnly ? 'Find an 18+ title by searching for its name (you can track it, not read it)' : ''"><span class="knob"></span>18+ only</button>
                             <button v-if="section !== 'songs'" @click.stop="hiddenGenreOpen = !hiddenGenreOpen" :class="{ 'is-on': hiddenOf(mediaType).length, 'is-open': hiddenGenreOpen }" class="toggle hg-toggle !pl-3" :aria-expanded="hiddenGenreOpen"><i class="fa-solid text-[11px]" :class="hiddenOf(mediaType).length ? 'fa-eye-slash' : 'fa-eye'"></i>{{ hiddenOf(mediaType).length ? 'Genres hidden' : 'Hide genres' }}<span v-if="hiddenOf(mediaType).length" class="clear-count">{{ hiddenOf(mediaType).length }}</span><i class="fa-solid fa-chevron-down hg-chev"></i></button>
                         </div>
                     </div>
@@ -1921,6 +1922,12 @@
                                 <i class="fa-solid fa-triangle-exclamation text-3xl text-mute"></i>
                                 <p class="mt-4 text-sub">{{ browseError }}</p>
                                 <button @click="fetchMainList(false)" class="btn-primary mt-6">Try again</button>
+                            </div>
+                            <!-- v1.3 track-only 18+: nothing to browse, search for the title -->
+                            <div v-else-if="trackSearchOnly && !filters.search.trim()" class="panel py-20 px-6 text-center">
+                                <i class="fa-solid fa-magnifying-glass text-3xl text-mute"></i>
+                                <p class="mt-4 font-display text-ink text-lg">Search for your manhwa</p>
+                                <p class="mt-1 text-sub text-sm max-w-sm mx-auto">Type its name in the search box above: the best match shows up here. You can track it, rate it and compare it; reading 18+ stays off.</p>
                             </div>
                             <div v-else-if="!visibleResults.length" class="panel py-20 text-center text-sub">Nothing found with these filters.<br><button @click="resetFilters" class="btn-ghost mt-5"><i class="fa-solid fa-filter-circle-xmark"></i> Clear all filters</button></div>
                             <!-- Songs: an organised track list (grouped the way you pick) instead of a wall of covers -->
@@ -4290,6 +4297,24 @@
                                             <button type="submit" :disabled="!ownerSearch.trim()" class="btn-ghost !py-2 !px-4 !text-xs shrink-0">Allow</button>
                                         </form>
                                     </template>
+                                </div>
+
+                                <!-- TRACK 18+ MANGA (v1.3, owner only) -->
+                                <div v-if="isOwner" class="set-block">
+                                    <p class="set-title">Track 18+ manga</p>
+                                    <p class="set-hint">A small 18+ access: these people can add, rate, compare and share 18+ manga, manhwa and manhua, but not read them. Nothing 18+ shows in their Browse: with Manga → <b>18+ only</b> they search for a title by name and get the best match. People with full 18+ access don't need this.</p>
+                                    <p v-if="adultTrack.missing" class="set-hint !text-[#f59e0b] mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Run the v1.3 SQL in Supabase (see README) before changing this.</p>
+                                    <p class="label mt-5 mb-2">Can track ({{ adultTrack.users.length }})</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button v-for="pp in statPeople" :key="pp.id" @click="toggleTrackUser(pp.id)" class="squad-chip" :class="{ on: adultTrack.users.includes(pp.id) }" style="--c:#f59e0b">
+                                            <i class="fa-solid" :class="adultTrack.users.includes(pp.id) ? 'fa-check' : 'fa-plus'"></i><user-avatar :user="pp" :size="16"></user-avatar>{{ pp.username }}
+                                        </button>
+                                        <button v-for="id in adultTrack.users.filter(id => !statPeople.some(p => p.id === id))" :key="id" @click="toggleTrackUser(id)" class="squad-chip on" style="--c:#f59e0b"><i class="fa-solid fa-check"></i>{{ personOf(id).username }}</button>
+                                    </div>
+                                    <form class="flex gap-2 mt-3 max-w-md" @submit.prevent="addTrackUserByName">
+                                        <input v-model="trackSearchName" placeholder="Add someone by username" class="field !py-2 !rounded-xl">
+                                        <button type="submit" :disabled="!trackSearchName.trim()" class="btn-ghost !py-2 !px-4 !text-xs shrink-0">Allow</button>
+                                    </form>
                                 </div>
 
                                 <!-- SONGS (v9.7) -->

@@ -1366,3 +1366,16 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
   played them in; the song's details come from your History).
 - **Lists → Songs → Played** shows them (not mixed into All). Liking a played song keeps its plays; un-liking a song
   you've played keeps it as Played instead of taking it off your list.
+
+## v1.3 — Track 18+ manga (owner gives it)
+
+**SQL: run `supabase/v1.3-track-18.sql` once** (one line, also in `supabase_setup.sql`). No Edge Function change.
+Hard-refresh: the footer says **v1.3**. No What’s new pop-up for this one (on purpose).
+
+- **Settings → Track 18+ manga** (only the owner sees it): pick people (or add by username). It's a small version of
+  18+ access, for the Manga section only (manga, manhwa, manhua):
+  - they can add 18+ titles to their lists, rate them, compare, see them on friends' lists and in the feed, share them…
+  - but **not read** them: no Read button, no chapters / sources, the reader refuses ("Reading locked · track only");
+  - **nothing 18+ in Browse**: Manga → **18+ only** says "Search for your manhwa"; once they search, it shows the title
+    that matches the name exactly (any of its names), otherwise the 3 best matches.
+- People with full 18+ access (and the owner) don't need it; anime 18+ stays off for track-only people.
