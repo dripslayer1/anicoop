@@ -1403,5 +1403,7 @@ Hard-refresh: the footer says **v1.4**. No What's new pop-up.
   Track 18+ manga get those rows (list updates about them too). They follow the Manga list's privacy setting. Before,
   they were only hidden by the page. "Completed" and "Mean score" on a profile leave them out for everyone else.
 - Watch buddies never copy 18+ titles into each other's Plan to read.
+- Tags taken out of the Tags filter and the tag chips on title pages (owner's choice): Boys' Love, LGBTQ+ Themes,
+  Asexual, Bisexual, Transgender, Male Pregnancy, Omegaverse. Titles that have them still show and are found by name.
 - What's already saved moves over: the SQL moves manga marked 18+, and the app finds older ones (asks AniList) and
   moves them a few seconds after the page opens, keeping their "last updated".

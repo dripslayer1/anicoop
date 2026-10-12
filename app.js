@@ -2507,13 +2507,16 @@ createApp({
         const detailLoading = ref(false);
         const defaultFilters = () => ({ search: '', genre: '', tag: '', year: '', season: '', status: '', format: '', country: '', platform: '', coop: false, sort: '', hideExplicit: false, isAdult: false, hideMyAnime: false });
         const tagCollection = ref([]);
+        // v1.4 tags the owner took out of the Tags filter and the tag chips on title pages (titles with them still show,
+        // and searching by name finds them as before)
+        const HIDDEN_TAGS = new Set(["Boys' Love",'LGBTQ+ Themes', 'Asexual', 'Bisexual', 'Transgender', 'Male Pregnancy', 'Omegaverse']);
         const fetchTags = async () => {
             if (tagCollection.value.length) return;
             try { const data = await anilistLow('query { MediaTagCollection { name category isAdult } }', {}); tagCollection.value = data?.MediaTagCollection || []; } catch {}
         };
         const tagGroups = computed(() => {
             const g = {};
-            tagCollection.value.filter(t => filters.value.isAdult || !t.isAdult).forEach(t => { const c = (t.category || 'Other').split('-')[0]; (g[c] = g[c] || []).push(t.name); });
+            tagCollection.value.filter(t => (filters.value.isAdult || !t.isAdult) && !HIDDEN_TAGS.has(t.name)).forEach(t => { const c = (t.category || 'Other').split('-')[0]; (g[c] = g[c] || []).push(t.name); });
             return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0])).map(([cat, names]) => ({ cat, names: names.sort() }));
         });
         const filters = ref(defaultFilters());
@@ -7687,7 +7690,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             text: `#${r.rank} ${r.type === 'RATED' ? 'highest rated' : 'most popular'} ${r.allTime ? 'all time' : (r.season ? nice(r.season) + ' ' : '') + (r.year || '')}`,
         })));
         const showSpoilerTags = ref(false);
-        const detailTags = computed(() => (selectedAnime.value?.tags || []).filter(t => showSpoilerTags.value || !t.isMediaSpoiler).slice(0, 14));
+        const detailTags = computed(() => (selectedAnime.value?.tags || []).filter(t => (showSpoilerTags.value || !t.isMediaSpoiler) && !HIDDEN_TAGS.has(t.name)).slice(0, 14));
         const STAT_STATUS = { CURRENT: ['Watching', '#3b82f6'], PLANNING: ['Planning', '#f59e0b'], COMPLETED: ['Completed', '#22c55e'], DROPPED: ['Dropped', '#ef4444'], PAUSED: ['Paused', '#a855f7'] };
         const detailStats = computed(() => {
             const st = selectedAnime.value?.stats; if (!st) return null;
