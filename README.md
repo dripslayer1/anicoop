@@ -1429,3 +1429,16 @@ Function change. Hard-refresh: the footer says **v1.4.2**. No What's new pop-up.
   watch them (no Watch button, watch link, episodes or streaming links on those titles; "Watching locked · track only").
 - In Browse, **Anime → 18+ only** works like Manga: "Search for your anime", then the one best match.
 - The database sends them 18+ anime rows ('ADULT_ANIME') too; profile Completed / Mean include them for them.
+
+## v1.4.3 — friends' 18+ lists for Track 18+, an 18+ watch buddy
+
+**SQL: run `supabase/v1.4.3-adult-buddy.sql`** (after v1.4.2; also in `supabase_setup.sql`). No Edge Function
+change. Hard-refresh: the footer says **v1.4.3**. No What's new pop-up.
+
+- **Fixes "Could not remove: column media_type does not exist"** (and the same error when adding to Plan to watch) on
+  databases that never ran `supabase/v2.3-buddy-sections.sql`: the v1.4.3 file adds that part too.
+- A friend's 18+ titles that the database keeps as 18+ now always show in their 18+ list (titles saved before v1.4
+  were sometimes left in their normal Manga / Anime list, so the 18+ list looked empty or missing).
+- A friend's profile opened before your Track 18+ access had loaded now shows their 18+ list once it loads.
+- **18+ watch buddy:** on a friend's profile, next to Anime / Manga / Movies & TV / Games, an **🔥 18+** button when you
+  both have 18+ access (full or Track 18+). It syncs only 18+ Plan to read / watch; other buddies still never get 18+.
