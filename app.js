@@ -7240,9 +7240,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
         const APP_VERSION = '1.3';
         const WHATS_NEW = {
-            '1.3': [
-                { icon: 'fa-user-lock', t: 'Track 18+ manga (owner)', d: 'The owner can let someone track 18+ manga & manhwa without reading them: Settings → Track 18+ manga. They find a title by searching for it in Manga → 18+, and can add, rate and compare it, but Read stays locked.' },
-            ],
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
             ],
@@ -7389,7 +7386,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             };
             setTimeout(tryShow, 2500);
         };
-        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.v = APP_VERSION; whatsNew.auto = false; whatsNew.open = true; };
+        const openWhatsNew = () => { settingsOpen.value = false; whatsNew.v = WHATS_NEW[APP_VERSION] ? APP_VERSION : whatsNewVersions[0];   // (v1.3 had no note)
+            whatsNew.auto = false; whatsNew.open = true; };
         // ---------- v1.5 download your lists: a backup file (everything) or a spreadsheet (one row per title) ----------
         const downloadFile = (name, text, type) => {
             const url = URL.createObjectURL(new Blob([text], { type }));

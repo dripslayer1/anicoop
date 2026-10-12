@@ -1370,7 +1370,7 @@ it uses the MAL_CLIENT_ID secret you already added for the MyAnimeList link. Har
 ## v1.3 — Track 18+ manga (owner gives it)
 
 **SQL: run `supabase/v1.3-track-18.sql` once** (one line, also in `supabase_setup.sql`). No Edge Function change.
-Hard-refresh: the footer says **v1.3**.
+Hard-refresh: the footer says **v1.3**. No What’s new pop-up for this one (on purpose).
 
 - **Settings → Track 18+ manga** (only the owner sees it): pick people (or add by username). It's a small version of
   18+ access, for the Manga section only (manga, manhwa, manhua):
