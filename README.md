@@ -1379,3 +1379,12 @@ Hard-refresh: the footer says **v1.3**. No What’s new pop-up for this one (on 
   - **nothing 18+ in Browse**: Manga → **18+ only** says "Search for your manhwa"; once they search, it shows the title
     that matches the name exactly (any of its names), otherwise the 3 best matches.
 - People with full 18+ access (and the owner) don't need it; anime 18+ stays off for track-only people.
+
+## v1.3.1 — Track 18+ manga: one best match
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.3.1**. No What's new pop-up (like v1.3).
+
+- The search shows **one** title, the best match: every result is scored on all its names (AniList's English, romaji,
+  native and other names, plus MangaDex's titles in every language). The same name wins, then a name that starts with
+  what you typed, then the most words in common; MangaDex's relevance order breaks a tie.
+- MangaDex is searched in both 18+ ratings ("erotica" too, not only "pornographic"): many 18+ manhwa are filed there.

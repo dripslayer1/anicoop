@@ -7238,7 +7238,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.3';
+        const APP_VERSION = '1.3.1';
         const WHATS_NEW = {
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
@@ -7822,14 +7822,42 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 && (!f.format || m.format === f.format)).map(normMedia);
             return { items, hasNextPage: (md.offset || 0) + per < Math.min(md.total || 0, 9900) };
         };
-        // v1.3 track-only 18+ manga: nothing until you search; then the one title that matches your search exactly (any of
-        // its names), else the 3 best matches
+        // v1.3 track-only 18+ manga: nothing until you search; then (v1.3.1) only the one best match. MangaDex is searched in
+        // both of its 18+ ratings (many 18+ manhwa are "erotica" there, not "pornographic"), and every result is scored on
+        // all its names (AniList's English / romaji / native / other names + MangaDex's titles in every language): the same
+        // name wins, then a name that starts with what you typed, then the most words in common; MangaDex's own relevance
+        // order breaks a tie.
+        const nameScore = (name, q, qWords) => {
+            const n = normTitle(name); if (!n) return 0;
+            if (n === q) return 100;
+            if (n.startsWith(q + ' ') || q.startsWith(n + ' ')) return 80 - Math.min(20, Math.abs(n.length - q.length) / 2);
+            if (n.startsWith(q) || q.startsWith(n)) return 70 - Math.min(20, Math.abs(n.length - q.length) / 2);
+            const nWords = new Set(n.split(' '));
+            const hit = qWords.filter(w => nWords.has(w)).length;
+            if (!hit) return n.includes(q) ? 40 : 0;
+            return (hit === qWords.length ? 55 : 45 * hit / qWords.length) - Math.min(10, Math.max(0, nWords.size - hit));
+        };
         const trackSearch = async (f, { low = false } = {}) => {
             const q = f.search.trim(); if (!q) return { items: [], hasNextPage: false };
-            const { items } = await adultMangaBrowse(f, 1, { low });
-            const want = normTitle(q);
-            const exact = items.find(m => [m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || [])].some(t => t && normTitle(t) === want));
-            return { items: exact ? [exact] : items.slice(0, 3), hasNextPage: false };
+            const p = new URLSearchParams({ limit: 40, title: q });
+            ['erotica', 'pornographic'].forEach(r => p.append('contentRating[]', r));
+            p.append('order[relevance]', 'desc');
+            const md = JSON.parse((await siteFetch('https://api.mangadex.org/manga?' + p)).body || '{}');
+            const rows = new Map();   // AniList id → { i: MangaDex position, names: MangaDex's names }
+            (md.data || []).forEach((m, i) => {
+                const al = Number(m.attributes?.links?.al); if (!al || rows.has(al)) return;
+                const at = m.attributes || {};
+                rows.set(al, { i, names: [...Object.values(at.title || {}), ...(at.altTitles || []).flatMap(o => Object.values(o || {}))] });
+            });
+            if (!rows.size) return { items: [], hasNextPage: false };
+            const data = await anilist(`query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: MANGA) { ${MEDIA_FIELDS} } } }`, { ids: [...rows.keys()].slice(0, 50) }, { low });
+            const want = normTitle(q), qWords = want.split(' ').filter(Boolean);
+            const scored = (data?.Page?.media || []).map(m => {
+                const r = rows.get(m.id);
+                const names = [m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || []), ...(r?.names || [])].filter(Boolean);
+                return { m, sc: Math.max(0, ...names.map(n => nameScore(n, want, qWords))) - (r?.i || 0) * 0.2 };
+            }).filter(x => x.sc > 0).sort((x, y) => y.sc - x.sc);
+            return { items: scored.length ? [normMedia(scored[0].m)] : [], hasNextPage: false };
         };
         const trackSearchOnly = computed(() => trackOnly.value && section.value === 'manga' && !!filters.value.isAdult);
         const browseFetch = async (type, f, page, { low = false } = {}) => {
