@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.2'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.3'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.2'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.3'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -473,6 +473,7 @@ These are cumulative; the README has one section per version.
 - **v1.1** (no SQL): lyrics (`lyr`, next to the player code): LRCLIB `/api/search` (track + artist, then q=), best by length (± 15 s of `durationMs` / YouTube length) → name → synced; `parseLrc` → `lyr.lines`; `lyrIdx` from `player.t` only in `yt` mode (previews show plain text); auto-scroll in `#lyr-box` pauses 4 s after you scroll; `lyrSeek` → `seekTo`. Cached per song id in memory (`lyrCache`).
 - **v1.1.1** (no SQL): `rankSongVideos` rejects uploads by none of the song's artists (unless exact name + length ± 3 s) and official tracks off by > 15 s (videos > 35 s); YTM query uses up to 3 artists; `YT_SONGS_KEY` → `anicoop_yt_songs_v2` (old remembered picks dropped).
 - **v1.2** (no SQL): songs with status `NONE` = "Played" (`LABEL_SETS.SONG`). `countPlay` creates one for a song not on your list (no activity logged); `movePendingPlays` (5 s after sign-in) moves old `anicoop_pending_plays` onto the list using History's saved media. Lists: songs get a "Played" filter (`NONE`), kept out of All and its count; `uncheckStatus` keeps a played song as NONE; TrackRow's ♥ still likes a Played song.
+- **v1.3** (SQL: `supabase/v1.3-track-18.sql`): app_config `adult_track` {users}, owner-only (policy "config: owner"). `trackOnly` (not full 18+, on the list): `adultOk` / `activityOk` let 18+ MANGA through, title pages open them; `readLocked(m)` blocks reading (`playKind` null, `openChapter` guard); Browse Manga + 18+ → `trackSearch` (no search = nothing + "Search for your manhwa"; search = exact-name match or top 3 from `adultMangaBrowse`). NSFW reading sources still follow full 18+ (`adultOn`).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

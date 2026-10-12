@@ -304,6 +304,8 @@ create table if not exists public.app_config (
   updated_at timestamptz not null default now()
 );
 insert into public.app_config (key, value) values ('adult', '{"everyone": false, "users": []}') on conflict (key) do nothing;
+-- v1.3 who may track (not read) 18+ manga; only the owner changes it (policy "config: owner"), everyone signed in reads it
+insert into public.app_config (key, value) values ('adult_track', '{"users": []}') on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------
 -- 2e. NEW TABLES (v7)
