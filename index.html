@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.4">
+    <link rel="stylesheet" href="app.css?v=1.4.1">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.4" defer></script>
+    <script src="app.js?v=1.4.1" defer></script>
 </head>
 <body>
 
@@ -1290,7 +1290,8 @@
                         <div v-if="viewedSection !== 'list'" class="px-5 md:px-8 pb-6 md:pb-8 mt-6">
                             <div class="stat-grid grid grid-cols-2 sm:grid-cols-5 sm:grid-rows-[auto_auto] gap-3" :class="{ 'no-songs': !songsOn }">
                                 <div v-for="(col, n) in statColumns(viewedStats)" :key="n" class="flex gap-3 sm:grid sm:grid-rows-subgrid sm:row-span-2" :class="n === 0 ? 'col-span-2 sm:col-span-1 flex-row' : 'flex-col'">
-                                    <button v-for="c in col" :key="c.key" @click="openFriendStat(c)" class="stat-card flex-1 sm:h-full" :class="[{ 'is-soon': c.soon || c.hidden, '!py-3': c.small, 'has-alt': c.alt != null && !c.hidden }]" :title="c.alt != null && !c.hidden ? c.value + ' episodes (each counted once) · ' + c.alt + ' with rewatches' : null">
+                                    <button v-for="c in col" :key="c.key" @click="openFriendStat(c)" class="stat-card relative flex-1 sm:h-full" :class="[{ 'is-soon': c.soon || c.hidden, '!py-3': c.small, 'has-alt': c.alt != null && !c.hidden }]" :title="c.alt != null && !c.hidden ? c.value + ' episodes (each counted once) · ' + c.alt + ' with rewatches' : null">
+                                        <span v-if="c.can18 && adultListOk" @click.stop="toggleStat18(c)" class="stat-18" :class="{ on: c.adult }" role="button" :title="c.adult ? 'Back to all' : 'Show 18+'"><i class="fa-solid fa-fire"></i></span>
                                         <span v-if="c.hidden" class="font-display font-bold text-mute" :class="c.small ? 'text-lg' : 'text-2xl'"><i class="fa-solid fa-lock" :class="c.small ? 'text-sm' : 'text-lg'"></i></span>
                                         <span v-else class="font-display font-bold" :class="[c.small ? 'text-lg' : 'text-2xl', c.accent ? 'text-volt' : 'text-ink']"><span v-if="c.alt != null" class="alt-swap"><span class="alt-off">{{ c.value }}</span><span class="alt-on">{{ c.alt }}</span></span><template v-else>{{ c.value }}</template></span>
                                         <span class="label mt-1 flex items-center gap-1.5"><i v-if="c.icon" :class="c.icon" class="fa-solid" :style="{ color: c.color }"></i><span v-if="c.alt != null" class="alt-swap"><span class="alt-off">{{ c.label }}</span><span class="alt-on">{{ c.altLabel }}</span></span><template v-else>{{ c.label }}</template><span v-if="c.soon" class="text-volt">soon</span></span>
@@ -1450,7 +1451,7 @@
                                     </div>
                                     <div class="seg">
                                         <button @click="theirList.type = 'ANIME'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'ANIME' }" class="seg-btn">Anime</button>
-                                        <button @click="theirList.type = 'MANGA'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'MANGA' }" class="seg-btn">Manga</button><button v-if="theirAdultCount" @click="theirList.type = 'ADULT'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'ADULT' }" class="seg-btn"><i class="fa-solid fa-fire mr-1 text-[#ef4444]"></i>18+</button><button @click="theirList.type = 'GAME'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'GAME' }" class="seg-btn">Games</button><button @click="theirList.type = 'TV'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'TV' }" class="seg-btn">Movies &amp; TV</button><button v-if="songsOn" @click="theirList.type = 'SONG'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'SONG' }" class="seg-btn">Songs</button>
+                                        <button @click="theirList.type = 'MANGA'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'MANGA' }" class="seg-btn">Manga</button><button v-if="theirAdultCount" @click="theirList.type = 'ADULT'; theirList.status = 'ALL'; theirList.sub = ''" :class="{ 'is-on': theirList.type === 'ADULT' }" class="seg-btn"><i class="fa-solid fa-fire mr-1 text-[#ef4444]"></i>18+</button><button @click="theirList.type = 'GAME'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'GAME' }" class="seg-btn">Games</button><button @click="theirList.type = 'TV'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'TV' }" class="seg-btn">Movies &amp; TV</button><button v-if="songsOn" @click="theirList.type = 'SONG'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'SONG' }" class="seg-btn">Songs</button>
                                     </div>
                                 </div>
                                 <div class="mt-8 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8 items-start">
@@ -1463,11 +1464,18 @@
                                             <p class="label mb-2 px-1">Sort by</p>
                                             <div class="chip-wrap w-full"><select v-model="PREFS.listOrder" class="chip w-full"><option v-for="o in LIST_ORDERS" :key="o.v" :value="o.v">{{ o.l }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
                                         </div>
+                                        <!-- v1.4.1 their 18+ list: anime / manga / manhwa -->
+                                        <div v-if="theirList.type === 'ADULT'">
+                                            <p class="label mb-2 px-1">Show</p>
+                                            <div class="flex lg:flex-col flex-wrap gap-1">
+                                                <button v-for="o in [{ v: '', l: 'All' }, { v: 'ANIME', l: 'Anime' }, { v: 'MANGA', l: 'Manga' }, { v: 'MANHWA', l: 'Manhwa & manhua' }]" :key="o.v" @click="theirList.sub = o.v; theirList.status = 'ALL'" :class="theirList.sub === o.v ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-colors">{{ o.l }}</button>
+                                            </div>
+                                        </div>
                                         <div>
                                             <p class="label mb-2 px-1">Status</p>
                                             <div class="flex lg:flex-col flex-wrap gap-1">
                                                 <button v-for="opt in ['ALL', ...STATUS_ORDER].filter(o => o === 'ALL' || theirCounts[o] || !(theirList.type === 'SONG' && (o === 'PLANNING' || o === 'PAUSED')) && (o !== 'REPEATING' || theirList.type === 'ANIME'))" :key="opt" @click="theirList.status = opt" :class="theirList.status === opt ? 'bg-overlay text-ink' : 'text-sub hover:text-ink hover:bg-raised'" class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors">
-                                                    <span class="flex items-center gap-2.5"><span class="qa-dot" :style="{ '--dot': opt === 'ALL' ? 'rgb(var(--c-ink))' : STATUS_COLORS[opt] }"></span>{{ opt === 'ALL' ? 'All' : statusLabelFor(theirList.type, opt) }}</span>
+                                                    <span class="flex items-center gap-2.5"><span class="qa-dot" :style="{ '--dot': opt === 'ALL' ? 'rgb(var(--c-ink))' : STATUS_COLORS[opt] }"></span>{{ opt === 'ALL' ? 'All' : statusLabelFor(theirLabelType, opt) }}</span>
                                                     <span class="font-mono text-xs text-mute">{{ theirCounts[opt] || 0 }}</span>
                                                 </button>
                                             </div>
@@ -1479,7 +1487,7 @@
                                         <section v-for="(group, status) in theirGrouped" :key="status" class="mb-12">
                                             <h3 class="flex items-center gap-3 mb-5">
                                                 <span class="qa-dot !w-3 !h-3" :style="{ '--dot': STATUS_COLORS[status] }"></span>
-                                                <span class="font-display font-semibold text-ink text-lg">{{ statusLabelFor(theirList.type, status) }}</span>
+                                                <span class="font-display font-semibold text-ink text-lg">{{ statusLabelFor(theirLabelType, status) }}</span>
                                                 <span class="font-mono text-xs text-mute">{{ group.length }}</span>
                                             </h3>
                                             <div :class="posterGrid()">
@@ -2670,14 +2678,11 @@
                     <div class="flex flex-wrap items-end justify-between gap-4">
                         <div>
                             <p class="kicker">// {{ currentSection.short.toLowerCase() }} · {{ strictSolo ? 'just you' : listWith.length ? 'with ' + joinNames(listWith.map(id => personOf(id).username)) : 'everything you track' }}</p>
-                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ adultView && section === 'manga' ? 'Your 18+ list' : 'Your list' }}</h1>
+                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ adultView && (section === 'manga' || section === 'anime') ? 'Your 18+ ' + (section === 'anime' ? 'anime' : 'manga') : 'Your list' }}</h1>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
-                            <!-- v1.4 the 18+ list: its own list, only for people with 18+ access or "Track 18+ manga" -->
-                            <div v-if="section === 'manga' && adultListOk" class="seg">
-                                <button @click="adultView = false" :class="{ 'is-on': !adultView }" class="seg-btn">Manga</button>
-                                <button @click="adultView = true" :class="{ 'is-on': adultView }" class="seg-btn"><i class="fa-solid fa-fire mr-1.5 text-[#ef4444]"></i>18+<span v-if="adultCount" class="opacity-60 ml-1.5">{{ adultCount }}</span></button>
-                            </div>
+                            <!-- v1.4.1 the 18+ titles of this section: a small switch (only with 18+ access / Track 18+, and only when you have some) -->
+                            <button v-if="(section === 'manga' || section === 'anime') && adultListOk && (adultCount || adultView)" @click="adultView = !adultView" class="solo-toggle adult-toggle" :class="{ on: adultView }" role="switch" :aria-checked="adultView" :title="adultView ? 'Back to your ' + section : 'Your 18+ ' + section"><i class="fa-solid fa-fire"></i> 18+<span class="opacity-60">{{ adultCount }}</span></button>
                             <!-- v1.6 Strictly solo: hides everything you watch with friends -->
                             <!-- v1.7 Group seasons: the seasons (and movies) of one show sit together -->
                             <button v-if="['ANIME', 'TV'].includes(currentSection.type)" @click="groupSeasons = !groupSeasons" class="solo-toggle" :class="{ on: groupSeasons }" role="switch" :aria-checked="groupSeasons" title="Show the seasons and movies of the same show together"><span class="st-track"><i></i></span>Group seasons</button>
@@ -2954,7 +2959,8 @@
                         <div class="px-5 md:px-8 pb-6 md:pb-8 mt-6">
                             <div class="stat-grid grid grid-cols-2 sm:grid-cols-5 sm:grid-rows-[auto_auto] gap-3" :class="{ 'no-songs': !songsOn }">
                                 <div v-for="(col, n) in statColumns(profileStatCards)" :key="n" class="flex gap-3 sm:grid sm:grid-rows-subgrid sm:row-span-2" :class="n === 0 ? 'col-span-2 sm:col-span-1 flex-row' : 'flex-col'">
-                                    <button v-for="c in col" :key="c.key" @click="openDrill(c, 'me')" class="stat-card flex-1 sm:h-full" :class="[{ 'is-soon': c.soon || c.hidden, '!py-3': c.small, 'has-alt': c.alt != null && !c.hidden }]" :title="c.alt != null && !c.hidden ? c.value + ' episodes (each counted once) · ' + c.alt + ' with rewatches' : null">
+                                    <button v-for="c in col" :key="c.key" @click="openDrill(c, 'me')" class="stat-card relative flex-1 sm:h-full" :class="[{ 'is-soon': c.soon || c.hidden, '!py-3': c.small, 'has-alt': c.alt != null && !c.hidden }]" :title="c.alt != null && !c.hidden ? c.value + ' episodes (each counted once) · ' + c.alt + ' with rewatches' : null">
+                                        <span v-if="c.can18 && adultListOk" @click.stop="toggleStat18(c)" class="stat-18" :class="{ on: c.adult }" role="button" :title="c.adult ? 'Back to all' : 'Show 18+'"><i class="fa-solid fa-fire"></i></span>
                                         <span v-if="c.hidden" class="font-display font-bold text-mute" :class="c.small ? 'text-lg' : 'text-2xl'"><i class="fa-solid fa-lock" :class="c.small ? 'text-sm' : 'text-lg'"></i></span>
                                         <span v-else class="font-display font-bold" :class="[c.small ? 'text-lg' : 'text-2xl', c.accent ? 'text-volt' : 'text-ink']"><span v-if="c.alt != null" class="alt-swap"><span class="alt-off">{{ c.value }}</span><span class="alt-on">{{ c.alt }}</span></span><template v-else>{{ c.value }}</template></span>
                                         <span class="label mt-1 flex items-center gap-1.5"><i v-if="c.icon" :class="c.icon" class="fa-solid" :style="{ color: c.color }"></i><span v-if="c.alt != null" class="alt-swap"><span class="alt-off">{{ c.label }}</span><span class="alt-on">{{ c.altLabel }}</span></span><template v-else>{{ c.label }}</template><span v-if="c.soon" class="text-volt">soon</span></span>

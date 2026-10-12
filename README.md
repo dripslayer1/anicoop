@@ -1405,3 +1405,17 @@ Hard-refresh: the footer says **v1.4**. No What's new pop-up.
 - Watch buddies never copy 18+ titles into each other's Plan to read.
 - What's already saved moves over: the SQL moves manga marked 18+, and the app finds older ones (asks AniList) and
   moves them a few seconds after the page opens, keeping their "last updated".
+
+## v1.4.1 — 18+: anime too, small switches instead of a tile
+
+**SQL: run `supabase/v1.4.1-adult-list.sql`** (safe if v1.4's already ran; also in `supabase_setup.sql`). No Edge
+Function change. Hard-refresh: the footer says **v1.4.1**. No What's new pop-up.
+
+- Clicking the 18+ tile on your profile showed everything (songs, games…): it's gone. Instead the **Anime** and **Manga**
+  tiles have a small **🔥** in the corner (only with access, only when you have some): it flips that tile and the
+  Episodes / Chapters tile under it to the 18+ numbers; clicking the tile then opens those 18+ titles. "Chapters read"
+  is back where it was.
+- **Lists → Anime** and **Lists → Manga** have a small **🔥 18+** switch that shows that section's 18+ titles.
+- 18+ **anime** count too: saved as 'ADULT_ANIME', which only people with **full** 18+ access receive (Track 18+ manga
+  stays manga only). They follow the Anime list's privacy.
+- A friend's **18+** list (and Compare / ranking) holds 18+ anime + manga, with **All / Anime / Manga / Manhwa** filters.

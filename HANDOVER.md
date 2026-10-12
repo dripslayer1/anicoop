@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.4'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.4.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.4'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.4.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -476,6 +476,7 @@ These are cumulative; the README has one section per version.
 - **v1.3** (SQL: `supabase/v1.3-track-18.sql`): app_config `adult_track` {users}, owner-only (policy "config: owner"). `trackOnly` (not full 18+, on the list): `adultOk` / `activityOk` let 18+ MANGA through, title pages open them; `readLocked(m)` blocks reading (`playKind` null, `openChapter` guard); Browse Manga + 18+ → `trackSearch` (no search = nothing + "Search for your manhwa"; search = exact-name match or top 3 from `adultMangaBrowse`). NSFW reading sources still follow full 18+ (`adultOn`). No WHATS_NEW entry for 1.3 (owner asked); `openWhatsNew` falls back to the newest version that has one.
 - **v1.3.1** (no SQL, no WHATS_NEW): `trackSearch` returns one title: MangaDex (erotica + pornographic, relevance) → AniList by id → `nameScore` over AniList + MangaDex names (exact 100, prefix 70–80, all words 55, some words less), MangaDex position as tie-break.
 - **v1.4** (SQL: `supabase/v1.4-adult-list.sql`, no WHATS_NEW): 18+ manga rows are `media_type = 'ADULT'` in the DB (`dbTypeOf` on every list / activity write; `listRow` keeps `dbType`); in the page they stay `anime.type 'MANGA'` and `listType(i)` says 'ADULT' (stats, `secSolo` + `adultView` switch, friend lists, compare, drill, rankings 'ADULT'). `LABEL_SETS.ADULT` = MANGA's. Activities read back through `fixAdultRow`. RLS: `can_view_list` lets 'ADULT' through only for owner / `adult_allowed()` / `adult_track_allowed()`; profile_stats leaves 18+ out of completed / mean for others; buddy sync skips 'ADULT'. `moveAdultRows` (6.5 s after sign-in) moves old rows the SQL couldn't tell were 18+.
+- **v1.4.1** (SQL: `supabase/v1.4.1-adult-list.sql`, no WHATS_NEW): 18+ anime = DB type 'ADULT_ANIME' (full 18+ only; Anime privacy); `isAdultTitle` / `listType` 'ADULT' covers anime + manga. No 18+ tile: `statAdult` + `.stat-18` corner flips the Anime / Manga tiles (cards with `adult`), drill and friend list follow `card.adult`; `statsFor` counts A_ANIME / A_MANGA. Lists: `adultView` switch in Anime and Manga. Friend's 18+ list: `theirList.sub` (`adultSubOk`), labels via `theirLabelType`.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
