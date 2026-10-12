@@ -115,9 +115,14 @@ const GAME_BASE = 1000000000, MOVIE_BASE = 1200000000, SHOW_BASE = 1300000000, P
 // v2.9 a TV season is its own title: SEASON_BASE + the show's TMDB id × 100 + the season number (shows up to id 499,999,
 // seasons 1–99), so a season can be opened from its number alone (a chat, a friend's list)
 const SEASON_BASE = 1450000000;
+// v1.5 MangaUpdates titles (manga / manhwa AniList doesn't have): MU_BASE + a number the database gives each MangaUpdates
+// series (their own ids are too big for a list row). 1.1e9–1.2e9 sits inside the games' range, which IGDB ids never reach,
+// so every "not an AniList id" check (≥ GAME_BASE: AniList / MAL sync, 18+ lookups…) already leaves them alone.
+const MU_BASE = 1100000000;
+const isMuId = (id) => id >= MU_BASE && id < MOVIE_BASE;
 const seasonIdOf = (showId, n) => (showId > 0 && showId < 500000 && n > 0 && n < 100) ? SEASON_BASE + showId * 100 + n : null;
 const seasonOf = (id) => id >= SEASON_BASE && id < SONG_BASE ? { show: Math.floor((id - SEASON_BASE) / 100), n: (id - SEASON_BASE) % 100 } : null;
-const typeOfId = (id) => id >= SONG_BASE ? 'SONG' : id >= SEASON_BASE ? 'TV' : id >= MOVIE_BASE && id < PERSON_BASE ? 'TV' : id >= GAME_BASE && id < MOVIE_BASE ? 'GAME' : null;
+const typeOfId = (id) => id >= SONG_BASE ? 'SONG' : id >= SEASON_BASE ? 'TV' : id >= MOVIE_BASE && id < PERSON_BASE ? 'TV' : isMuId(id) ? 'MU' : id >= GAME_BASE && id < MOVIE_BASE ? 'GAME' : null;
 const SECTION_LIST = Object.values(SECTIONS);
 const ACCENTS = ['#B490F5', '#D4FF3A', '#FF4D8D', '#3b82f6', '#22c55e', '#f59e0b', '#22d3ee', '#f97316'];
 const THEME_ACCENTS = ['#D4FF3A', '#B490F5', '#FF4D8D', '#22d3ee', '#3b82f6', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#F5F5F7'];
@@ -284,6 +289,7 @@ const slimAnime = (a) => ({
     episodes: a.episodes || a.chapters || null, averageScore: a.averageScore || null, genres: a.genres || [], format: a.format || null,
     type: a.type || 'ANIME', countryOfOrigin: a.countryOfOrigin || null,
     trailer: a.trailer?.id ? { id: a.trailer.id, site: a.trailer.site } : null,
+    ...(a.muId ? { muId: a.muId, muUrl: a.muUrl || null } : {}),   // v1.5 a MangaUpdates title
     ...(a.isAdult || a.adult ? { isAdult: true } : {}),   // v10 kept, so people without 18+ access never see it on someone's list
     ...(a.type === 'TV' ? { extId: a.extId || null, kind: a.kind || null, runtime: a.runtime || null } : {}),
     ...(a.type === 'SONG' ? { extId: a.extId || null, artists: (a.artists || []).slice(0, 4), album: a.album || null, durationMs: a.durationMs || null, explicit: !!a.explicit, previewUrl: a.previewUrl || null, spotifyId: a.spotifyId || null, appleUrl: a.appleUrl || null } : {}),
@@ -1717,6 +1723,71 @@ const findSongExt = async (id, hint = {}) => {
         } catch { /* Apple busy */ }
     }
     return null;
+};
+// ---------- v1.5 MangaUpdates: manga / manhwa / doujinshi AniList doesn't have ----------
+// Asked through the "mu" endpoint of the Edge Function (MangaUpdates doesn't answer browsers). Each series gets a list id
+// from the database (rpc mu_ids), the same for everyone, so friends' lists, Compare and rankings line up.
+const muCall = async (body) => {
+    const { data, error } = await sb.functions.invoke('igdb', { body: { endpoint: 'mu', ...body } });
+    if (error) {
+        let msg = ''; try { msg = (await error.context.json())?.error || ''; } catch {}
+        throw new Error(/mangaupdates/i.test(msg) ? msg : 'MangaUpdates isn’t set up yet: deploy the updated “igdb” Edge Function in Supabase (see README).');
+    }
+    return typeof data === 'string' ? JSON.parse(data) : data;
+};
+const muNums = new Map();   // MangaUpdates series id (text) → list id
+const muSids = new Map();   // list id → MangaUpdates series id (text)
+const muIdsFor = async (sids) => {
+    const need = [...new Set(sids.map(String))].filter(s => /^\d+$/.test(s) && !muNums.has(s));
+    if (need.length) {
+        const { data, error } = await sb.rpc('mu_ids', { sids: need.slice(0, 100) });
+        if (error) throw new Error(/mu_ids|schema cache|function/i.test(error.message) ? 'Run supabase/v1.5-mangaupdates.sql in Supabase first (see README).' : error.message);
+        Object.entries(data || {}).forEach(([s, n]) => { muNums.set(s, MU_BASE + Number(n)); muSids.set(MU_BASE + Number(n), s); });
+    }
+    return sids.map(s => muNums.get(String(s)) || null);
+};
+const MU_ADULT = ['Adult', 'Hentai', 'Smut'];
+const MU_COUNTRY = { Manga: 'JP', Doujinshi: 'JP', Manhwa: 'KR', Manhua: 'CN', OEL: 'US', 'Filipino': 'PH', 'Indonesian': 'ID', 'Thai': 'TH', 'Vietnamese': 'VN', 'Malaysian': 'MY' };
+// "250 Chapters (Ongoing)" → 250 (only trusted once it's finished, like AniList's own count)
+const muChapters = (st) => { const m = String(st || '').match(/(\d+)\s+Chapters?/i); return m ? Number(m[1]) : null; };
+// MangaUpdates descriptions are short Markdown: links, **bold**, new lines (safeHtml cleans the result again)
+const muDesc = (t) => escapeHtml(t).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+const normMu = (r, id) => {
+    const genres = (r.genres || []).filter(Boolean);
+    const by = (r.authors || []).filter(x => x.name).map(x => x.name);
+    const done = !!r.completed, chapters = done ? muChapters(r.status) : null;
+    return {
+        id, muId: Number(r.series_id), muUrl: /^https:\/\/www\.mangaupdates\.com\//.test(r.url || '') ? r.url : null, type: 'MANGA',
+        format: /novel/i.test(r.type) ? 'NOVEL' : /one\s?shot/i.test(r.status || '') ? 'ONE_SHOT' : 'MANGA',
+        title: { romaji: r.title || '', english: r.title || '', native: null }, synonyms: (r.associated || []).concat(r.hit_title && r.hit_title !== r.title ? [r.hit_title] : []),
+        coverImage: { large: /^https:\/\//.test(r.image || '') ? r.image : null }, bannerImage: null,
+        description: (by.length ? '<b>By ' + escapeHtml([...new Set(by)].slice(0, 4).join(', ')) + '</b><br><br>' : '') + muDesc(r.description || ''),
+        genres, isAdult: genres.some(g => MU_ADULT.includes(g)), countryOfOrigin: MU_COUNTRY[r.type] || null,
+        status: r.status ? (done ? 'FINISHED' : 'RELEASING') : null, chapters, episodes: chapters,
+        seasonYear: parseInt(r.year, 10) || null, averageScore: r.rating ? Math.round(Number(r.rating) * 10) : null, muType: r.type || '',
+    };
+};
+const muApi = {
+    // titles come without a list id; withIds() gives them one (only the ones that get shown)
+    async search(q, { page = 1 } = {}) {
+        const d = await muCall({ action: 'search', q, page });
+        return (d?.results || []).filter(r => r.series_id).map(r => normMu(r, null));
+    },
+    async withIds(items) {
+        const ids = await muIdsFor(items.map(m => m.muId));
+        return items.map((m, i) => ids[i] ? { ...m, id: ids[i] } : null).filter(Boolean);
+    },
+    // node: a list id, or a title (from a list row it carries muId)
+    async details(node) {
+        const id = typeof node === 'object' ? node?.id : node;
+        let sid = (typeof node === 'object' && node?.muId) || muSids.get(id);
+        if (!sid) { const { data } = await sb.from('mu_titles').select('series_id').eq('n', id - MU_BASE).maybeSingle(); sid = data?.series_id; }
+        if (!sid) return null;
+        const r = await muCall({ action: 'series', id: String(sid) });
+        if (!r?.series_id) return null;
+        muNums.set(String(sid), id); muSids.set(id, String(sid));
+        return normMu(r, id);
+    },
 };
 const songApi = {
     async browse(f, page = 1) {
@@ -7283,8 +7354,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.4.3';
+        const APP_VERSION = '1.5.0';
         const WHATS_NEW = {
+            '1.5.0': [   // (the old numbering already had a 1.5–1.9: new ones are x.y.0)
+                { icon: 'fa-book', t: 'Manga that weren’t on AniList', d: 'Searching for a manga or manhwa in Browse now also looks on MangaUpdates, so titles AniList doesn’t have (or removed) show up after AniList’s results. Open one to see its info and a MangaUpdates link, and add it to your list like any other.' },
+            ],
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
             ],
@@ -7778,6 +7852,18 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const kind = typeOfId(id);
             const requestId = ++detailRequestId;
             detailLoading.value = true;
+            if (kind === 'MU') {   // v1.5 a MangaUpdates title
+                try {
+                    const media = await muApi.details(animeNode);
+                    if (requestId !== detailRequestId) return;
+                    if (!media) { showToast('That title could not be found on MangaUpdates', 'error'); return; }
+                    if (!adultOk(media)) { showToast('18+ content is turned off for your account', 'error'); return; }
+                    detailCache.set(id, media);
+                    if (push) navigate(() => showDetails(media)); else showDetails(media);
+                } catch (err) { showToast(err.message || 'Could not load', 'error'); }
+                finally { if (requestId === detailRequestId) detailLoading.value = false; }
+                return;
+            }
             if (kind === 'GAME' || kind === 'TV' || kind === 'SONG') {   // IGDB / TMDB / Spotify pages
                 try {
                     if (kind === 'SONG' && !(typeof animeNode === 'object' && animeNode?.extId)) await findSongExt(id, typeof animeNode === 'object' ? animeNode : {});   // v2.4
@@ -7910,14 +7996,42 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             }).filter(x => x.sc > 0).sort((x, y) => y.sc - x.sc);
             return { items: scored.length ? [normMedia(scored[0].m)] : [], hasNextPage: false };
         };
+        // v1.5 MangaUpdates fills the gaps: on a manga name search (page 1, no other filters) its results that AniList didn't
+        // return (by any of their names) come after AniList's. 18+ ones only in an 18+ search, and only for people allowed.
+        const muNames = (m) => [m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || [])].map(normTitle).filter(Boolean);
+        const muSearchable = (f, page) => page === 1 && !!f.search.trim() && !(f.genre || f.tag || f.year || f.status || f.format || f.country);
+        const withMu = async (res, f, page, adult) => {
+            if (!muSearchable(f, page)) return res;
+            let mu = [];
+            try { mu = await muApi.search(f.search.trim()); } catch (err) { console.warn('MangaUpdates skipped:', err.message || err); return res; }
+            const have = new Set(res.items.flatMap(muNames));
+            const want = normTitle(f.search.trim()), qWords = want.split(' ').filter(Boolean);
+            // close matches only (every word of the search, or the name starts with it), so a search AniList answers well
+            // doesn't get a tail of loosely related titles
+            let add = mu.filter(m => !!m.isAdult === adult && adultOk(m) && !hiddenOf('MANGA').some(g => m.genres.includes(g)) && !muNames(m).some(n => have.has(n))
+                && Math.max(0, ...muNames(m).map(n => nameScore(n, want, qWords))) >= 50);
+            try { add = await muApi.withIds(add); } catch (err) { console.warn('MangaUpdates skipped:', err.message || err); return res; }
+            return { ...res, items: [...res.items, ...add] };
+        };
+        // Track 18+: still one title, the best match of AniList's and MangaUpdates' 18+ titles
+        const trackWithMu = async (res, f) => {
+            let mu = [];
+            try { mu = (await muApi.search(f.search.trim())).filter(m => m.isAdult); } catch { return res; }
+            if (!mu.length) return res;
+            const want = normTitle(f.search.trim()), qWords = want.split(' ').filter(Boolean);
+            const sc = (m) => Math.max(0, ...muNames(m).map(n => nameScore(n, want, qWords)));
+            const best = mu.map((m, i) => ({ m, s: sc(m) - i * 0.2 })).sort((x, y) => y.s - x.s)[0];
+            if (!best || best.s <= 0 || (res.items[0] && sc(res.items[0]) >= best.s)) return res;
+            try { const [m] = await muApi.withIds([best.m]); return m ? { items: [m], hasNextPage: false } : res; } catch { return res; }
+        };
         const trackSearchOnly = computed(() => trackOnly.value && (section.value === 'manga' || section.value === 'anime') && !!filters.value.isAdult);
         const browseFetch = async (type, f, page, { low = false } = {}) => {
             if (type === 'GAME') return gameApi.browse(f, page, gameOpts(), { low });
             if (type === 'TV') return tvApi.browse(f, page, { ...gameOpts(), hidden: hiddenOf('TV') });
             if (type === 'SONG') return songApi.browse(f, page);
             const isManga = type === 'MANGA';
-            if (isManga && f.isAdult && adultAllowed.value) return adultMangaBrowse(f, page, { low });
-            if (isManga && f.isAdult && trackOnly.value) return trackSearch(f, { low });   // v1.3
+            if (isManga && f.isAdult && adultAllowed.value) return withMu(await adultMangaBrowse(f, page, { low }), f, page, true);
+            if (isManga && f.isAdult && trackOnly.value) return f.search.trim() ? trackWithMu(await trackSearch(f, { low }), f) : trackSearch(f, { low });   // v1.3
             if (type === 'ANIME' && f.isAdult && trackOnly.value) return trackSearchAnime(f, { low });   // v1.4.2
             const varsDef = ['$page: Int'];
             const mediaArgs = [`type: ${type}`, `isAdult: ${f.isAdult && adultAllowed.value ? 'true' : 'false'}`];   // 18+ only if the owner allows you
@@ -7937,7 +8051,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const query = `query (${varsDef.join(', ')}) { Page(page: $page, perPage: 48) { pageInfo { hasNextPage }
                 media(${mediaArgs.join(', ')}, sort: ${sort}) { ${MEDIA_FIELDS} } } }`;
             const data = await anilist(query, variables, { low });
-            return { items: (data?.Page?.media || []).map(normMedia), hasNextPage: data?.Page?.pageInfo?.hasNextPage || false };
+            const res = { items: (data?.Page?.media || []).map(normMedia), hasNextPage: data?.Page?.pageInfo?.hasNextPage || false };
+            return isManga ? withMu(res, f, page, false) : res;
         };
         // the same page asked twice at once (e.g. you open a section while it's being prepared) shares one request
         const inflight = new Map();
@@ -10922,7 +11037,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const me = uid(); if (!me || !follows.value.length) return;
             const KEY = `anicoop_followcheck:${me}`;
             try { if (!force && Date.now() - Number(localStorage.getItem(KEY) || 0) < 90 * 60 * 1000) return; localStorage.setItem(KEY, String(Date.now())); } catch {}
-            const list = follows.value.filter(f => isAniListType(f.media_type)); const notes = []; const updates = [];
+            const list = follows.value.filter(f => isAniListType(f.media_type) && f.media_id < GAME_BASE); const notes = []; const updates = [];
             try {
                 for (let i = 0; i < list.length; i += 50) {
                     const chunk = list.slice(i, i + 50);
@@ -11520,7 +11635,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         const pushAllToMal = async () => {
             if (!malLink.value || malSync.pending) return;
-            const list = soloList.value.filter(e => isAniListType(typeOf(e)));
+            const list = soloList.value.filter(e => isAniListType(typeOf(e)) && e.anime.id < GAME_BASE);
             if (!(await askConfirm({ title: `Copy all ${list.length} anime & manga to MyAnimeList?`, body: 'Titles already there get this site’s status, progress and score. This takes about a second per title — you can keep using the app.', ok: 'Copy to MyAnimeList', danger: false }))) return;
             list.forEach(e => malEnqueue(e.anime.id, { kind: 'save', entry: e }));
             showToast('Syncing to MyAnimeList in the background…');
@@ -11574,7 +11689,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const me = uid(); if (!me) return;
             const TRIED_KEY = `anicoop_namefill_v1:${me}`;
             const tried = new Set(readJSON(TRIED_KEY) || []);
-            const need = soloList.value.filter(e => e.anime?.id && isAniListType(e.anime.type) && !tried.has(e.anime.id)
+            const need = soloList.value.filter(e => e.anime?.id && e.anime.id < GAME_BASE && isAniListType(e.anime.type) && !tried.has(e.anime.id)
                 && ((e.anime.format === 'MOVIE' && !e.anime.mn) || (fullEnglishOf(e.anime) && !e.anime.title?.full)));
             if (!need.length) return;
             const ids = [...new Set(need.map(e => e.anime.id))];
@@ -11613,7 +11728,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             let namesDone = true; try { namesDone = !!localStorage.getItem(NAMES_KEY); } catch {}
             try { if (!force && namesDone && localStorage.getItem(DAY_KEY) === localDay()) return; } catch { return; }
             const all = new Map();
-            soloList.value.forEach(i => { if (i.anime?.id && isAniListType(i.anime.type)) all.set(i.anime.id, i.anime); });
+            soloList.value.forEach(i => { if (i.anime?.id && i.anime.id < GAME_BASE && isAniListType(i.anime.type)) all.set(i.anime.id, i.anime); });
             if (!all.size) return;
             const snap = readJSON(SNAP_KEY) || {};
             const next = {}; const notes = []; const fresh = new Map();

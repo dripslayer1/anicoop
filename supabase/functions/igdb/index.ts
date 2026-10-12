@@ -680,6 +680,45 @@ const gifSearch = async (body: Record<string, any>) => {
     return json(text);
 };
 
+// ---------- v1.5 MangaUpdates: manga / manhwa AniList doesn't have (its API doesn't answer browsers, so it goes through here) ----------
+// { action: 'search', q, page } → up to 25 series · { action: 'series', id } → one series. Public API, no key.
+const MU_API = 'https://api.mangaupdates.com/v1';
+const muTrim = (r: Record<string, any>) => ({
+    series_id: r.series_id, title: r.title || '', url: r.url || '', type: r.type || '', year: r.year || '',
+    image: r.image?.url?.original || r.image?.url?.thumb || '', rating: r.bayesian_rating || null,
+    genres: (r.genres || []).map((g: Record<string, string>) => g.genre).filter(Boolean),
+    associated: (r.associated || []).map((a: Record<string, string>) => a.title).filter(Boolean).slice(0, 30),
+    status: typeof r.status === 'string' ? r.status.slice(0, 600) : '', completed: !!r.completed, latest_chapter: r.latest_chapter || null,
+    description: typeof r.description === 'string' ? r.description.slice(0, 6000) : '',
+    authors: (r.authors || []).map((a: Record<string, string>) => ({ name: a.name, type: a.type })).slice(0, 8),
+});
+const muCall = async (body: Record<string, any>) => {
+    const action = String(body.action || '');
+    let url = '', init: RequestInit = { headers: { 'User-Agent': 'anicoop/1.0 (+https://github.com/dripslayer1/anicoop)', Accept: 'application/json' } };
+    if (action === 'search') {
+        const q = String(body.q || '').trim().slice(0, 200); if (!q) return json({ results: [] });
+        const page = Math.min(20, Math.max(1, Number(body.page) || 1));
+        url = MU_API + '/series/search';
+        init = { method: 'POST', headers: { ...(init.headers as Record<string, string>), 'Content-Type': 'application/json' }, body: JSON.stringify({ search: q, page, perpage: 25 }) };
+    } else if (action === 'series') {
+        const id = String(body.id || ''); if (!/^\d{1,20}$/.test(id)) return json({ error: 'Bad id' }, 400);
+        url = MU_API + '/series/' + id;
+    } else return json({ error: 'Unknown MangaUpdates action' }, 400);
+    const key = 'mu\n' + url + '\n' + (init.body || '');
+    const hit = cache.get(key); if (hit && Date.now() - hit.at < CACHE_MS) return json(hit.body);
+    let r: Response;
+    try { r = await fetch(url, init); } catch (err) { return json({ error: 'Could not reach MangaUpdates: ' + ((err as Error).message || 'network error') }, 502); }
+    if (r.status === 404) return json({ error: 'Not on MangaUpdates' }, 404);
+    if (!r.ok) return json({ error: 'MangaUpdates answered ' + r.status }, 502);
+    const d = await r.json().catch(() => null);
+    if (!d) return json({ error: 'MangaUpdates sent something unreadable' }, 502);
+    const out = JSON.stringify(action === 'search'
+        ? { total: d.total_hits || 0, results: (d.results || []).map((h: Record<string, any>) => ({ ...muTrim(h.record || {}), description: '', hit_title: h.hit_title || '' })) }
+        : muTrim(d));
+    cachePut(key, out);
+    return json(out);
+};
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
     if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -695,6 +734,7 @@ Deno.serve(async (req) => {
     if (endpoint === 'emoji') return emojiList();
     if (endpoint === 'gif') return gifSearch(body);
     if (endpoint === 'mal') return malCall(body);
+    if (endpoint === 'mu') return muCall(body);   // v1.5
     if (endpoint === 'steamuser') return steamUser(body);
     if (endpoint === 'tmdb') return tmdb(body);
     if (endpoint === 'spotify') return spotify(body);
