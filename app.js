@@ -35,6 +35,7 @@ Object.values(LABEL_SETS).forEach(set => { set.labels.REPEATING = 'Repeating'; s
 // v10.1 the same idea for manga ("Wanna Reread") and games ("Wanna Replay"), and games get "In Rotation" (the ones you keep
 // coming back to) — both are marks on an entry, it keeps its status
 LABEL_SETS.MANGA.labels.REWISH = LABEL_SETS.MANGA.short.REWISH = 'Wanna Reread';
+LABEL_SETS.ADULT = LABEL_SETS.MANGA;   // v1.4 the 18+ list (18+ manga, manhwa, manhua) talks like the Manga list
 LABEL_SETS.GAME.labels.REWISH = LABEL_SETS.GAME.short.REWISH = 'Wanna Replay';
 LABEL_SETS.GAME.labels.ROTATION = LABEL_SETS.GAME.short.ROTATION = 'In Rotation';
 // v1.4 "no status": a title that's only on a mark list (In Rotation, Wanna …) after you unchecked its status. It shows
@@ -303,7 +304,7 @@ const timeAgo = (iso) => {
 };
 const emptyForm = () => ({ anime: null, status: 'PLANNING', score: 0, progress: 0 });
 // rewatch counters (media_data.rep, one number per repeat) and the hidden "lil bro" flag live inside media_data, so they need no new column
-const listRow = (r) => ({ anime: normMedia(r.media_data), status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
+const listRow = (r) => ({ anime: normMedia(r.media_data), dbType: r.media_type || null, status: r.status, score: Number(r.score) || 0, progress: r.progress || 0, updatedAt: r.updated_at, createdAt: r.created_at || r.updated_at,
     startedOver: !!r.media_data?.so, rewatchedEps: Math.max(0, Number(r.media_data?.rx) || 0),
     repeats: Array.isArray(r.media_data?.rep) ? r.media_data.rep.map(n => Math.max(0, Number(n) || 0)).slice(0, MAX_REPEATS) : [], lilbro: !!r.media_data?.lilbro, rewish: !!r.media_data?.rw, rotation: !!r.media_data?.rot, watchLink: typeof r.media_data?.wl === 'string' ? r.media_data.wl : '', readPos: r.media_data?.rp && typeof r.media_data.rp === 'object' ? r.media_data.rp : null });
 // the fields every list/browse query asks AniList for
@@ -2555,12 +2556,22 @@ createApp({
         const adultOk = (a) => adultAllowed.value || !isAdultMedia(a) || (trackOnly.value && a?.type === 'MANGA');
         // reading an 18+ manga needs the full 18+ access (track-only people get here, everyone else never sees one)
         const readLocked = (m) => !!m && m.type === 'MANGA' && !adultAllowed.value && isAdultMedia(m);
+        // v1.4 the 18+ list: 18+ manga / manhwa / manhua are their own list (not in Manga), saved in the database as type
+        // 'ADULT' so the database itself only sends them to people with 18+ access or "Track 18+ manga" (and their owner).
+        // In the page they stay manga (anime.type 'MANGA'); listType() is what decides which list they're in.
+        const isAdultManga = (a) => a?.type === 'MANGA' && isAdultMedia(a);
+        const listType = (i) => isAdultManga(i?.anime) ? 'ADULT' : typeOf(i);
+        const dbTypeOf = (a) => isAdultManga(a) ? 'ADULT' : (a?.type || 'ANIME');
+        const adultListOk = computed(() => adultAllowed.value || trackOnly.value);
+        // activity rows saved as 'ADULT' read back as manga (marked 18+), so every place that shows them keeps working
+        const fixAdultRow = (r) => { if (r?.media_type === 'ADULT') { r.media_type = 'MANGA'; r.extra = { ...(r.extra || {}), adult: true }; } return r; };
+        const adultView = ref(false);   // Lists → Manga: the 18+ list instead of Manga
         const adultOkItem = (i) => adultOk(i?.anime);
         // a post / list update about an 18+ title (marked when it's made from v10 on; older ones: AniList is asked)
         const activityOk = (a) => adultAllowed.value || (trackOnly.value && a?.media_type === 'MANGA') || !(a?.extra?.adult || (a?.media_id && adultIds[a.media_id] === true) || (a?.extra?.pick && isAdultMedia(a.extra.pick)));
         let adultAsking = false;
-        const checkAdultIds = async (ids) => {
-            if (adultAllowed.value || adultAsking) return;
+        const checkAdultIds = async (ids, force = false) => {
+            if ((adultAllowed.value && !force) || adultAsking) return;
             const todo = [...new Set(ids)].filter(id => id && id < GAME_BASE && !(id in adultIds)).slice(0, 500);
             if (!todo.length) return;
             adultAsking = true;
@@ -2575,7 +2586,8 @@ createApp({
                 }
             } catch {} finally { adultAsking = false; }
         };
-        const secSolo = computed(() => soloList.value.filter(i => typeOf(i) === mediaType.value && adultOkItem(i)));
+        const secSolo = computed(() => soloList.value.filter(i => (mediaType.value === 'MANGA' ? listType(i) === (adultView.value && adultListOk.value ? 'ADULT' : 'MANGA') : typeOf(i) === mediaType.value) && adultOkItem(i)));
+        const adultCount = computed(() => adultListOk.value ? soloList.value.filter(i => listType(i) === 'ADULT' && adultOkItem(i)).length : 0);
 
 
         const editForm = ref(emptyForm());
@@ -2681,7 +2693,7 @@ createApp({
             startPresence(); touchLastSeen();
             fetchFollows().then(() => setTimeout(checkFollowed, 6000));
             loadAniListLink(); loadMalLink();
-            setTimeout(fillNames, 4000); setTimeout(movePendingPlays, 5000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
+            setTimeout(fillNames, 4000); setTimeout(moveAdultRows, 6500); setTimeout(movePendingPlays, 5000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
         };
         const clearUserData = () => {
             loadedUserId = null;
@@ -2800,7 +2812,7 @@ createApp({
             return { ...e, repeats: e.repeats ?? o?.repeats ?? [], lilbro: e.lilbro ?? o?.lilbro ?? false, rewish: e.rewish ?? o?.rewish ?? false, rotation: e.rotation ?? o?.rotation ?? false, watchLink: e.watchLink ?? o?.watchLink ?? '', readPos: e.readPos ?? o?.readPos ?? null,
                 startedOver: e.startedOver ?? o?.startedOver ?? false, rewatchedEps: e.rewatchedEps ?? o?.rewatchedEps ?? 0 };
         };
-        const soloRow = (e) => { e = withRepeats(e); return { user_id: uid(), media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score || 0, progress: e.progress || 0, updated_at: new Date().toISOString() }; };
+        const soloRow = (e) => { e = withRepeats(e); return { user_id: uid(), media_id: e.anime.id, media_type: dbTypeOf(e.anime), media_data: entryData(e), status: e.status, score: e.score || 0, progress: e.progress || 0, updated_at: new Date().toISOString() }; };
         // v1.5 your own saves update the screen from what was saved, and the live update that comes back for them is
         // skipped (it used to download your whole list again 1.5 s after every +1 and every reading-spot save)
         const ownWrites = new Map();   // media id → when this device last wrote it
@@ -3880,6 +3892,7 @@ createApp({
                 // go to the feed of the post's own section (a manga poll lives in the Manga feed), with the whole feed
                 // loaded around it, then scroll to it once it's really on screen
                 const { data: act } = await sb.from('activities').select('*').eq('id', n.activity_id).maybeSingle();
+                fixAdultRow(act);
                 if (!act) { showToast('That post was deleted', 'error'); return; }
                 const sec = Object.values(SECTIONS).find(s => s.type === (act.media_type || 'ANIME'))?.id || 'anime';
                 highlightActivity.value = n.activity_id;
@@ -4054,7 +4067,7 @@ createApp({
                 const { data, error } = await q;
                 if (tok !== feedTok) return;   // a newer request is on its way
                 if (error) throw error;
-                let rows = data || [];
+                let rows = (data || []).map(fixAdultRow);
                 if (feedFilter.who === 'friends') rows = rows.filter(a => a.user_id !== uid());
                 feedEnd.value = (data || []).length < FEED_PAGE;
                 feed.value = more ? [...feed.value, ...rows.filter(r => !feed.value.some(x => x.id === r.id))] : rows;
@@ -4647,7 +4660,7 @@ createApp({
                     }
                 }
                 const { data, error } = await sb.from('activities').insert({
-                    user_id: uid(), kind: 'list', media_id: anime.id, media_type: anime.type || 'ANIME',
+                    user_id: uid(), kind: 'list', media_id: anime.id, media_type: dbTypeOf(anime),
                     media_title: anime.title?.romaji || anime.title?.english || anime.title?.native || 'Untitled', media_cover: anime.coverImage?.large || null,
                     squad_id: squadId, ...row, ...(isAdultMedia(anime) ? { extra: { adult: true } } : {}),
                 }).select().single();
@@ -5824,16 +5837,17 @@ createApp({
         const statsFor = (items) => {
             let epsWatched = 0, chaptersRead = 0, hoursPlayed = 0, tvEps = 0, plays = 0, scored = 0, scoreSum = 0, repeatEps = 0;
             items.forEach(i => {
-                const t = typeOf(i);
+                const t = listType(i);   // (v1.4 18+ manga count in the 18+ list, not Manga)
                 const n = t === 'GAME' ? (i.progress || 0) : (i.status === 'COMPLETED' || (i.status === 'REPEATING' && !isRestart(i))) ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0);
                 if (t === 'ANIME') { (i.repeats || []).forEach(x => { repeatEps += x || 0; }); repeatEps += i.rewatchedEps || 0; }   // rewatched episodes: only in the "with rewatches" total (v2.6 + the first watch of a show you started over and passed)
                 if (t === 'MANGA') chaptersRead += n; else if (t === 'GAME') hoursPlayed += n; else if (t === 'ANIME') epsWatched += n; else if (t === 'TV') tvEps += n; else if (t === 'SONG') plays += (i.progress || 0);
                 if (i.score > 0) { scored++; scoreSum += i.score; }
             });
-            const count = (t, done) => items.filter(i => typeOf(i) === t && (!done || i.status === 'COMPLETED' || (i.status === 'REPEATING' && !isRestart(i)))).length;
+            const count = (t, done) => items.filter(i => listType(i) === t && (!done || i.status === 'COMPLETED' || (i.status === 'REPEATING' && !isRestart(i)))).length;
             return {
                 anime: count('ANIME'), manga: count('MANGA'), games: count('GAME'), tv: count('TV'), songs: count('SONG'),
                 epsWatched, epsWithRepeats: epsWatched + repeatEps, repeatEps, chaptersRead, hoursPlayed, tvEps, plays, completed: items.filter(i => i.status === 'COMPLETED').length,
+                adult: count('ADULT'), adultDone: count('ADULT', true),
                 animeDone: count('ANIME', true), mangaDone: count('MANGA', true), gamesDone: count('GAME', true), tvDone: count('TV', true), songsDone: count('SONG', true),
                 mean: scored ? scoreSum / scored : 0, meanScore: formatMean(scored ? scoreSum / scored : 0),
             };
@@ -5846,6 +5860,7 @@ createApp({
             { key: 'eps', label: 'Episodes watched', value: s.epsWatched, small: true, col: 1, alt: s.epsWithRepeats, altLabel: 'With rewatches' },
             { key: 'MANGA', label: 'Manga', value: s.manga, icon: 'fa-book-open', color: SECTIONS.manga.color, col: 2, done: s.mangaDone },
             { key: 'chapters', label: 'Chapters read', value: s.chaptersRead, small: true, col: 2 },
+            { key: 'ADULT', label: '18+', value: s.adult, icon: 'fa-fire', color: '#ef4444', col: 2, done: s.adultDone },   // v1.4 (only with access, and only when there are some)
             { key: 'TV', label: 'Movies & TV', value: s.tv, icon: 'fa-film', color: SECTIONS.movies.color, col: 3 },
             { key: 'tv_done', label: 'Completed', value: s.tvDone, small: true, col: 3 },
             { key: 'GAME', label: 'Games', value: s.games, icon: 'fa-gamepad', color: SECTIONS.games.color, col: 4, done: s.gamesDone },
@@ -5853,7 +5868,7 @@ createApp({
             { key: 'SONG', label: 'Songs', value: s.songs, icon: 'fa-music', color: SECTIONS.songs.color, col: 5, done: s.songsDone },
             { key: 'plays', label: 'Plays', value: s.plays, small: true, col: 5 },
         ];
-        const statColumns = (cards) => [0, 1, 2, 3, 4, 5].map(c => cards.filter(x => x.col === c && (songsOn.value || x.col !== 5))).filter(col => col.length);
+        const statColumns = (cards) => [0, 1, 2, 3, 4, 5].map(c => cards.filter(x => x.col === c && (songsOn.value || x.col !== 5) && (x.key !== 'ADULT' || (adultListOk.value && x.value > 0)))).filter(col => col.length);
 
         // v10.1 the "series" count (seasons of the same show counted once) was taken out at the owner's request:
         // anime and manga are counted title by title again. (It lived here from v8 to v10: AniList relations, franchiseLinks.)
@@ -5908,9 +5923,11 @@ createApp({
             { id: 'MANGA', label: 'Manga', icon: 'fa-book-open', noun: 'manga' }, { id: 'MANHWA', label: 'Manhwa & Manhua', icon: 'fa-scroll', noun: 'manhwa' },
             { id: 'GAME', label: 'Games', icon: 'fa-gamepad', noun: 'games' }, { id: 'FILM', label: 'Movies', icon: 'fa-film', noun: 'movies' },
             { id: 'TV', label: 'TV shows', icon: 'fa-tv', noun: 'TV shows' }, { id: 'SONG', label: 'Songs', icon: 'fa-music', noun: 'songs' },
+            { id: 'ADULT', label: '18+', icon: 'fa-fire', noun: '18+ titles' },   // v1.4 (only with access)
         ];
         const rankCatOf = (i) => {
-            const t = typeOf(i);
+            const t = listType(i);
+            if (t === 'ADULT') return 'ADULT';
             if (t === 'GAME' || t === 'SONG') return t;
             if (t === 'TV') return i.anime?.format === 'MOVIE' ? 'FILM' : 'TV';
             if (t === 'MANGA') return ['KR', 'CN', 'TW'].includes(i.anime?.countryOfOrigin) ? 'MANHWA' : 'MANGA';
@@ -5927,7 +5944,7 @@ createApp({
             return out;
         };
         // manhwa used to share the manga ranking, so until you reorder Manhwa it keeps the order you gave it there
-        const buildRankings = (entries, orders) => RANK_CATS.filter(c => songsOn.value || c.id !== 'SONG').map(c => ({ ...c, items: applyRankOrder(entries.filter(i => (i.score > 0 || (c.id === 'SONG' && i.status === 'WATCHING')) && rankCatOf(i) === c.id), orders[c.id]?.length ? orders[c.id] : (c.id === 'MANHWA' ? orders.MANGA : null)) }));
+        const buildRankings = (entries, orders) => RANK_CATS.filter(c => (songsOn.value || c.id !== 'SONG') && (adultListOk.value || c.id !== 'ADULT')).map(c => ({ ...c, items: applyRankOrder(entries.filter(i => (i.score > 0 || (c.id === 'SONG' && i.status === 'WATCHING')) && rankCatOf(i) === c.id), orders[c.id]?.length ? orders[c.id] : (c.id === 'MANHWA' ? orders.MANGA : null)) }));
         const myRankOrders = reactive({});
         const viewedRankOrders = reactive({});
         const myRankings = computed(() => buildRankings(uniqueItems.value, myRankOrders));
@@ -5977,7 +5994,7 @@ createApp({
         const rankDrag = rankSort.st;
         const onRankPointerDown = rankSort.down, onRankPointerMove = rankSort.move, onRankPointerUp = rankSort.up, rankRowStyle = rankSort.style;
         const sectionCounts = computed(() => {
-            const c = {}; uniqueItems.value.forEach(i => { const k = SECTION_OF_TYPE[typeOf(i)] || 'anime'; c[k] = (c[k] || 0) + 1; }); return c;
+            const c = {}; uniqueItems.value.forEach(i => { if (listType(i) === 'ADULT') return; const k = SECTION_OF_TYPE[typeOf(i)] || 'anime'; c[k] = (c[k] || 0) + 1; }); return c;
         });
         const sectionProgress = computed(() => secSolo.value.reduce((n, i) => n + (i.status === 'COMPLETED' && typeOf(i) !== 'GAME' ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0)), 0));
 
@@ -6176,7 +6193,7 @@ createApp({
         watch(viewUserId, (id) => { if (id) { loadViewedUser(id); fetchRankOrders(id, viewedRankOrders); Object.keys(rankShown).filter(k => k.startsWith('them:')).forEach(k => delete rankShown[k]); } else viewedUser.value = null; });
         // friend stats come from the server so each stat can be hidden per person (Settings → Privacy)
         const STAT_FROM_SERVER = { days: 'days', ANIME: 'anime', MANGA: 'manga', eps: 'eps', chapters: 'chapters', completed: 'completed', mean: 'mean' };
-        const STAT_LIST_TYPE = { ANIME: 'ANIME', eps: 'ANIME', MANGA: 'MANGA', chapters: 'MANGA', TV: 'TV', tv_done: 'TV', GAME: 'GAME', hours: 'GAME', SONG: 'SONG', plays: 'SONG' };
+        const STAT_LIST_TYPE = { ANIME: 'ANIME', eps: 'ANIME', MANGA: 'MANGA', chapters: 'MANGA', TV: 'TV', tv_done: 'TV', GAME: 'GAME', hours: 'GAME', SONG: 'SONG', plays: 'SONG', ADULT: 'ADULT' };
         const viewedStats = computed(() => {
             const v = viewedUser.value; if (!v) return [];
             const st = statsFor(v.entries);
@@ -6211,7 +6228,7 @@ createApp({
             if (!userId) return;
             const { data, error } = await sb.from('activities').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(40);
             if (error) return;
-            const rows = (data || []).filter(activityOk);
+            const rows = (data || []).map(fixAdultRow).filter(activityOk);
             if (userId === uid()) myRecent.value = rows; else if (viewUserId.value === userId) viewedRecent.value = rows;
         };
         // profile "Activity" button: list updates + posts. People can hide theirs (Edit profile → decor.hideActivity)
@@ -6221,7 +6238,8 @@ createApp({
         const openTheirList = (type = 'ANIME', status = 'ALL') => {
             navigate(() => { Object.assign(theirList, { type, status, q: '' }); viewedSection.value = 'list'; });
         };
-        const theirBase = computed(() => (viewedUser.value?.entries || []).filter(i => typeOf(i) === theirList.type));
+        const theirBase = computed(() => (viewedUser.value?.entries || []).filter(i => listType(i) === theirList.type));
+        const theirAdultCount = computed(() => adultListOk.value ? (viewedUser.value?.entries || []).filter(i => listType(i) === 'ADULT').length : 0);
         const theirCounts = computed(() => { const c = { ALL: theirBase.value.length }; theirBase.value.forEach(i => { c[i.status] = (c[i.status] || 0) + 1; }); return c; });
         const theirGrouped = computed(() => {
             const q = theirList.q.trim().toLowerCase();
@@ -6251,6 +6269,7 @@ createApp({
             if (card.key === 'SONG' || card.key === 'plays') return openTheirList('SONG');
             if (card.key === 'tv_done') return openTheirList('TV', 'COMPLETED');
             if (card.key === 'MANGA' || card.key === 'chapters') return openTheirList('MANGA');
+            if (card.key === 'ADULT') return openTheirList('ADULT');
             if (card.key === 'completed') return openTheirList('ANIME', 'COMPLETED');
             openDrill(card, 'them');
         };
@@ -6271,8 +6290,8 @@ createApp({
             if (card.soon) { showToast(`${card.label} is coming soon`); return; }
             if (card.hidden) { showToast(`${viewedUser.value?.profile?.username || 'They'} keep${viewedUser.value ? 's' : ''} this stat private`, 'error'); return; }
             const type = ({ eps: 'ANIME', chapters: 'MANGA', hours: 'GAME', tv_done: 'TV', plays: 'SONG' })[card.key] || card.key;
-            const hasDone = drillEntries.value.some(i => typeOf(i) === type && i.status === 'COMPLETED');
-            Object.assign(drill, { open: true, key: card.key, who, status: ['ANIME', 'MANGA', 'GAME', 'TV', 'SONG'].includes(card.key) && hasDone ? 'COMPLETED' : card.key === 'tv_done' ? 'COMPLETED' : 'ALL', days: [] });
+            const hasDone = drillEntries.value.some(i => listType(i) === type && i.status === 'COMPLETED');
+            Object.assign(drill, { open: true, key: card.key, who, status: ['ANIME', 'MANGA', 'ADULT', 'GAME', 'TV', 'SONG'].includes(card.key) && hasDone ? 'COMPLETED' : card.key === 'tv_done' ? 'COMPLETED' : 'ALL', days: [] });
             if (card.key === 'days') {
                 drill.loadingDays = true;
                 const userId = who === 'me' ? uid() : viewUserId.value;
@@ -6286,7 +6305,7 @@ createApp({
         const countedOf = (i) => i.status === 'COMPLETED' && typeOf(i) !== 'GAME' && typeOf(i) !== 'SONG' ? (i.anime?.episodes || i.progress || 0) : (i.progress || 0);
         const drillBase = computed(() => {
             let items = drillEntries.value;
-            if (drillType.value) items = items.filter(i => typeOf(i) === drillType.value);
+            if (drillType.value) items = items.filter(i => listType(i) === drillType.value);
             if (drill.key === 'completed') items = items.filter(i => i.status === 'COMPLETED');
             if (drill.key === 'mean') items = items.filter(i => i.score > 0);
             return items;
@@ -6342,8 +6361,8 @@ createApp({
             compareType.value = songsOn.value || mediaType.value !== 'SONG' ? mediaType.value : 'ANIME';
         });
         const comparison = computed(() => {
-            const theirs = (viewedUser.value?.entries || []).filter(i => typeOf(i) === compareType.value);
-            const mine = uniqueItems.value.filter(i => typeOf(i) === compareType.value);
+            const theirs = (viewedUser.value?.entries || []).filter(i => listType(i) === compareType.value);
+            const mine = uniqueItems.value.filter(i => listType(i) === compareType.value);
             const mineById = new Map(mine.map(i => [i.anime.id, i]));
             const theirsById = new Map(theirs.map(i => [i.anime.id, i]));
             const seen = (i) => i && (i.status === 'COMPLETED' || (i.progress || 0) > 0);
@@ -7238,7 +7257,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.3';
+        const APP_VERSION = '1.4';
         const WHATS_NEW = {
             '1.2': [
                 { icon: 'fa-play', t: 'Every song you play counts', d: 'Songs you listen to go on your list as “Played” with their plays, so your songs and plays show on your profile (for friends too), not only liked songs. Plays this browser kept from before are moved over. They’re in Lists → Songs → Played, not in In Love / Liked.' },
@@ -7279,9 +7298,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             ],
             '3.1': [
                 { icon: 'fa-heart', t: 'Like from the +', d: 'The + on a song now starts with “Liked songs”: tap it to like the song (tap again to unlike), or pick a playlist like before.' },
-            ],
-            '3.0': [
-                { icon: 'fa-eye-slash', t: 'Adult streaming sites hidden', d: 'Streaming sites for adult anime (like OceanVeil) only show up for people with 18+ access, on title pages and as the automatic Watch link.' },
             ],
             '2.9': [
                 { icon: 'fa-layer-group', t: 'TV seasons as their own titles', d: 'Searching a show lists its seasons too, and the Seasons row on its page opens each one: track Season 1, Season 2… with their own status, episodes and score.' },
@@ -7822,14 +7838,42 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 && (!f.format || m.format === f.format)).map(normMedia);
             return { items, hasNextPage: (md.offset || 0) + per < Math.min(md.total || 0, 9900) };
         };
-        // v1.3 track-only 18+ manga: nothing until you search; then the one title that matches your search exactly (any of
-        // its names), else the 3 best matches
+        // v1.3 track-only 18+ manga: nothing until you search; then (v1.3.1) only the one best match. MangaDex is searched in
+        // both of its 18+ ratings (many 18+ manhwa are "erotica" there, not "pornographic"), and every result is scored on
+        // all its names (AniList's English / romaji / native / other names + MangaDex's titles in every language): the same
+        // name wins, then a name that starts with what you typed, then the most words in common; MangaDex's own relevance
+        // order breaks a tie.
+        const nameScore = (name, q, qWords) => {
+            const n = normTitle(name); if (!n) return 0;
+            if (n === q) return 100;
+            if (n.startsWith(q + ' ') || q.startsWith(n + ' ')) return 80 - Math.min(20, Math.abs(n.length - q.length) / 2);
+            if (n.startsWith(q) || q.startsWith(n)) return 70 - Math.min(20, Math.abs(n.length - q.length) / 2);
+            const nWords = new Set(n.split(' '));
+            const hit = qWords.filter(w => nWords.has(w)).length;
+            if (!hit) return n.includes(q) ? 40 : 0;
+            return (hit === qWords.length ? 55 : 45 * hit / qWords.length) - Math.min(10, Math.max(0, nWords.size - hit));
+        };
         const trackSearch = async (f, { low = false } = {}) => {
             const q = f.search.trim(); if (!q) return { items: [], hasNextPage: false };
-            const { items } = await adultMangaBrowse(f, 1, { low });
-            const want = normTitle(q);
-            const exact = items.find(m => [m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || [])].some(t => t && normTitle(t) === want));
-            return { items: exact ? [exact] : items.slice(0, 3), hasNextPage: false };
+            const p = new URLSearchParams({ limit: 40, title: q });
+            ['erotica', 'pornographic'].forEach(r => p.append('contentRating[]', r));
+            p.append('order[relevance]', 'desc');
+            const md = JSON.parse((await siteFetch('https://api.mangadex.org/manga?' + p)).body || '{}');
+            const rows = new Map();   // AniList id → { i: MangaDex position, names: MangaDex's names }
+            (md.data || []).forEach((m, i) => {
+                const al = Number(m.attributes?.links?.al); if (!al || rows.has(al)) return;
+                const at = m.attributes || {};
+                rows.set(al, { i, names: [...Object.values(at.title || {}), ...(at.altTitles || []).flatMap(o => Object.values(o || {}))] });
+            });
+            if (!rows.size) return { items: [], hasNextPage: false };
+            const data = await anilist(`query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: MANGA) { ${MEDIA_FIELDS} } } }`, { ids: [...rows.keys()].slice(0, 50) }, { low });
+            const want = normTitle(q), qWords = want.split(' ').filter(Boolean);
+            const scored = (data?.Page?.media || []).map(m => {
+                const r = rows.get(m.id);
+                const names = [m.title?.english, m.title?.romaji, m.title?.native, ...(m.synonyms || []), ...(r?.names || [])].filter(Boolean);
+                return { m, sc: Math.max(0, ...names.map(n => nameScore(n, want, qWords))) - (r?.i || 0) * 0.2 };
+            }).filter(x => x.sc > 0).sort((x, y) => y.sc - x.sc);
+            return { items: scored.length ? [normMedia(scored[0].m)] : [], hasNextPage: false };
         };
         const trackSearchOnly = computed(() => trackOnly.value && section.value === 'manga' && !!filters.value.isAdult);
         const browseFetch = async (type, f, page, { low = false } = {}) => {
@@ -11046,7 +11090,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const top = list.find(e => !isAdultMedia(e.anime)) || list[0], a = top.anime;
             try {
                 const { data, error } = await sb.from('activities').insert({
-                    user_id: uid(), kind: 'list', media_id: a.id, media_type: a.type || 'ANIME', status: top.status, progress_from: null, progress_to: null,
+                    user_id: uid(), kind: 'list', media_id: a.id, media_type: dbTypeOf(a), status: top.status, progress_from: null, progress_to: null,
                     media_title: a.title?.romaji || a.title?.english || a.title?.native || 'Untitled', media_cover: a.coverImage?.large || null,
                     extra: { batch: { n: list.length, from: 'AniList' }, ...(isAdultMedia(a) ? { adult: true } : {}) },
                 }).select().single();
@@ -11457,6 +11501,25 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (heroPool.value.some(x => !x)) { const fresh = pickHero(pools); heroPool.value = heroPool.value.map((x, n) => x || fresh[n]); }
         };
 
+        // ---------- v1.4 18+ manga saved as Manga before → the 18+ list (type 'ADULT' in the database) ----------
+        // The v1.4 SQL moves the ones marked 18+ in their saved data; older rows without that mark are found here (AniList
+        // is asked which of your manga are 18+) and saved again, keeping "last updated".
+        // (Lists → Manga: back to Manga when you leave the section or lose access)
+        watch(() => [mediaType.value, adultListOk.value], ([t, ok]) => { if (t !== 'MANGA' || !ok) adultView.value = false; });
+        const moveAdultRows = async () => {
+            const me = uid(); if (!me) return;
+            const unknown = soloList.value.filter(e => typeOf(e) === 'MANGA' && !e.anime?.isAdult && !(e.anime?.id in adultIds)).map(e => e.anime.id);
+            if (unknown.length) await checkAdultIds(unknown, true);
+            const rows = soloList.value.filter(e => isAdultManga(e.anime) && e.dbType && e.dbType !== 'ADULT')
+                .map(e => ({ user_id: me, media_id: e.anime.id, media_type: 'ADULT', media_data: entryData(e), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt }));
+            if (!rows.length) return;
+            rows.forEach(r => ownWrites.set(r.media_id, Date.now()));
+            const { error } = await sb.from('list_entries').upsert(rows, { onConflict: 'user_id,media_id' });
+            if (error) { console.warn('18+ list not moved:', error.message); return; }
+            const moved = new Set(rows.map(r => r.media_id));
+            soloList.value.forEach(e => { if (moved.has(e.anime.id)) e.dbType = 'ADULT'; });
+        };
+
         // ---------- v3.5.2 movie numbers / full English names for titles saved before v3.4 ----------
         // The daily list check goes through the whole list in the background, so on a big list it can take long or stop
         // when AniList is busy. This asks only for the movies without a number (and shows whose English name is cut
@@ -11486,7 +11549,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 const mn = movieNoOf({ ...anime, format: e.anime.format || m.format }), full = fullEnglishOf(anime);
                 if (!mn && !full) return;
                 e.anime = { ...e.anime, ...(mn ? { mn } : {}), title: { ...e.anime.title, ...(full ? { full } : {}) } };   // on screen now
-                rows.push({ user_id: me, media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt });
+                rows.push({ user_id: me, media_id: e.anime.id, media_type: dbTypeOf(e.anime), media_data: entryData(e), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt });
             });
             if (!rows.length) return;
             rows.forEach(r => ownWrites.set(r.media_id, Date.now()));
@@ -11546,7 +11609,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             }
             // keep list posters fresh (airing episode counts, status) without bumping "last updated"
             const soloRows = soloList.value.filter(e => fresh.has(e.anime.id) && JSON.stringify(slimAnime(fresh.get(e.anime.id))) !== JSON.stringify(slimAnime(e.anime)))
-                .map(e => ({ user_id: me, media_id: e.anime.id, media_type: e.anime.type || 'ANIME', media_data: entryData(e, fresh.get(e.anime.id)), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt }));
+                .map(e => ({ user_id: me, media_id: e.anime.id, media_type: dbTypeOf({ ...e.anime, ...fresh.get(e.anime.id) }), media_data: entryData(e, fresh.get(e.anime.id)), status: e.status, score: e.score, progress: e.progress, updated_at: e.updatedAt }));
             if (soloRows.length) { const { error } = await sb.from('list_entries').upsert(soloRows, { onConflict: 'user_id,media_id' }); if (!error) fetchSolo(); }
         };
 
@@ -11671,7 +11734,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdCols, cdQuery, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
-            adultAllowed, isOwner, hasOwner, adultConfig, adultTrack, trackOnly, readLocked, trackSearchOnly, toggleTrackUser, trackSearchName, addTrackUserByName, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
+            adultAllowed, isOwner, hasOwner, adultConfig, adultListOk, adultView, adultCount, theirAdultCount, adultTrack, trackOnly, readLocked, trackSearchOnly, toggleTrackUser, trackSearchName, addTrackUserByName, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
             gifTab, isGifSaved, toggleSaveGif, gifMore, STICKERS, stickerById, chats, chatWith, chatMessages, chatLoading, chatDraft, chatReplyTo, chatSending, chatPanel, chatSearch, chatSearchBusy, gifState, chatScroll, chatFile,
             incomingRequests, chatList, chatUnread, currentChat, chatBanner, openChat, startChatByName, sendText, sendGif, sendGifLink, onChatFile, unsendMessage, respondChat,
             msgById, msgPreview, chatPreview, dayLabel, clockOf, chatPickerOpen, emoji, EMOJI_GROUPS, emojiShown, insertEmoji, noteCaret, sendSheet, sendAnimeTo, sendEpisodeTo, sendTargets, sendSheetTo,

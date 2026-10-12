@@ -1379,3 +1379,29 @@ Hard-refresh: the footer says **v1.3**. No What’s new pop-up for this one (on 
   - **nothing 18+ in Browse**: Manga → **18+ only** says "Search for your manhwa"; once they search, it shows the title
     that matches the name exactly (any of its names), otherwise the 3 best matches.
 - People with full 18+ access (and the owner) don't need it; anime 18+ stays off for track-only people.
+
+## v1.3.1 — Track 18+ manga: one best match
+
+**No SQL, no Edge Function change.** Hard-refresh: the footer says **v1.3.1**. No What's new pop-up (like v1.3).
+
+- The search shows **one** title, the best match: every result is scored on all its names (AniList's English, romaji,
+  native and other names, plus MangaDex's titles in every language). The same name wins, then a name that starts with
+  what you typed, then the most words in common; MangaDex's relevance order breaks a tie.
+- MangaDex is searched in both 18+ ratings ("erotica" too, not only "pornographic"): many 18+ manhwa are filed there.
+
+## v1.4 — the 18+ list
+
+**SQL: run `supabase/v1.4-adult-list.sql` once** (also in `supabase_setup.sql`). No Edge Function change.
+Hard-refresh: the footer says **v1.4**. No What's new pop-up.
+
+- 18+ manga, manhwa and manhua have **their own list, 18+**, instead of being mixed into Manga:
+  - **Lists → Manga** has a **Manga | 18+** switch; on profiles the list has an **18+** button and Compare an **18+**
+    tab; there's an **18+** stat tile and an **18+** ranking. All of it only for people with 18+ access or
+    "Track 18+ manga", and only when there's something in it.
+  - Manga numbers (count, chapters read, completed) no longer include 18+ titles.
+- **The database hides them**: they're saved as type 'ADULT', and only their owner and friends with 18+ access /
+  Track 18+ manga get those rows (list updates about them too). They follow the Manga list's privacy setting. Before,
+  they were only hidden by the page. "Completed" and "Mean score" on a profile leave them out for everyone else.
+- Watch buddies never copy 18+ titles into each other's Plan to read.
+- What's already saved moves over: the SQL moves manga marked 18+, and the app finds older ones (asks AniList) and
+  moves them a few seconds after the page opens, keeping their "last updated".

@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.3">
+    <link rel="stylesheet" href="app.css?v=1.4">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.3" defer></script>
+    <script src="app.js?v=1.4" defer></script>
 </head>
 <body>
 
@@ -1319,7 +1319,7 @@
                                     </div>
                                     <div class="seg">
                                         <button @click="compareType = 'ANIME'" :class="{ 'is-on': compareType === 'ANIME' }" class="seg-btn">Anime</button>
-                                        <button @click="compareType = 'MANGA'" :class="{ 'is-on': compareType === 'MANGA' }" class="seg-btn">Manga</button><button @click="compareType = 'GAME'" :class="{ 'is-on': compareType === 'GAME' }" class="seg-btn">Games</button><button @click="compareType = 'TV'" :class="{ 'is-on': compareType === 'TV' }" class="seg-btn">Movies &amp; TV</button><button v-if="songsOn" @click="compareType = 'SONG'" :class="{ 'is-on': compareType === 'SONG' }" class="seg-btn">Songs</button>
+                                        <button @click="compareType = 'MANGA'" :class="{ 'is-on': compareType === 'MANGA' }" class="seg-btn">Manga</button><button v-if="adultListOk" @click="compareType = 'ADULT'" :class="{ 'is-on': compareType === 'ADULT' }" class="seg-btn"><i class="fa-solid fa-fire mr-1 text-[#ef4444]"></i>18+</button><button @click="compareType = 'GAME'" :class="{ 'is-on': compareType === 'GAME' }" class="seg-btn">Games</button><button @click="compareType = 'TV'" :class="{ 'is-on': compareType === 'TV' }" class="seg-btn">Movies &amp; TV</button><button v-if="songsOn" @click="compareType = 'SONG'" :class="{ 'is-on': compareType === 'SONG' }" class="seg-btn">Songs</button>
                                     </div>
                                 </div>
                                 <div class="grid md:grid-cols-[250px_1fr] gap-4">
@@ -1450,7 +1450,7 @@
                                     </div>
                                     <div class="seg">
                                         <button @click="theirList.type = 'ANIME'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'ANIME' }" class="seg-btn">Anime</button>
-                                        <button @click="theirList.type = 'MANGA'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'MANGA' }" class="seg-btn">Manga</button><button @click="theirList.type = 'GAME'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'GAME' }" class="seg-btn">Games</button><button @click="theirList.type = 'TV'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'TV' }" class="seg-btn">Movies &amp; TV</button><button v-if="songsOn" @click="theirList.type = 'SONG'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'SONG' }" class="seg-btn">Songs</button>
+                                        <button @click="theirList.type = 'MANGA'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'MANGA' }" class="seg-btn">Manga</button><button v-if="theirAdultCount" @click="theirList.type = 'ADULT'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'ADULT' }" class="seg-btn"><i class="fa-solid fa-fire mr-1 text-[#ef4444]"></i>18+</button><button @click="theirList.type = 'GAME'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'GAME' }" class="seg-btn">Games</button><button @click="theirList.type = 'TV'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'TV' }" class="seg-btn">Movies &amp; TV</button><button v-if="songsOn" @click="theirList.type = 'SONG'; theirList.status = 'ALL'" :class="{ 'is-on': theirList.type === 'SONG' }" class="seg-btn">Songs</button>
                                     </div>
                                 </div>
                                 <div class="mt-8 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8 items-start">
@@ -1929,6 +1929,7 @@
                                 <p class="mt-4 font-display text-ink text-lg">Search for your manhwa</p>
                                 <p class="mt-1 text-sub text-sm max-w-sm mx-auto">Type its name in the search box above: the best match shows up here. You can track it, rate it and compare it; reading 18+ stays off.</p>
                             </div>
+                            <div v-else-if="trackSearchOnly && !visibleResults.length" class="panel py-20 px-6 text-center text-sub">No 18+ title found for “{{ filters.search.trim() }}”. Check the spelling or try another of its names. If it isn’t 18+, turn off <b>18+ only</b> to find it.</div>
                             <div v-else-if="!visibleResults.length" class="panel py-20 text-center text-sub">Nothing found with these filters.<br><button @click="resetFilters" class="btn-ghost mt-5"><i class="fa-solid fa-filter-circle-xmark"></i> Clear all filters</button></div>
                             <!-- Songs: an organised track list (grouped the way you pick) instead of a wall of covers -->
                             <div v-else-if="section === 'songs' && songView === 'list'" class="song-browse">
@@ -2669,9 +2670,14 @@
                     <div class="flex flex-wrap items-end justify-between gap-4">
                         <div>
                             <p class="kicker">// {{ currentSection.short.toLowerCase() }} · {{ strictSolo ? 'just you' : listWith.length ? 'with ' + joinNames(listWith.map(id => personOf(id).username)) : 'everything you track' }}</p>
-                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Your list</h1>
+                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ adultView && section === 'manga' ? 'Your 18+ list' : 'Your list' }}</h1>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
+                            <!-- v1.4 the 18+ list: its own list, only for people with 18+ access or "Track 18+ manga" -->
+                            <div v-if="section === 'manga' && adultListOk" class="seg">
+                                <button @click="adultView = false" :class="{ 'is-on': !adultView }" class="seg-btn">Manga</button>
+                                <button @click="adultView = true" :class="{ 'is-on': adultView }" class="seg-btn"><i class="fa-solid fa-fire mr-1.5 text-[#ef4444]"></i>18+<span v-if="adultCount" class="opacity-60 ml-1.5">{{ adultCount }}</span></button>
+                            </div>
                             <!-- v1.6 Strictly solo: hides everything you watch with friends -->
                             <!-- v1.7 Group seasons: the seasons (and movies) of one show sit together -->
                             <button v-if="['ANIME', 'TV'].includes(currentSection.type)" @click="groupSeasons = !groupSeasons" class="solo-toggle" :class="{ on: groupSeasons }" role="switch" :aria-checked="groupSeasons" title="Show the seasons and movies of the same show together"><span class="st-track"><i></i></span>Group seasons</button>
