@@ -1454,3 +1454,21 @@ change. Hard-refresh: the footer says **v1.4.3**. No What's new pop-up.
   like any title. 18+ ones follow the usual 18+ rules (only in an 18+ search, only for people allowed).
 - List id = 1100000000 + a number from the `mu_titles` table (same for everyone), so friends' lists and Compare match.
 - AniList / MyAnimeList sync, the daily list check and episode alerts skip them (they aren't AniList titles).
+
+## v1.6.0 — songs, games and Browse
+
+No SQL and no Edge Function change. Hard-refresh: the footer says **v1.6.0**.
+
+- **Songs:** In Love and Liked are one list, **Liked** (old In Love rows read as Liked; nothing to migrate). A heart in
+  the player bar likes / unlikes the song that's playing; the + is only playlists (and Play next). A friend's Songs list
+  has **Select songs** (Like / Add to playlist / Play). Random picks play right there. A **year** shows that year's most
+  popular songs (Spotify `year:` search, sorted by popularity) instead of this week's chart filtered to that year.
+- **Games:** **Popular** = several IGDB popularity lists merged (playing, visits, Steam 24 h peak, Twitch hours), also
+  with filters on (it used to switch to "most rated ever" as soon as a filter was set). **Free to play** is a toggle
+  like Co-op (not a tag). **Releasing soon** (the Countdown page, for games): coming out soonest, most anticipated, on
+  my list. **Tell me when it's free** on a paid Steam game (an alert in `media_follows` with `data.free`, checked
+  with the other alerts).
+- **Browse side panel** (Quick stats, Top 5 trending, Top 5 among friends): its own column from the top, sticky. Each
+  row has a + (songs: playlist; others: add / edit) and songs a Play on the cover (on hover).
+- **Leaderboard:** a genre and a tag (anime, manga, games, movies & TV).
+- **Friends list:** online first, then by last seen.
