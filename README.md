@@ -1500,3 +1500,7 @@ No SQL and no Edge Function change. Hard-refresh: the footer says **v1.6.4**.
 ## v1.6.5 — Games: a full "Best of all time" row
 
 No SQL / Edge Function, no What's new. The row asked only for games with 1500+ ratings and 86+ (about 8 exist); now the best of 250+ ratings / 84+, ranked by score weighted by votes, 18 games.
+
+## v1.6.6 — the side panel column comes back on a round button
+
+No SQL / Edge Function, no What's new. The round button on the right edge of Browse shows / hides the side panel as it was (its own column, level with the posters, sticky); hidden by default.

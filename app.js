@@ -7427,7 +7427,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.5';
+        const APP_VERSION = '1.6.6';
         const WHATS_NEW = {
             '1.6.4': [
                 { icon: 'fa-gift', t: 'Free games', d: 'Games → Free now lists the games you can get for free right now on Steam, Epic, GOG and more, with until when. When a new one shows up you get a notification (turn it off in Settings → Notifications).' },

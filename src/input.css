@@ -2296,15 +2296,12 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
 .shelf-row:hover::-webkit-scrollbar-thumb { background: rgb(var(--c-mute)); }
 @media (hover: none) { .shelf-row { scrollbar-width: none; } .shelf-row::-webkit-scrollbar { display: none; } }
 
-/* v1.6.4 the Browse side panel: a tab on the right edge opens it as a drawer that stays in view */
-.aside-handle { position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 46; width: 36px; height: 52px; border-radius: 14px 0 0 14px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: rgb(var(--c-ink)); background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); border-right: 0; box-shadow: -6px 8px 24px -12px rgba(0,0,0,.8); transition: color .15s, background-color .15s, width .2s var(--ease); }
-.aside-handle:hover { width: 42px; color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); border-color: rgb(var(--c-volt)); }
+/* v1.6.6 the round button on the right edge that shows / hides the Browse side panel (it follows you) */
+.aside-handle { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 46; width: 40px; height: 40px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: rgb(var(--c-ink)); background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); box-shadow: 0 8px 24px -10px rgba(0,0,0,.8); transition: color .15s, background-color .15s, border-color .15s, transform .2s var(--ease); }
+.aside-handle:hover { color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); border-color: rgb(var(--c-volt)); transform: translateY(-50%) scale(1.08); }
+.aside-handle:active { transform: translateY(-50%) scale(.94); }
 .aside-handle.on { color: rgb(var(--c-volt)); }
 .aside-handle.on:hover { color: rgb(var(--c-onvolt)); }
-.browse-aside.browse-drawer { position: fixed; right: 48px; top: calc(64px + var(--dock-h, 0px) + 16px); bottom: auto; width: min(300px, calc(100vw - 64px)); max-height: calc(100dvh - 64px - var(--dock-h, 0px) - 40px); margin: 0; padding: 10px; overflow-y: auto; overscroll-behavior: contain; z-index: 45; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; background: rgb(var(--c-base)); border: 1px solid rgb(var(--c-line2)); border-radius: 22px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.9); }
-.browse-drawer .panel { background: rgb(var(--c-surface)); }
-.drawer-enter-active, .drawer-leave-active { transition: opacity .18s, transform .25s var(--ease); }
-.drawer-enter-from, .drawer-leave-to { opacity: 0; transform: translateX(24px); }
 
 /* v1.6.4 Free games */
 .free-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
