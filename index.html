@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.1">
+    <link rel="stylesheet" href="app.css?v=1.6.2">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.1" defer></script>
+    <script src="app.js?v=1.6.2" defer></script>
 </head>
 <body>
 
@@ -2007,7 +2007,7 @@
 
                     </div>
                     </div>
-                        <aside class="browse-aside order-first xl:order-none flex xl:flex-col gap-5 overflow-x-auto xl:overflow-visible no-scrollbar -mx-4 px-4 xl:mx-0 xl:px-0" :class="{ 'is-searching': filters.search.trim() }">
+                        <aside class="browse-aside order-first xl:order-none flex xl:flex-col gap-5 overflow-x-auto xl:overflow-visible no-scrollbar -mx-4 px-4 xl:mx-0 xl:px-0" :class="{ 'is-searching': filters.search.trim(), 'aside-shelf': shelfRows.length && !filters.search.trim(), 'aside-align': !shelfRows.length && !filters.search.trim() && !currentSection.noApi }">
                             <div class="panel p-5 w-[270px] shrink-0 xl:w-auto hidden xl:block">
                                 <p class="label mb-4"><i class="fa-solid fa-bolt text-volt mr-1.5"></i>Quick stats</p>
                                 <div class="space-y-3 text-sm">

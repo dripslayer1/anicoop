@@ -2283,3 +2283,6 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
 .aside-add:active { transform: scale(.9); }
 .aside-add.on { color: rgb(var(--c-volt)); }
 .aside-add.on:hover { color: rgb(var(--c-onvolt)); }
+
+/* v1.6.2 the side panel starts level with the posters of the first row (below its title), not with the title */
+@media (min-width: 1280px) { .browse-aside.aside-shelf { margin-top: 68px; } }
