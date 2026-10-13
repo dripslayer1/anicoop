@@ -2264,3 +2264,22 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
 .stat-18.on { color: #fff; background: #ef4444; border-color: #ef4444; }
 .adult-toggle i { color: #ef4444; }
 .adult-toggle.on { border-color: #ef4444 !important; }
+
+/* v1.6.0 the heart in the player bar, and Play on a random song */
+.pbar-like.on { color: #ff4d8d; }
+.pbar-like.on::after { display: none; }
+.rand-play { position: absolute; right: 8px; bottom: 8px; width: 38px; height: 38px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); box-shadow: 0 6px 18px -6px rgba(0,0,0,.6); opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .2s var(--ease); }
+.rand-card:hover .rand-play, .rand-play:focus-visible { opacity: 1; transform: none; }
+@media (hover: none) { .rand-play { opacity: 1; transform: none; } }
+
+/* v1.6.0 Browse: the side panel is its own column from the top (the first row starts level with it) */
+.browse-main > :first-child { margin-top: 0 !important; }
+.aside-art { position: relative; flex-shrink: 0; }
+.aside-play { position: absolute; inset: 0; margin: auto; width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); box-shadow: 0 4px 14px -4px rgba(0,0,0,.7); opacity: 0; transform: scale(.85); transition: opacity .15s, transform .2s var(--ease); }
+.aside-row:hover .aside-play, .aside-play:focus-visible { opacity: 1; transform: none; }
+@media (hover: none) { .aside-play { opacity: 1; transform: none; } }
+.aside-add { width: 28px; height: 28px; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: rgb(var(--c-sub)); background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); transition: color .15s, background-color .15s, transform .15s; }
+.aside-add:hover { color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); border-color: rgb(var(--c-volt)); }
+.aside-add:active { transform: scale(.9); }
+.aside-add.on { color: rgb(var(--c-volt)); }
+.aside-add.on:hover { color: rgb(var(--c-onvolt)); }
