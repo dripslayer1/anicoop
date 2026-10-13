@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.3">
+    <link rel="stylesheet" href="app.css?v=1.6.4">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.3" defer></script>
+    <script src="app.js?v=1.6.4" defer></script>
 </head>
 <body>
 
@@ -667,8 +667,6 @@
                                 <a v-else-if="selectedAnime.type === 'GAME' && selectedAnime.steamId" :href="'https://store.steampowered.com/app/' + selectedAnime.steamId" target="_blank" rel="noopener" class="steam-play" title="Not in your Steam library: open its store page"><i class="fa-brands fa-steam"></i> Get it on Steam</a>
                                 <button v-if="selectedAnime.trailer?.id" @click="playTrailer(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-volt text-onvolt text-xs font-bold active:scale-95 transition-transform"><i class="fa-solid fa-play text-[10px]"></i> Watch trailer</button>
                                 <button @click="sendAnimeTo(selectedAnime)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-paper-plane text-[10px] text-lilac"></i> Send to a friend</button>
-                                <!-- v1.6.0 a paid Steam game: get told when it's free -->
-                                <button v-if="selectedAnime.type === 'GAME' && selectedAnime.steamId && currentUser" @click="toggleFreeAlert(selectedAnime)" :class="isFreeAlert(selectedAnime.id) ? 'bg-volt text-onvolt border-volt' : 'bg-raised text-ink border-line2'" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold border" :title="isFreeAlert(selectedAnime.id) ? 'Turn off the free alert' : 'Get notified when this game is free on Steam'"><i class="fa-solid fa-gift text-[11px]"></i> {{ isFreeAlert(selectedAnime.id) ? 'Free alert on' : 'Tell me when it’s free' }}</button>
                                 <button v-if="isAniListType(selectedAnime.type)" @click="toggleFollow(selectedAnime)" :class="isFollowing(selectedAnime.id) ? 'bg-volt text-onvolt border-volt' : 'bg-raised text-ink border-line2'" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold border" :title="isFollowing(selectedAnime.id) ? 'Turn off alerts' : 'Get notified about new episodes, seasons and updates'"><i class="fa-solid text-[11px]" :class="isFollowing(selectedAnime.id) ? 'fa-bell' : 'fa-bell-slash'"></i> {{ isFollowing(selectedAnime.id) ? 'Alerts on' : 'Get alerts' }}</button>
                                 <a href="#comments" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-raised text-ink text-xs font-bold border border-line2"><i class="fa-solid fa-comments text-[11px] text-lilac"></i> Comments <span v-if="comments.length" class="text-mute">{{ comments.length }}</span></a>
                                 <span v-if="selectedAnime.averageScore" class="rating !text-sm !px-3 !py-1.5"><i class="fa-solid fa-star star"></i> {{ formatAvg(selectedAnime.averageScore) }}</span>
@@ -1658,6 +1656,36 @@
                     </div>
                 </main>
 
+                <!-- v1.6.4 games you can keep for free right now (GamerPower) -->
+                <main v-else-if="activeTab === 'free'" key="free" class="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
+                    <p class="kicker">// giveaways · free to keep for a limited time</p>
+                    <div class="flex flex-wrap items-end justify-between gap-3 mt-2">
+                        <h1 class="font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Free games right now</h1>
+                        <div class="flex items-center gap-2">
+                            <div class="seg !h-10 shrink-0"><button v-for="p in FREE_STORES" :key="p.v" @click="freeG.store = p.v" :class="{ 'is-on': freeG.store === p.v }" class="seg-btn !px-3">{{ p.l }}</button></div>
+                            <button @click="loadFreeGames(true)" class="icon-btn !w-10 !h-10 shrink-0" title="Refresh"><i class="fa-solid fa-rotate-right text-xs" :class="{ 'fa-spin': freeG.loading }"></i></button>
+                        </div>
+                    </div>
+                    <p class="mt-2 text-xs text-sub">You get a notification when a new one shows up (Settings → Notifications). Games on your list come first. From GamerPower.</p>
+                    <p v-if="freeG.error" class="mt-6 panel !rounded-2xl px-4 py-3 text-sm text-rose-300"><i class="fa-solid fa-circle-exclamation mr-2"></i>{{ freeG.error }}</p>
+                    <div v-if="freeG.loading && !freeG.list.length" class="free-grid mt-6"><div v-for="n in 8" :key="n" class="h-64 rounded-2xl skeleton"></div></div>
+                    <p v-else-if="!freeShown.length && !freeG.error" class="mt-6 panel !rounded-2xl p-8 text-center text-sm text-mute">Nothing free {{ freeG.store ? 'there ' : '' }}right now. Check back later.</p>
+                    <div class="free-grid mt-6">
+                        <a v-for="g in freeShown" :key="g.id" :href="g.url || undefined" target="_blank" rel="noopener" class="free-card">
+                            <span class="free-art"><img v-if="g.image" :src="g.image" alt="" loading="lazy" decoding="async"><span v-if="g.mine" class="free-mine"><i class="fa-solid fa-bookmark"></i> On your list</span></span>
+                            <span class="free-body">
+                                <span class="block text-ink font-semibold text-sm leading-snug line-clamp-2">{{ g.title }}</span>
+                                <span class="flex flex-wrap gap-1 mt-2"><span v-for="p in g.platforms" :key="p" class="free-chip">{{ p }}</span></span>
+                                <span class="flex items-center gap-2 mt-3 text-xs">
+                                    <s v-if="g.worth" class="text-mute">{{ g.worth }}</s><b class="text-volt">FREE</b>
+                                    <span class="text-sub ml-auto">{{ g.end ? 'until ' + freeUntil(g.end) : 'no end date' }}</span>
+                                </span>
+                                <span class="free-get"><i class="fa-solid fa-arrow-up-right-from-square"></i> Get it</span>
+                            </span>
+                        </a>
+                    </div>
+                </main>
+
                 <main v-else-if="activeTab === 'top'" :key="'top-' + section" class="w-full max-w-3xl mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
                     <div class="flex flex-wrap items-end justify-between gap-3">
                         <div>
@@ -1797,6 +1825,7 @@
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <button v-if="section === 'anime' || section === 'games'" @click="openCountdown" class="btn-ghost"><i class="fa-solid fa-hourglass-half text-lilac"></i> {{ section === 'games' ? 'Releasing soon' : 'Countdown' }}</button>
+                            <button v-if="section === 'games'" @click="openFreeGames" class="btn-ghost"><i class="fa-solid fa-gift text-pink"></i> Free now</button>
                             <button @click="openHistory(mediaType)" class="btn-ghost"><i class="fa-solid fa-clock-rotate-left text-volt"></i> History<span v-if="histList.some(h => h.type === mediaType)" class="opacity-60">· {{ histList.filter(h => h.type === mediaType).length }}</span></button>
                         </div>
                     </div>
@@ -1895,7 +1924,7 @@
 
                     <!-- v1.6.0 the side panel (quick stats, top 5 trending, top 5 among friends) is a column of its own, starting
                          level with the first row under Continue watching ("This season"…), and stays in view while you scroll -->
-                    <div class="browse-layout mt-12 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-x-10 gap-y-8 items-start">
+                    <div class="browse-layout mt-12">
                     <div class="browse-main min-w-0">
                     <!-- every section: organised rows before the big popular list -->
                     <div v-if="shelfRows.length" class="mt-12 space-y-10">
@@ -2007,8 +2036,11 @@
 
                     </div>
                     </div>
-                        <aside class="browse-aside order-first xl:order-none flex xl:flex-col gap-5 overflow-x-auto xl:overflow-visible no-scrollbar -mx-4 px-4 xl:mx-0 xl:px-0" :class="{ 'is-searching': filters.search.trim(), 'aside-shelf': shelfRows.length && !filters.search.trim(), 'aside-align': !shelfRows.length && !filters.search.trim() && !currentSection.noApi }">
-                            <div class="panel p-5 w-[270px] shrink-0 xl:w-auto hidden xl:block">
+                        <!-- v1.6.4 the side panel opens from the small tab on the right edge and follows you -->
+                        <button @click="PREFS.asideOpen = !PREFS.asideOpen" class="aside-handle" :class="{ on: PREFS.asideOpen }" :title="PREFS.asideOpen ? 'Close the side panel' : 'Quick stats & top 5'" :aria-expanded="PREFS.asideOpen"><i class="fa-solid" :class="PREFS.asideOpen ? 'fa-xmark' : 'fa-chart-simple'"></i></button>
+                        <transition name="drawer">
+                        <aside v-if="PREFS.asideOpen" class="browse-aside browse-drawer">
+                            <div class="panel p-5">
                                 <p class="label mb-4"><i class="fa-solid fa-bolt text-volt mr-1.5"></i>Quick stats</p>
                                 <div class="space-y-3 text-sm">
                                     <div class="flex justify-between"><span class="text-sub">On your list</span><span class="text-ink font-mono font-bold">{{ secSolo.length }}</span></div>
@@ -2016,7 +2048,7 @@
                                     <div class="flex justify-between"><span class="text-sub">{{ section === 'manga' ? 'Read' : section === 'games' ? 'Played' : section === 'songs' ? 'Plays' : 'Watched' }}</span><span class="text-ink font-mono font-bold">{{ sectionProgress }} {{ UNIT.unit.toLowerCase() }}</span></div>
                                 </div>
                             </div>
-                            <div v-if="trendingTop.length" class="panel p-5 w-[270px] shrink-0 xl:w-auto">
+                            <div v-if="trendingTop.length" class="panel p-5">
                                 <p class="label mb-4"><i class="fa-solid fa-fire text-pink mr-1.5"></i>Top 5 trending</p>
                                 <div class="space-y-3.5">
                                     <div v-for="(a, idx) in trendingTop.filter(notHidden)" :key="a.id" @click="fetchAnimeDetails(a)" @keydown.enter.self="fetchAnimeDetails(a)" role="button" tabindex="0" class="aside-row w-full flex items-center gap-3 text-left group cursor-pointer">
@@ -2033,7 +2065,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="panel p-5 w-[270px] shrink-0 xl:w-auto">
+                            <div class="panel p-5">
                                 <p class="label mb-4"><i class="fa-solid fa-user-group text-lilac mr-1.5"></i>Top 5 among friends</p>
                                 <div v-if="friendsTrending.length" class="space-y-3.5">
                                     <div v-for="(t, idx) in friendsTrending" :key="t.anime.id" @click="fetchAnimeDetails(t.anime)" @keydown.enter.self="fetchAnimeDetails(t.anime)" role="button" tabindex="0" class="aside-row w-full flex items-center gap-3 text-left group cursor-pointer">
@@ -2057,6 +2089,7 @@
                                 <p v-else class="text-xs text-mute leading-relaxed">{{ friendsList.length ? 'Your friends haven’t added any ' + currentSection.short.toLowerCase() + ' yet.' : 'Add friends on your Profile to see what they’re into.' }}</p>
                             </div>
                         </aside>
+                        </transition>
                     </div>
                 </main>
 
@@ -3368,13 +3401,12 @@
             </form>
             <div class="seg mx-3 mb-2 !flex">
                 <button @click="peopleTab = 'friends'" :class="{ 'is-on': peopleTab === 'friends' }" class="seg-btn flex-1">Friends</button>
-                <button @click="peopleTab = 'online'" :class="{ 'is-on': peopleTab === 'online' }" class="seg-btn flex-1"><span class="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block mr-1.5 align-middle"></span>Online</button>
                 <button @click="peopleTab = 'everyone'" :class="{ 'is-on': peopleTab === 'everyone' }" class="seg-btn flex-1">Everyone</button>
             </div>
             <!-- online / everyone: all people on anicoop, not just friends -->
             <div v-if="peopleTab !== 'friends'" class="max-h-[60dvh] overflow-y-auto px-2 pb-2">
                 <p v-if="peopleLoading && !people.length" class="text-xs text-mute text-center py-6"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Loading…</p>
-                <template v-for="grp in (peopleTab === 'online' ? [{ k: 'on', l: 'Online now', list: peopleOnline }] : [{ k: 'on', l: 'Online now', list: peopleOnline }, { k: 'off', l: 'Offline', list: peopleOffline }])" :key="grp.k">
+                <template v-for="grp in [{ k: 'on', l: 'Online now', list: peopleOnline }, { k: 'off', l: 'Offline', list: peopleOffline }]" :key="grp.k">
                     <p class="label px-2 pt-2 pb-1.5">{{ grp.l }} · {{ grp.list.length }}</p>
                     <div v-for="pp in grp.list" :key="pp.id" class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-overlay transition-colors">
                         <button @click="friendsOpen = false; openUser(pp.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left">
@@ -3409,14 +3441,17 @@
                     </div>
                 </template>
                 <input v-if="friendsList.length > 6" v-model="friendsQuery" placeholder="Search friends" class="field !py-1.5 !rounded-xl !text-xs mx-1 my-1.5 !w-[calc(100%-.5rem)]">
-                <div v-for="f in friendsFiltered" :key="f.id" class="group flex items-center gap-2.5 p-2 rounded-xl hover:bg-overlay transition-colors">
-                    <button @click="friendsOpen = false; openUser(f.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left">
-                        <span class="relative shrink-0"><user-avatar :user="f" :size="34"></user-avatar><span class="online-dot" :class="{ on: isOnline(f.id) }"></span></span>
-                        <span class="min-w-0"><span class="flex items-center gap-1.5 text-sm font-semibold text-ink"><span class="truncate">{{ f.username }}</span><i v-if="buddyState(f.id) === 'buddies'" class="fa-solid fa-link text-[10px] text-lilac" title="Watch buddy"></i></span><span class="block text-[11px] text-mute truncate">{{ f.bio || ((friendCounts[f.id] || 0) + ' titles') }}</span></span>
-                    </button>
-                    <button @click="openFriendLists(f.id)" class="w-8 h-8 rounded-full text-sub hover:text-ink hover:bg-raised shrink-0" title="Their lists"><i class="fa-solid fa-list text-xs"></i></button>
-                    <button @click="friendsOpen = false; openChat(f.id)" class="w-8 h-8 rounded-full text-sub hover:text-ink hover:bg-raised shrink-0" title="Message"><i class="fa-solid fa-comment-dots text-xs"></i></button>
-                </div>
+                <template v-for="grp in friendGroups" :key="grp.k">
+                    <p v-if="grp.list.length" class="label px-2 pt-2 pb-1.5">{{ grp.l }} · {{ grp.list.length }}</p>
+                    <div v-for="f in friendsFiltered" :key="f.id" class="group flex items-center gap-2.5 p-2 rounded-xl hover:bg-overlay transition-colors">
+                        <button @click="friendsOpen = false; openUser(f.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left">
+                            <span class="relative shrink-0"><user-avatar :user="f" :size="34"></user-avatar><span class="online-dot" :class="{ on: isOnline(f.id) }"></span></span>
+                            <span class="min-w-0"><span class="flex items-center gap-1.5 text-sm font-semibold text-ink"><span class="truncate">{{ f.username }}</span><i v-if="buddyState(f.id) === 'buddies'" class="fa-solid fa-link text-[10px] text-lilac" title="Watch buddy"></i></span><span class="block text-[11px] text-mute truncate">{{ lastSeenText(f) }} · {{ friendCounts[f.id] || 0 }} title{{ friendCounts[f.id] === 1 ? '' : 's' }}</span></span>
+                        </button>
+                        <button @click="openFriendLists(f.id)" class="w-8 h-8 rounded-full text-sub hover:text-ink hover:bg-raised shrink-0" title="Their lists"><i class="fa-solid fa-list text-xs"></i></button>
+                        <button @click="friendsOpen = false; openChat(f.id)" class="w-8 h-8 rounded-full text-sub hover:text-ink hover:bg-raised shrink-0" title="Message"><i class="fa-solid fa-comment-dots text-xs"></i></button>
+                    </div>
+                </template>
                 <p v-if="!friendsList.length" class="text-sm text-mute text-center px-4 py-8">No friends yet — add someone by username above.</p>
             </div>
         </div>

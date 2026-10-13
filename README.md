@@ -1485,3 +1485,14 @@ No SQL / Edge Function, no What's new. The Browse side panel starts level with t
 ## v1.6.3 — a slider under Browse rows
 
 No SQL / Edge Function, no What's new. Browse rows (This season, …) show a thin slider on computers; the side panel sits 2px above the posters.
+
+## v1.6.4 — free games, side panel drawer, friends list
+
+No SQL and no Edge Function change. Hard-refresh: the footer says **v1.6.4**.
+
+- **Games → Free now:** games free to keep right now (GamerPower's public API, read straight from the browser): store
+  filter, worth, until when, "Get it". A new giveaway sends a notification (`media_changed` + GAME, text "Free on …";
+  Settings → Notifications → `game_free`); the first check only remembers what's already free. The "Tell me when it's
+  free" button on game pages is gone (alerts made with it still work).
+- **Browse side panel:** closed by default; a tab on the right edge opens it as a drawer that stays in view (`PREFS.asideOpen`).
+- **Friends panel:** no Online tab; friends are grouped Online now / Offline, most recently seen first.

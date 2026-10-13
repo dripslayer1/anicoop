@@ -143,6 +143,7 @@ const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
     msgSound: true,   // v2.1 a short chime with the message pop-up
+    asideOpen: false,   // v1.6.4 Browse: the side panel (quick stats, top 5s) is open
     fixedRuns: false,   // v2.8 the one-time repair of new watches left in the rewatch slots has run
     contOrder: {},   // v2.1 your own order of Continue watching / reading, per section: { anime: [media ids] }
     alPull: null,   // v2.0 { id: your AniList id, at: the newest AniList change already brought in (AniList's updatedAt) }
@@ -2845,7 +2846,7 @@ createApp({
             startPresence(); touchLastSeen();
             fetchFollows().then(() => setTimeout(checkFollowed, 6000));
             loadAniListLink(); loadMalLink();
-            setTimeout(fillNames, 4000); setTimeout(moveAdultRows, 6500); setTimeout(movePendingPlays, 5000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
+            setTimeout(fillNames, 4000); setTimeout(moveAdultRows, 6500); setTimeout(() => checkFreeGiveaways(), 12000); setTimeout(movePendingPlays, 5000); setTimeout(checkListMedia, 8000); setTimeout(checkGames, 11000);
         };
         const clearUserData = () => {
             loadedUserId = null;
@@ -3315,6 +3316,7 @@ createApp({
             ] },
             { title: 'Site Data Changes', note: 'anicoop checks the shows on your lists against AniList once a day.', items: [
                 { key: 'media_related', label: 'When an anime or manga in my list has a new related entry created' },
+                { key: 'game_free', label: 'When a game becomes free to keep (giveaways on Steam, Epic, GOG…)', hint: 'Games → Free now lists them all' },
                 { key: 'media_changed', label: 'When an anime or manga in my list has its data changed that affects my list' },
                 { key: 'media_merged', label: 'When one or more anime or manga in my list are merged into another' },
                 { key: 'media_deleted', label: 'When an anime or manga in my list is deleted from the site' },
@@ -3947,7 +3949,7 @@ createApp({
                 case 'party_dropped': return `${who} dropped ${title} (you can carry on)`;
                 case 'playlist_added': return `${who} added you to the playlist “${n.text}”: you can add songs too`;
                 case 'media_related': return `${title} has a new related entry`;
-                case 'media_changed': return `${title} was updated on AniList`;
+                case 'media_changed': return isFreeNote(n) ? `🎁 ${title} is free right now` : n.media_type === 'GAME' ? `${title} changed` : `${title} was updated on AniList`;
                 case 'media_removed': return `${title} was merged or removed on AniList`;
                 case 'message': return `${who}: ${n.text || 'sent you a message'}`;
                 case 'message_request': return `${who} wants to chat: ${n.text || ''}`;
@@ -3967,7 +3969,7 @@ createApp({
         };
         const NOTIF_QUOTE = ['friend_tierlist', 'friend_debate', 'comment', 'comment_reply', 'comment_mention', 'comment_like', 'activity_reply', 'activity_mention', 'reply_like', 'friend_post', 'friend_poll', 'friend_question', 'best_answer'];
         const notifQuote = (n) => n.text && NOTIF_QUOTE.includes(n.kind) ? `“${n.text}”` : ((n.kind?.startsWith('media_') || n.kind === 'poll_ended') ? n.text : '');
-        const notifIcon = (n) => ({ media_related: 'fa-diagram-project', media_changed: 'fa-rotate', media_removed: 'fa-triangle-exclamation', poll_ended: 'fa-square-poll-horizontal', media_episode: 'fa-tv' })[n.kind] || 'fa-bell';
+        const notifIcon = (n) => isFreeNote(n) ? 'fa-gift' : ({ media_related: 'fa-diagram-project', media_changed: 'fa-rotate', media_removed: 'fa-triangle-exclamation', poll_ended: 'fa-square-poll-horizontal', media_episode: 'fa-tv' })[n.kind] || 'fa-bell';
         const systemNotifOn = ref(typeof Notification !== 'undefined' && Notification.permission === 'granted');
         // ---------- v2.1 new messages: a card in the bottom-right corner (click it to open the chat) + a short chime ----------
         const msgPops = ref([]);   // newest first, at most 3; one card per chat (a new message in it updates the card)
@@ -4035,6 +4037,7 @@ createApp({
             notifOpen.value = false; invOpen.value = false;
             if (!n.read) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); }
             if (n.kind === 'message' || n.kind === 'message_request') { openChat(n.actor_id); return; }
+            if (isFreeNote(n)) { openFreeGames(); return; }   // v1.6.4
             if (n.kind === 'group_message') { openGroup(n.group_id); return; }
             if (n.kind === 'buddy_request' || n.kind === 'buddy_accept') { fetchBuddies(); openUser(n.actor_id); return; }
             if (n.kind === 'follow' || n.kind === 'friend_accept') { openTracker('profile'); setTimeout(() => document.getElementById('friends')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); return; }
@@ -6432,7 +6435,9 @@ createApp({
         // quick friends list (people icon in the header)
         const friendsOpen = ref(false);
         const friendsQuery = ref('');
-        const friendsFiltered = computed(() => { const q = friendsQuery.value.trim().toLowerCase(); return q ? friendsList.value.filter(f => (f.username || '').toLowerCase().includes(q)) : friendsList.value; });
+        const friendsFiltered = computed(() => { const q = friendsQuery.value.trim().toLowerCase(); return q ? friendsSorted.value.filter(f => (f.username || '').toLowerCase().includes(q)) : friendsSorted.value; });
+        // v1.6.4 the friends panel: Online now, then Offline (most recently seen first), like Everyone
+        const friendGroups = computed(() => [{ k: 'on', l: 'Online now', list: friendsFiltered.value.filter(f => isOnline(f.id)) }, { k: 'off', l: 'Offline', list: friendsFiltered.value.filter(f => !isOnline(f.id)) }]);
         const friendCounts = computed(() => { const c = {}; friendEntries.value.forEach(r => { c[r.user_id] = (c[r.user_id] || 0) + 1; }); return c; });
         // v1.6 on a friend's profile: how many titles you two watch together (tap → your list with only those)
         const sharedWith = computed(() => { const id = viewUserId.value; if (!id) return 0; let n = 0; partyTags.value.forEach(tags => { if (tags.some(t => t.id === id && t.state !== 'invited')) n++; }); return n; });
@@ -7419,8 +7424,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.3';
+        const APP_VERSION = '1.6.4';
         const WHATS_NEW = {
+            '1.6.4': [
+                { icon: 'fa-gift', t: 'Free games', d: 'Games → Free now lists the games you can get for free right now on Steam, Epic, GOG and more, with until when. When a new one shows up you get a notification (turn it off in Settings → Notifications).' },
+                { icon: 'fa-table-columns', t: 'Side panel when you want it', d: 'Quick stats and the Top 5 lists open from the small tab on the right edge of Browse and stay with you while you scroll. Tap it again to close.' },
+                { icon: 'fa-user-group', t: 'Friends list', d: 'Your friends are split into Online now and Offline, most recently online first, like Everyone (no separate Online tab).' },
+            ],
             '1.6.0': [
                 { icon: 'fa-heart', t: 'Liked songs, one list', d: 'In Love and Liked are now one list: Liked (your In Love songs are in it). Like the song that’s playing with the heart in the player bar. The + is just for playlists (and Play next).' },
                 { icon: 'fa-list-check', t: 'Pick songs from a friend’s list', d: 'On a friend’s Songs list, “Select songs” lets you like them, add them to a playlist or play them, all at once.' },
@@ -9725,6 +9735,62 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             currentAppView.value = 'tracker'; activeTab.value = 'countdown'; selectedAnime.value = null; viewUserId.value = null; entity.value = null;
         });
         const cdRow = (m, ep, at) => ({ anime: normMedia(m), ep: ep || null, at: at ? at * 1000 : null });
+        // ---------- v1.6.4 free games: games you can keep for free for a while (Steam, Epic, GOG…), from GamerPower ----------
+        // The Free games page (Games → Free now) lists them; a new one sends you a notification (Settings → Notifications).
+        const FREE_STORES = [{ v: '', l: 'All' }, { v: 'Steam', l: 'Steam' }, { v: 'Epic Games Store', l: 'Epic' }, { v: 'GOG', l: 'GOG' }, { v: 'other', l: 'Other' }];
+        const MAIN_STORES = ['Steam', 'Epic Games Store', 'GOG'];
+        const freeG = reactive({ list: [], loading: false, error: '', at: 0, store: '' });
+        const freeName = (t) => String(t || '').replace(/\s*\([^()]*\)\s*/g, ' ').replace(/\bgiveaway\b/ig, '').replace(/\s+/g, ' ').trim();
+        const myGameByName = computed(() => { const m = new Map(); uniqueItems.value.forEach(i => { if (typeOf(i) === 'GAME') m.set(normTitle(titleOf(i.anime)), i.anime); }); return m; });
+        const normGiveaway = (g) => {
+            const end = g.end_date && g.end_date !== 'N/A' ? new Date(String(g.end_date).replace(' ', 'T')) : null;
+            const title = freeName(g.title);
+            return { id: g.id, title, image: /^https:\/\//.test(g.image || '') ? g.image : /^https:\/\//.test(g.thumbnail || '') ? g.thumbnail : null,
+                platforms: String(g.platforms || '').split(',').map(s => s.trim()).filter(Boolean), worth: g.worth && g.worth !== 'N/A' ? g.worth : '',
+                end: end && !isNaN(end) ? end.getTime() : null, url: /^https:\/\/www\.gamerpower\.com\//.test(g.open_giveaway_url || '') ? g.open_giveaway_url : null,
+                mine: myGameByName.value.get(normTitle(title)) || null };
+        };
+        const fetchGiveaways = async () => {
+            const r = await fetch('https://www.gamerpower.com/api/giveaways?type=game');
+            if (r.status === 201) return [];   // (no giveaways right now)
+            if (!r.ok) throw new Error('GamerPower answered ' + r.status);
+            const d = await r.json(); return (Array.isArray(d) ? d : []).map(normGiveaway);
+        };
+        const loadFreeGames = async (force = false) => {
+            if (freeG.loading || (!force && Date.now() - freeG.at < 30 * 60e3 && freeG.list.length)) return;
+            freeG.loading = true; freeG.error = '';
+            try { freeG.list = await fetchGiveaways(); freeG.at = Date.now(); }
+            catch (err) { freeG.error = err.message || 'Could not load the free games'; }
+            finally { freeG.loading = false; }
+        };
+        const freeShown = computed(() => freeG.list.filter(g => !freeG.store || (freeG.store === 'other' ? !g.platforms.some(p => MAIN_STORES.includes(p)) : g.platforms.includes(freeG.store)))
+            .map(g => ({ ...g, mine: myGameByName.value.get(normTitle(g.title)) || null })).sort((x, y) => (!!y.mine - !!x.mine) || ((x.end || 9e15) - (y.end || 9e15))));
+        const freeUntil = (t) => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(new Date(t).getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }) : '';
+        const openFreeGames = () => navigate(() => {
+            if (section.value !== 'games') section.value = 'games';
+            currentAppView.value = 'tracker'; activeTab.value = 'free'; selectedAnime.value = null; viewUserId.value = null; entity.value = null;
+        });
+        watch(() => currentAppView.value === 'tracker' && activeTab.value === 'free' ? section.value : null, (s) => { if (!s) return; if (s !== 'games') activeTab.value = 'browse'; else loadFreeGames(); });
+        // a notification for each new one (the first check only remembers what's free already, so you don't get 15 at once;
+        // another device that told you already is checked in your notifications)
+        const freeNoteText = (g) => `Free on ${g.platforms.join(', ') || 'PC'}${g.end ? ' until ' + freeUntil(g.end) : ''}${g.worth ? ' (worth ' + g.worth + ')' : ''}${g.mine ? ' · on your list' : ''}`;
+        const isFreeNote = (n) => n?.kind === 'media_changed' && n.media_type === 'GAME' && /^Free on /.test(n.text || '');
+        const checkFreeGiveaways = async () => {
+            const me = uid(); if (!me) return;
+            let list; try { list = await fetchGiveaways(); } catch { return; }
+            freeG.list = list; freeG.at = Date.now();
+            const KEY = `anicoop_freeseen:${me}`, seen = readJSON(KEY);
+            try { localStorage.setItem(KEY, JSON.stringify([...new Set([...(seen || []), ...list.map(g => g.id)])].slice(-500))); } catch {}
+            if (!Array.isArray(seen) || !notifOn('game_free')) return;
+            const rows = list.filter(g => !seen.includes(g.id)).map(g => ({ user_id: me, kind: 'media_changed', media_id: g.mine?.id || null, media_type: 'GAME', media_title: g.title, media_cover: g.image, text: freeNoteText(g) }));
+            if (!rows.length) return;
+            const { data: had } = await sb.from('notifications').select('media_title').eq('user_id', me).eq('kind', 'media_changed').eq('media_type', 'GAME')
+                .in('media_title', rows.map(r => r.media_title)).gte('created_at', new Date(Date.now() - 30 * 86400e3).toISOString());
+            const told = new Set((had || []).map(n => n.media_title));
+            const todo = rows.filter(r => !told.has(r.media_title));
+            if (todo.length) { const { error } = await sb.from('notifications').insert(todo); if (!error) fetchNotifications(); }
+        };
+        setInterval(() => checkFreeGiveaways(), 60 * 60 * 1000);
         // a game's release as a countdown row (at = its release time)
         const cdGameRow = (g) => { const t = g.releaseDate ? new Date(g.releaseDate).getTime() : null; return { anime: g, ep: null, at: t, start: null }; };
         const loadGameCountdown = async (force = false) => {
@@ -10638,7 +10704,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const touchLastSeen = async () => { if (uid() && PREFS.showOnline) await sb.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid()).then(() => {}, () => {}); };
         setInterval(touchLastSeen, 5 * 60 * 1000);
         const people = ref([]);
-        const peopleTab = ref('friends');           // friends | online | everyone (friends panel tabs)
+        const peopleTab = ref('friends');           // friends | everyone (friends panel tabs; v1.6.4 no Online tab)
         const peopleLoading = ref(false);
         const fetchPeople = async () => {
             peopleLoading.value = true;
@@ -11168,24 +11234,6 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         };
         // v1.6.0 a paid game on Steam: get told when it's free (a free weekend, a 100% sale, or it went free to play).
         // Saved like an alert (media_follows, data.free) with the price it had; checked with the other alerts.
-        const isFreeAlert = (id) => follows.value.some(f => f.media_id === id && f.data?.free);
-        const toggleFreeAlert = async (g) => {
-            if (!g?.steamId) return;
-            if (!currentUser.value) { showToast('Sign in first', 'error'); return; }
-            if (isFreeAlert(g.id)) {
-                follows.value = follows.value.filter(f => f.media_id !== g.id);
-                const { error } = await sb.from('media_follows').delete().eq('user_id', uid()).eq('media_id', g.id);
-                if (error) { showToast(error.message, 'error'); fetchFollows(); return; }
-                showToast(`Free alert off for ${titleOf(g)}`); return;
-            }
-            let p = null; try { p = (await steam('prices', [g.steamId]))?.[g.steamId] || null; } catch {}
-            if (p && !p.final) { showToast(`${titleOf(g)} is free on Steam right now`); return; }
-            const row = { user_id: uid(), media_id: g.id, media_type: 'GAME', data: { free: true, steamId: g.steamId, price: p?.final ?? null, text: p?.text || null } };
-            follows.value = [...follows.value.filter(f => f.media_id !== g.id), row];
-            const { error } = await sb.from('media_follows').upsert(row, { onConflict: 'user_id,media_id' });
-            if (error) { showToast('Could not turn it on: ' + error.message, 'error'); fetchFollows(); return; }
-            showToast(`🎁 You’ll be told when ${titleOf(g)} is free on Steam`);
-        };
         const checkFreeAlerts = async () => {
             const me = uid(); const list = follows.value.filter(f => f.data?.free && f.data.steamId); if (!me || !list.length) return;
             const notes = [], updates = [];
@@ -12067,7 +12115,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
-            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdGame, cdCols, cdQuery, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addIcon, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
+            selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdGame, cdCols, cdQuery, FREE_STORES, freeG, freeShown, freeUntil, loadFreeGames, openFreeGames, checkFreeGiveaways, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addIcon, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
             // v6
             songsOn, songsCfg, setSongsEveryone, toggleSongsUser, songsSearch, addSongsUserByName,
             adultAllowed, isOwner, hasOwner, adultConfig, adultListOk, adultView, adultCount, theirAdultCount, statAdult, toggleStat18, theirLabelType, adultTrack, trackOnly, readLocked, trackSearchOnly, toggleTrackUser, trackSearchName, addTrackUserByName, claimOwner, setAdultEveryone, toggleAdultUser, ownerSearch, addAdultUserByName,
@@ -12081,10 +12129,10 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             EFFECTS, NAME_STYLES, effectParticles, heroColors, decorOpen,
             personKind, FAV_PEOPLE, isPeopleTab, favTheirTab, favItems, favCount, openFavItem, removeFavItem, FAV_EMPTY, heroGlow, FRAMES, THEMES, BADGES, myBadges, viewedBadges, decorOf, decorDraft, togglePinBadge, toggleHideBadge, hideBadgeNow, myEarnedBadges, decorDirty, saveDecor, profileBg, pageBg, bgBannerChoices, setBgUrl, onBgFile, bgUrlDraft, bgUploading, bgInput,
             debateInfo, sideLabel, tier, TIER_SOURCES, tierType, tierAL, SECTIONS, SECTION_OF_TYPE, tierManhwaNow, tierWho, tierPlaceholder, tierNoun, picOf, charPicFix, tierStatuses, openTierMaker, tierItemKey, pickTierResult, loadTierGroup, loadTierMine, moveTierItem, tapTierItem, tapTierRow, onTierDrop, removeTierItem, addTierRow, removeTierRow, tierPlacedCount, postTierList,
-            follows, isFollowing, toggleFollow, checkFollowed, isFreeAlert, toggleFreeAlert,             buddyState, buddyRequests, askBuddy, acceptBuddy, endBuddy, buddySectionsFor, buddyLabel,
+            follows, isFollowing, toggleFollow, checkFollowed,             buddyState, buddyRequests, askBuddy, acceptBuddy, endBuddy, buddySectionsFor, buddyLabel,
             siteUrl: location.origin + location.pathname, alLink, alClientId, alClientDraft, alSync, connectAniList, disconnectAniList, saveAniListClient, pushAllToAniList, malLink, malSync, connectMal, disconnectMal, pushAllToMal,
             rankTab, RANK_CATS, myRankings, viewedRankings, shownOf, showMoreRank, rankEdit, moveRank, setRankPos, resetRankOrder, myRankOrders, rankDrag, onRankPointerDown, onRankPointerMove, onRankPointerUp, rankRowStyle,
-            compareBig, compareAddable, theirList, openTheirList, theirCounts, theirGrouped, theirSongSelect, playSelectedSongs, openFriendStat, setViewedSection, openFriendLists, openFriendsManage, friendsOpen, friendsQuery, friendsFiltered, friendCounts,
+            compareBig, compareAddable, theirList, openTheirList, theirCounts, theirGrouped, theirSongSelect, playSelectedSongs, openFriendStat, setViewedSection, openFriendLists, openFriendsManage, friendsOpen, friendsQuery, friendsFiltered, friendGroups, friendCounts,
             groupWith, groups, groupMessages, groupUnread, groupInfo, groupMemberProfiles, openGroup, leaveGroupChat,
             groupDraft, openGroupDraft, toggleGroupMember, createGroupChat, addMemberDraft, openAddMember, addableFriends, addMemberTo,
             // v5
