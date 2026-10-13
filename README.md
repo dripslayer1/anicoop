@@ -1496,3 +1496,7 @@ No SQL and no Edge Function change. Hard-refresh: the footer says **v1.6.4**.
   free" button on game pages is gone (alerts made with it still work).
 - **Browse side panel:** closed by default; a tab on the right edge opens it as a drawer that stays in view (`PREFS.asideOpen`).
 - **Friends panel:** no Online tab; friends are grouped Online now / Offline, most recently seen first.
+
+## v1.6.5 — Games: a full "Best of all time" row
+
+No SQL / Edge Function, no What's new. The row asked only for games with 1500+ ratings and 86+ (about 8 exist); now the best of 250+ ratings / 84+, ranked by score weighted by votes, 18 games.
