@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.2">
+    <link rel="stylesheet" href="app.css?v=1.6.3">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.2" defer></script>
+    <script src="app.js?v=1.6.3" defer></script>
 </head>
 <body>
 
@@ -1905,7 +1905,7 @@
                                 <div class="min-w-0"><h2 class="font-display font-semibold text-ink text-xl md:text-2xl leading-tight">{{ s.l }}</h2><p class="text-xs text-sub">{{ shelfSub(s) }}</p></div>
                                 <button @click="seeShelf(s)" class="ml-auto text-xs font-bold text-sub hover:text-ink shrink-0">See all <i class="fa-solid fa-arrow-right text-[10px]"></i></button>
                             </div>
-                            <div class="shelf-row no-scrollbar">
+                            <div class="shelf-row">
                                 <div v-for="(g, i) in s.items" :key="s.k + g.id" class="shelf-item" :class="{ 'is-sq': g.type === 'SONG' }">
                                     <poster-card :anime="g" :entry="myEntry(g.id)" :solo="soloEntry(g.id)" :i="i % 12" :quick="true" :menu-open="quickMenuFor === g.id"
                                         @open="fetchAnimeDetails(g)" @trailer="playTrailer(g)" @action="quickSolo(g, $event)" @edit="openEditor(g)" @toggle="onPlusClick(g)"></poster-card>

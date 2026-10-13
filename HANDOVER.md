@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.6.2'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.6.3'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.6.2'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.6.3'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -483,6 +483,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.0** (no SQL / Edge Function): songs: `listRow` reads a song's WATCHING (old "In Love") as COMPLETED (Liked); `LIKED`, `isLikedSong` / `toggleLikeSong` / `likeSongs`; player-bar `.pbar-like`; the + picker lost Liked / In Love; `addStatuses` for a song = ['COMPLETED'] with `addIcon` (heart); friend's song Select (`theirSongSelect`, `batchShown` / `visibleAnime` cover it, `playSelectedSongs`); Random Play (`.rand-play`); `songApi.browse` year → Spotify `year:` search. Games: `gameApi.popularPool` (POP_TYPES 3/1/5/34 merged by rank, 30 min) + `popularMatching(where)` for Popular with or without filters; `f.free` (keyword 2385) like `f.coop`; Countdown for games (`cdGame`, `gameApi.upcoming` / `searchUpcoming`, `cdGameMine`); free alerts (`toggleFreeAlert`, `checkFreeAlerts` from `checkFollowed`). Browse: `.browse-layout` grid = `.browse-main` + the sticky `.browse-aside`; top-5 rows are `.aside-row` with `.aside-play` / `.aside-add` (`asideAdd`). Leaderboard: `top.genre` / `top.tag`, `setTopFilter`, `topTagOpts`; `gameApi.top(page, o, f)`, `tvApi.top` genre / tag. Friends: `friendsSorted`.
 - **v1.6.1** (no WHATS_NEW): `.browse-layout` starts after Continue watching (full width), so the side panel is level with the first shelf.
 - **v1.6.2** (no WHATS_NEW): `.browse-aside.aside-shelf` (68px at xl) lines the panel up with the first shelf's posters; `.aside-align` (52px) when the results list comes first.
+- **v1.6.3** (no WHATS_NEW): `.shelf-row` lost `no-scrollbar` and has a thin styled scrollbar (hidden on touch); `.aside-shelf` 66px.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
