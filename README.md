@@ -1481,3 +1481,7 @@ No SQL / Edge Function. Continue watching is full width again; the side panel st
 ## v1.6.2 — side panel level with the posters
 
 No SQL / Edge Function, no What's new. The Browse side panel starts level with the first row's posters (below its title).
+
+## v1.6.3 — a slider under Browse rows
+
+No SQL / Edge Function, no What's new. Browse rows (This season, …) show a thin slider on computers; the side panel sits 2px above the posters.

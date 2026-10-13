@@ -7419,7 +7419,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.2';
+        const APP_VERSION = '1.6.3';
         const WHATS_NEW = {
             '1.6.0': [
                 { icon: 'fa-heart', t: 'Liked songs, one list', d: 'In Love and Liked are now one list: Liked (your In Love songs are in it). Like the song that’s playing with the heart in the player bar. The + is just for playlists (and Play next).' },
