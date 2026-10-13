@@ -2296,13 +2296,6 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
 .shelf-row:hover::-webkit-scrollbar-thumb { background: rgb(var(--c-mute)); }
 @media (hover: none) { .shelf-row { scrollbar-width: none; } .shelf-row::-webkit-scrollbar { display: none; } }
 
-/* v1.6.6 the round button on the right edge that shows / hides the Browse side panel (it follows you) */
-.aside-handle { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 46; width: 40px; height: 40px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: rgb(var(--c-ink)); background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); box-shadow: 0 8px 24px -10px rgba(0,0,0,.8); transition: color .15s, background-color .15s, border-color .15s, transform .2s var(--ease); }
-.aside-handle:hover { color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); border-color: rgb(var(--c-volt)); transform: translateY(-50%) scale(1.08); }
-.aside-handle:active { transform: translateY(-50%) scale(.94); }
-.aside-handle.on { color: rgb(var(--c-volt)); }
-.aside-handle.on:hover { color: rgb(var(--c-onvolt)); }
-
 /* v1.6.4 Free games */
 .free-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
 .free-card { display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: rgb(var(--c-surface)); border: 1px solid rgb(var(--c-line)); transition: transform .2s var(--ease), border-color .15s; }

@@ -143,7 +143,7 @@ const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
     msgSound: true,   // v2.1 a short chime with the message pop-up
-    asideOpen: false,   // v1.6.4 Browse: the side panel (quick stats, top 5s) is open
+    asideOpen: false,   // (v1.6.4–1.6.6 Browse side panel toggle; since v1.6.7 the panel always shows, unused)
     fixedRuns: false,   // v2.8 the one-time repair of new watches left in the rewatch slots has run
     contOrder: {},   // v2.1 your own order of Continue watching / reading, per section: { anime: [media ids] }
     alPull: null,   // v2.0 { id: your AniList id, at: the newest AniList change already brought in (AniList's updatedAt) }
@@ -7427,7 +7427,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.6';
+        const APP_VERSION = '1.6.7';
         const WHATS_NEW = {
             '1.6.4': [
                 { icon: 'fa-gift', t: 'Free games', d: 'Games → Free now lists the games you can get for free right now on Steam, Epic, GOG and more, with until when. When a new one shows up you get a notification (turn it off in Settings → Notifications).' },

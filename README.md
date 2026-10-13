@@ -1504,3 +1504,7 @@ No SQL / Edge Function, no What's new. The row asked only for games with 1500+ r
 ## v1.6.6 — the side panel column comes back on a round button
 
 No SQL / Edge Function, no What's new. The round button on the right edge of Browse shows / hides the side panel as it was (its own column, level with the posters, sticky); hidden by default.
+
+## v1.6.7 — the side panel back where it started
+
+No SQL / Edge Function, no What's new. No button on the right: Quick stats / Top 5s are back beside the big list under the rows (starting with Trending now), like before v1.6.0; they keep the + and Play buttons.

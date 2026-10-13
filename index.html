@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.6">
+    <link rel="stylesheet" href="app.css?v=1.6.7">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.6" defer></script>
+    <script src="app.js?v=1.6.7" defer></script>
 </head>
 <body>
 
@@ -1922,10 +1922,6 @@
                         </div>
                     </section>
 
-                    <!-- v1.6.0 the side panel (quick stats, top 5 trending, top 5 among friends) is a column of its own, starting
-                         level with the first row under Continue watching ("This season"…), and stays in view while you scroll -->
-                    <div class="browse-layout mt-12 grid grid-cols-1 gap-x-10 gap-y-8 items-start" :class="{ 'xl:grid-cols-[minmax(0,1fr)_280px]': PREFS.asideOpen }">
-                    <div class="browse-main min-w-0">
                     <!-- every section: organised rows before the big popular list -->
                     <div v-if="shelfRows.length" class="mt-12 space-y-10">
                         <section v-for="s in shelfRows" :key="s.k">
@@ -1943,7 +1939,7 @@
                             </div>
                         </section>
                     </div>
-                    <div id="browse-results" class="mt-12">
+                    <div id="browse-results" class="mt-12 grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-10 items-start">
                         <section class="min-w-0">
                             <div v-if="(!filters.search.trim() && !currentSection.noApi) || (section === 'songs' && visibleResults.length && !isLoading)" class="browse-head">
                                 <h2 v-if="!filters.search.trim() && !currentSection.noApi" class="font-display font-semibold text-ink text-xl md:text-2xl">{{ anyFilter ? 'Results' : section === 'games' ? 'Popular right now' : section === 'movies' ? 'Trending this week' : section === 'songs' ? (filters.country ? 'Most played this week' : 'Most played worldwide') : 'Trending now' }}</h2>
@@ -2034,11 +2030,7 @@
                             </div>
                         </section>
 
-                    </div>
-                    </div>
-                        <!-- v1.6.6 the round button on the right edge (it follows you) shows / hides the side panel column -->
-                        <button @click="PREFS.asideOpen = !PREFS.asideOpen" class="aside-handle" :class="{ on: PREFS.asideOpen }" :title="PREFS.asideOpen ? 'Hide quick stats & top 5' : 'Show quick stats & top 5'" :aria-expanded="PREFS.asideOpen"><i class="fa-solid" :class="PREFS.asideOpen ? 'fa-angles-right' : 'fa-angles-left'"></i></button>
-                        <aside v-if="PREFS.asideOpen" class="browse-aside order-first xl:order-none flex xl:flex-col gap-5 overflow-x-auto xl:overflow-visible no-scrollbar -mx-4 px-4 xl:mx-0 xl:px-0" :class="{ 'is-searching': filters.search.trim(), 'aside-shelf': shelfRows.length && !filters.search.trim(), 'aside-align': !shelfRows.length && !filters.search.trim() && !currentSection.noApi }">
+                        <aside class="browse-aside order-first xl:order-none flex xl:flex-col gap-5 overflow-x-auto xl:overflow-visible no-scrollbar -mx-4 px-4 xl:mx-0 xl:px-0" :class="{ 'aside-align': !filters.search.trim() && !currentSection.noApi, 'is-searching': filters.search.trim() }">
                             <div class="panel p-5 w-[270px] shrink-0 xl:w-auto hidden xl:block">
                                 <p class="label mb-4"><i class="fa-solid fa-bolt text-volt mr-1.5"></i>Quick stats</p>
                                 <div class="space-y-3 text-sm">
