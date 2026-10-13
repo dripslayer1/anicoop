@@ -1472,3 +1472,8 @@ No SQL and no Edge Function change. Hard-refresh: the footer says **v1.6.0**.
   row has a + (songs: playlist; others: add / edit) and songs a Play on the cover (on hover).
 - **Leaderboard:** a genre and a tag (anime, manga, games, movies & TV).
 - **Friends list:** online first, then by last seen.
+
+## v1.6.1 — Browse side panel level with the first row
+
+No SQL / Edge Function. Continue watching is full width again; the side panel starts level with the first row under it
+("This season" …). No What's new pop-up.
