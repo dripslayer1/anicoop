@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.0">
+    <link rel="stylesheet" href="app.css?v=1.6.1">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.0" defer></script>
+    <script src="app.js?v=1.6.1" defer></script>
 </head>
 <body>
 
@@ -1870,10 +1870,6 @@
                         </div>
                     </div>
                     <!-- continue watching -->
-                    <!-- v1.6.0 the side panel (quick stats, top 5 trending, top 5 among friends) is a column of its own from the top,
-                         level with the first row, and stays in view while you scroll -->
-                    <div class="browse-layout mt-12 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-x-10 gap-y-8 items-start">
-                    <div class="browse-main min-w-0">
                     <section v-if="continueWatching.length && !filters.search.trim()" class="mt-12">
                         <div class="flex items-center gap-3 mb-4">
                             <h2 class="font-display font-semibold text-ink text-xl md:text-2xl">{{ section === 'manga' ? 'Continue reading' : section === 'games' ? 'Continue playing' : section === 'songs' ? 'On repeat' : 'Continue watching' }}</h2>
@@ -1897,6 +1893,10 @@
                         </div>
                     </section>
 
+                    <!-- v1.6.0 the side panel (quick stats, top 5 trending, top 5 among friends) is a column of its own, starting
+                         level with the first row under Continue watching ("This season"…), and stays in view while you scroll -->
+                    <div class="browse-layout mt-12 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-x-10 gap-y-8 items-start">
+                    <div class="browse-main min-w-0">
                     <!-- every section: organised rows before the big popular list -->
                     <div v-if="shelfRows.length" class="mt-12 space-y-10">
                         <section v-for="s in shelfRows" :key="s.k">
