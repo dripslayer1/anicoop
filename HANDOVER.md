@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.6.4'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.6.5'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.6.4'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.6.5'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -485,6 +485,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.2** (no WHATS_NEW): `.browse-aside.aside-shelf` (68px at xl) lines the panel up with the first shelf's posters; `.aside-align` (52px) when the results list comes first.
 - **v1.6.3** (no WHATS_NEW): `.shelf-row` lost `no-scrollbar` and has a thin styled scrollbar (hidden on touch); `.aside-shelf` 66px.
 - **v1.6.4**: free games (`freeG`, `fetchGiveaways` from https://www.gamerpower.com/api/giveaways?type=game — CORS open, no proxy; tab `activeTab === 'free'`, `openFreeGames`); `checkFreeGiveaways` (12 s after sign-in, hourly; seen ids in `anicoop_freeseen:<uid>`, other devices' notes checked by media_title) inserts `media_changed` GAME notes, `isFreeNote` (text "Free on …") for text / icon / click; notif pref `game_free`. Free-alert button removed (`checkFreeAlerts` still runs for old rows). Side panel = `.browse-drawer` (fixed) + `.aside-handle`, `PREFS.asideOpen`; `.browse-layout` is one column again. Friends panel: `friendGroups`, no Online tab.
+- **v1.6.5** (no WHATS_NEW): `gameApi.shelves` best row = 60 games with 250+ ratings / 84+, weighted (m 600, C 78), top 18.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

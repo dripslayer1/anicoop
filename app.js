@@ -1198,7 +1198,10 @@ const gameApi = {
         const [fresh, soon, best, coop] = await Promise.all([
             q(`first_release_date >= ${now - 120 * day} & first_release_date <= ${now} & total_rating_count >= 5`, 'total_rating_count desc'),
             q(`first_release_date > ${now} & first_release_date < ${now + 365 * day} & hypes > 5`, 'hypes desc'),
-            q('total_rating_count >= 1500 & total_rating >= 86', 'total_rating desc'),
+            // v1.6.5 only ~8 games have 1500+ ratings and 86+, so the row was half empty: the best rated of a bigger pool,
+            // ranked by score weighted by how many rated it (a 92 from 300 people doesn't beat a 90 from 3000)
+            q('total_rating_count >= 250 & total_rating >= 84', 'total_rating desc', 60)
+                .then(l => l.map(g => ({ g, w: (g.votes / (g.votes + 600)) * g.rating + (600 / (g.votes + 600)) * 78 })).sort((x, y) => y.w - x.w).slice(0, 18).map(x => x.g)),
             q(`game_modes = (3) & total_rating_count >= 60 & first_release_date >= ${now - 6 * 365 * day}`, 'total_rating_count desc'),
         ]);
         return { fresh, soon: soon.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate)), best, coop };
@@ -7424,7 +7427,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.4';
+        const APP_VERSION = '1.6.5';
         const WHATS_NEW = {
             '1.6.4': [
                 { icon: 'fa-gift', t: 'Free games', d: 'Games → Free now lists the games you can get for free right now on Steam, Epic, GOG and more, with until when. When a new one shows up you get a notification (turn it off in Settings → Notifications).' },
@@ -8195,7 +8198,8 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 { k: 'kr', l: 'K-pop & Korea', sub: 'most played in Korea', icon: 'fa-star', see: { country: 'kr' } },
             ],
         };
-        const SHELF_KEY = 'anicoop_shelves_v2:';
+        const SHELF_KEY = 'anicoop_shelves_v3:';   // (v1.6.5 v3: the games' Best of all time row is new)
+        try { Object.keys(localStorage).filter(k => k.startsWith('anicoop_shelves_v2:')).forEach(k => localStorage.removeItem(k)); } catch {}
         const shelves = reactive({});            // type → { rows, at }
         const shelvesBusy = {};
         Object.keys(SHELF_DEFS).forEach(t => { const c = readJSON(SHELF_KEY + t); if (c?.rows) shelves[t] = { at: c.at, rows: Object.fromEntries(Object.entries(c.rows).map(([k, l]) => [k, l.map(normMedia)])) }; });
