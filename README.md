@@ -1508,3 +1508,7 @@ No SQL / Edge Function, no What's new. The round button on the right edge of Bro
 ## v1.6.7 — the side panel back where it started
 
 No SQL / Edge Function, no What's new. No button on the right: Quick stats / Top 5s are back beside the big list under the rows (starting with Trending now), like before v1.6.0; they keep the + and Play buttons.
+
+## v1.6.8 — delete all notifications
+
+No SQL / Edge Function (the "own delete" policy already exists). The bell has **Delete all** (asks first); invites in ✉ (follow, buddy_request, party_invite) stay.

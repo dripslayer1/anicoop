@@ -4035,6 +4035,16 @@ createApp({
             notifications.value = notifications.value.map(n => ({ ...n, read: true }));
             await sb.from('notifications').update({ read: true }).eq('user_id', uid()).eq('read', false);
         };
+        // v1.6.8 delete every notification in the bell (friend / watch-together invites in ✉ stay)
+        const clearNotifications = async () => {
+            if (!bellNotifs.value.length) return;
+            if (!(await askConfirm({ title: 'Delete all notifications?', body: 'They’re deleted for good. Friend requests, watch buddy requests and invites (✉) stay.', ok: 'Delete all' }))) return;
+            const before = notifications.value;
+            notifications.value = before.filter(n => INVITE_KINDS.includes(n.kind));
+            const { error } = await sb.from('notifications').delete().eq('user_id', uid()).not('kind', 'in', `(${INVITE_KINDS.join(',')})`);
+            if (error) { notifications.value = before; showToast('Could not delete them: ' + error.message, 'error'); return; }
+            showToast('Notifications deleted');
+        };
         const highlightActivity = ref(null);
         const openNotification = async (n) => {
             notifOpen.value = false; invOpen.value = false;
@@ -7427,8 +7437,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.7';
+        const APP_VERSION = '1.6.8';
         const WHATS_NEW = {
+            '1.6.8': [
+                { icon: 'fa-trash-can', t: 'Delete all notifications', d: 'The bell has a “Delete all” button next to “Mark all read”. Friend requests and invites in ✉ stay.' },
+            ],
             '1.6.4': [
                 { icon: 'fa-gift', t: 'Free games', d: 'Games → Free now lists the games you can get for free right now on Steam, Epic, GOG and more, with until when. When a new one shows up you get a notification (turn it off in Settings → Notifications).' },
                 { icon: 'fa-table-columns', t: 'Side panel when you want it', d: 'Quick stats and the Top 5 lists open from the small tab on the right edge of Browse and stay with you while you scroll. Tap it again to close.' },
@@ -12116,7 +12129,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             installPrompt, installApp, dismissInstall,
             trailerOf, trailerUrl, trailerExternal, playTrailer, closeTrailer,
 
-            notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, systemNotifOn, enableSystemNotifs,
+            notifications, notifOpen, unreadCount, bellNotifs, invOpen, invPulse, invCount, toggleInvites, openInviteTitle, openInviter, notifText, openNotification, markAllRead, clearNotifications, systemNotifOn, enableSystemNotifs,
             comments, commentsLoading, commentFilter, commentDraft, commentEp, commentPosting, commentEpisodes, countFor, shownComments, isSpoiler, revealed, setCommentFilter, postComment, deleteComment, epLabel,
             viewUserId, viewedUser, viewedStats, viewedIsFriend, openUser,
             selectMode, selectedCount, toggleSelectMode, batchMin, batchShown, openSearch, cd, cdGame, cdCols, cdQuery, FREE_STORES, freeG, freeShown, freeUntil, loadFreeGames, openFreeGames, checkFreeGiveaways, malExtrasOf, malExtraTitle, movieNoOf, cdStatusOpts, cdGenres, cdFormats, cdFiltersOn, clearCdFilters, cdParts, cdStart, openCountdown, loadCountdown, listFilterGenre, listGenres, rankScore, openRankScore, saveRankScore, hs, toggleHeaderSearch, closeHeaderSearch, pickHeaderResult, headerSearchAll, feedShown, isFlagged, toggleFlag, hasWatchLink, watchLinkOf, wlEdit, startWatchLink, saveWatchLink, nextEpOf, wlAtEnd, ach, loadAch, achStats, achView, achDate, achTotal, loadAchTotal, steamPlay, playOnSteam, steamAcc, connectSteam, disconnectSteam, loadSteamLib, importSteam, steamCount, steamOwned, steamHours, tour, tourStep, tourDim, TOUR_STEPS, startTour, endTour, maybeStartTour, tourCopy, tourRepoState, tourPasteRepo, tourNext, tourBack, watchClosed, linkInfo, sendMyLink, WATCH_SERVICES, watchMine, officialLinks, useOfficial, watchAsk, askLeft, openMyLink, stepAsk, closeAsk, saveAsk, ROTATION_TYPES, ADD_ICONS, addIcon, addStatuses, quickAdd, addOn, listStatusOpts, REWISH_TYPES, isSelected, toggleSelect, selectAllVisible, clearSelected, batchStatus, batchRemove, batchBusy,
