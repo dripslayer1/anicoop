@@ -1477,3 +1477,7 @@ No SQL and no Edge Function change. Hard-refresh: the footer says **v1.6.0**.
 
 No SQL / Edge Function. Continue watching is full width again; the side panel starts level with the first row under it
 ("This season" …). No What's new pop-up.
+
+## v1.6.2 — side panel level with the posters
+
+No SQL / Edge Function, no What's new. The Browse side panel starts level with the first row's posters (below its title).
