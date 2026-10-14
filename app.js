@@ -1693,6 +1693,31 @@ const normApple = (x) => {   // an iTunes search/lookup result or an Apple chart
         trackNo: x.trackNumber || null, discNo: x.discNumber || 1, albumId: x.collectionId || null, previewUrl: x.previewUrl || null, appleUrl: x.trackViewUrl || x.url || null, trailer: null, artistId: x.artistId || null,
     };
 };
+// v1.6.10 Deezer: releases and songs Apple Music doesn't have (Apple had 15 of Pan Piano's 17 songs; Spotify and Deezer
+// have all 17). Free, no key, read through our server (siteFetch). A Deezer song is "dz:<id>"; its 30-second preview
+// is asked for when it plays (Deezer's preview links expire), full songs come from YouTube like every other song.
+const DZ_KEY = (id) => 'dz:' + id;
+const dzGet = async (path) => {
+    const d = JSON.parse((await siteFetch('https://api.deezer.com/' + path)).body || '{}');
+    if (d?.error) throw new Error(d.error.message || 'Deezer didn’t answer');
+    return d;
+};
+const DZ_KIND = { album: 'Album', ep: 'EP', single: 'Single' };
+const normDeezer = (t, al = t.album || {}, artistId = null) => {
+    const key = DZ_KEY(t.id); const id = songNum(key); if (songIds[id] !== key) { songIds[id] = key; saveSongIds(); }
+    const date = al.release_date || null;
+    const names = (t.contributors?.length ? t.contributors.map(c => c.name) : [t.artist?.name]).filter(Boolean);
+    return {
+        id, extId: key, deezerId: String(t.id), spotifyId: null, type: 'SONG', format: 'SONG',
+        title: { romaji: t.title || 'Untitled', english: null, native: null },
+        coverImage: { large: al.cover_xl || al.cover_big || null }, bannerImage: null,
+        status: 'FINISHED', seasonYear: date ? Number(date.slice(0, 4)) : null, releaseDate: date,
+        episodes: null, chapters: null, countryOfOrigin: null, nextAiringEpisode: null, averageScore: null, genres: [],
+        artists: [...new Set(names)], album: al.title || null, albumId: al.id ? 'dz' + al.id : null,
+        durationMs: t.duration ? t.duration * 1000 : null, explicit: !!t.explicit_lyrics, previewUrl: null,
+        trackNo: t.track_position || null, discNo: t.disk_number || 1, appleUrl: null, deezerUrl: t.link || null, trailer: null, artistId,
+    };
+};
 const SONG_SPOTIFY_KEY = 'anicoop_songspotify_v1';
 const songSpotify = readJSON(SONG_SPOTIFY_KEY) || {};   // Apple key → Spotify id (or '' = not on Spotify), so each song is asked once
 const saveSongSpotify = debounce(() => { try { localStorage.setItem(SONG_SPOTIFY_KEY, JSON.stringify(songSpotify)); } catch {} }, 1500);
@@ -1770,7 +1795,7 @@ const wikiArtist = async (name) => {
     return { html: d.extract.split(/\n+/).map(p => `<p>${esc(p)}</p>`).join(''), description: d.description || null, url: d.content_urls?.desktop?.page || null };
 };
 // songs saved before v8 have a Spotify id as extId; newer ones an Apple key ("am:…") plus the Spotify id once it's known
-const songPlayerId = (a) => a?.spotifyId || (a?.extId && !String(a.extId).startsWith('am:') ? a.extId : null);
+const songPlayerId = (a) => a?.spotifyId || (a?.extId && !/^(am|dz):/.test(String(a.extId)) ? a.extId : null);
 const songSpotifyUrl = (a) => a?.spotifyUrl || (songPlayerId(a) ? `https://open.spotify.com/track/${songPlayerId(a)}` : `https://open.spotify.com/search/${encodeURIComponent(`${a?.title?.romaji || ''} ${(a?.artists || [])[0] || ''}`.trim())}`);
 // v2.4 a song known only by its number (a chat recommendation, a friend's update, a post): which song is it? The number
 // is made from the Apple / Spotify id, and the way back was only kept in the browser that found the song — so a
@@ -1937,7 +1962,7 @@ const songApi = {
         // Apple's full list of 200 songs is slow (~2 s): the page shows with the first 50, the rest swaps in after
         const fullSongs = itunes('lookup', { id, entity: 'song', limit: 200 }).catch(() => null);
         const [info, songs, albums] = await Promise.all([
-            itunes('lookup', { id }), itunes('lookup', { id, entity: 'song', limit: 50 }), itunes('lookup', { id, entity: 'album', limit: 100 }),
+            itunes('lookup', { id }), itunes('lookup', { id, entity: 'song', limit: 50 }), itunes('lookup', { id, entity: 'album', limit: 200 }),
         ]);
         const a = info?.results?.[0]; if (!a) return null;
         const name = a.artistName;
@@ -1952,6 +1977,38 @@ const songApi = {
                 active: years.length ? `${Math.min(...years)} – ${Math.max(...years) >= new Date().getFullYear() - 1 ? 'now' : Math.max(...years)}` : null };
         };
         const first = songFields(songs);
+        const more = fullSongs.then(r => r?.results?.length ? songFields(r) : null);
+        // v1.6.10 Deezer: the releases Apple Music doesn't have (and their songs), added once Apple's full list is in
+        const un = (x) => String(x || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');   // any script (Japanese names too)
+        const relKey = (n) => un(String(n || '').replace(/ - (single|ep)$/i, '').replace(/\s*[([][^)\]]*(deluxe|edition|expanded|version|remaster|anniversary|clean|explicit|bonus|complete|platinum|special)[^)\]]*[)\]]/gi, ''));
+        const fromDeezer = async () => {
+            const found = (await dzGet(`search/artist?q=${encodeURIComponent(name)}&limit=10`)).data || [];
+            const ar = found.find(x => un(x.name) === un(name)); if (!ar) return [];
+            const rels = []; let next = `artist/${ar.id}/albums?limit=100`;
+            for (let k = 0; k < 4 && next; k++) { const d = await dzGet(next); rels.push(...(d.data || [])); next = d.next ? d.next.replace(/^https?:\/\/api\.deezer\.com\//, '') : null; }
+            const have = new Set(albumList.map(x => relKey(x.name)));
+            const missing = rels.filter(r => DZ_KIND[r.record_type] && !have.has(relKey(r.title)) && have.add(relKey(r.title))).slice(0, 40);
+            const out = [];
+            for (let k = 0; k < missing.length; k += 6) {   // a few at a time
+                out.push(...await Promise.all(missing.slice(k, k + 6).map(r => dzGet(`album/${r.id}/tracks?limit=200`)
+                    .then(d => ({ r, songs: (d.data || []).map(t => normDeezer(t, r, t.artist?.id === ar.id ? id : null)) })).catch(() => null))));
+            }
+            return out.filter(x => x?.songs.length);
+        };
+        const deezer = Promise.all([more.catch(() => null), fromDeezer().catch(() => [])]).then(([full, found]) => {
+            const base = full || first;
+            const key = (s) => songKey(s.title?.romaji, (s.artists || [])[0]);
+            const known = new Set(base.tracks.map(key));
+            // only releases with a song Apple doesn't have (a single Apple only lists on its album isn't missing)
+            const extra = found.filter(x => x.songs.some(s => !known.has(key(s))));
+            if (!extra.length) return null;
+            const extraTracks = extra.flatMap(x => x.songs);
+            const newSongs = dedupeSongs(extraTracks.filter(s => !known.has(key(s))));
+            const songList = [...base.songs, ...newSongs];
+            const albumsAll = [...albumList, ...extra.map(({ r, songs }) => ({ id: 'dz' + r.id, name: r.title, cover: r.cover_xl || r.cover_big || null, year: (r.release_date || '').slice(0, 4), tracks: songs.length, kind: DZ_KIND[r.record_type], url: r.link || null, dz: true }))]
+                .sort((p, q) => String(q.year).localeCompare(String(p.year)));
+            return { songs: songList, tracks: [...base.tracks, ...extraTracks], songCount: songList.length, albums: albumsAll, albumCount: albumsAll.filter(x => x.kind === 'Album').length };
+        });
         return {
             id, isArtist: true, name: { full: name, native: null, alternative: [] },
             image: { large: albumList[0]?.cover || first.songs[0]?.coverImage?.large || null },
@@ -1960,7 +2017,7 @@ const songApi = {
             fans: null, albumCount: albumList.filter(x => x.kind === 'Album').length, ...first,
             appleUrl: a.artistLinkUrl || null, albums: albumList,
             extras: early && norm(hint) === norm(name) ? early : extrasFor(name),
-            more: fullSongs.then(r => r?.results?.length ? songFields(r) : null),
+            more, deezer,
         };
     },
     async album(id) {
@@ -2018,6 +2075,28 @@ const songApi = {
             }
             s.spotifyId = await songApi.spotifyIdFor(s);
             if (s.spotifyId) s.spotifyUrl = `https://open.spotify.com/track/${s.spotifyId}`;
+            return s;
+        }
+        // v1.6.10 a Deezer song (one Apple Music doesn't have)
+        if (extId.startsWith('dz:')) {
+            const t = await dzGet('track/' + extId.slice(3)).catch(() => null);
+            if (!t?.id) return typeof m === 'object' ? { ...m } : null;
+            const s = normDeezer(t, t.album || {});
+            s.songInfo = [
+                ['Artist', s.artists.join(', ')],
+                t.album?.title && ['Album', t.album.title],
+                s.releaseDate && ['Released', new Date(s.releaseDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })],
+                t.duration && ['Length', fmtDuration(t.duration * 1000)],
+                ['Explicit', s.explicit ? 'Yes' : 'No'],
+            ].filter(Boolean).map(([k, v]) => ({ k, v, hot: false }));
+            s.artistInfo = t.artist?.name ? { name: t.artist.name, id: null, image: t.artist.picture_xl || null, url: null } : null;
+            if (t.album?.id) {
+                const al = await dzGet(`album/${t.album.id}/tracks?limit=100`).catch(() => null);
+                s.similar = (al?.data || []).filter(x => String(x.id) !== s.deezerId).slice(0, 14).map(x => normDeezer(x, t.album));
+                s.similarLabel = 'More from this release';
+            }
+            s.spotifyId = await songApi.spotifyIdFor(s);
+            s.spotifyUrl = s.spotifyId ? `https://open.spotify.com/track/${s.spotifyId}` : null;
             return s;
         }
         // songs added before v8 are Spotify ids: ask Spotify, and if it's busy show what the list already has
@@ -2123,7 +2202,9 @@ const songApi = {
 const ALLTIME_KEY = 'anicoop_alltime_v1', ALLTIME_MATCH_KEY = 'anicoop_alltime_match_v3', KWORB_KEY = 'anicoop_kworb_v1';
 let kworbMemo = null;
 // the same song in two lists ("Shape of You" / "Shape of You (Remastered)", "Ed Sheeran" / "Ed Sheeran, X")
-const songKey = (title, artist) => { const n = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/\s*[([].*?[)\]]/g, '').replace(/[^a-z0-9]/g, ''); return n(title) + '|' + n(String(artist || '').split(/,| & | and | feat/i)[0]); };
+// v1.6.10 any script: Japanese / Korean titles used to lose every letter, so all of an artist's songs in Japanese shared one
+// key (and the player could reuse one song's YouTube upload for another). Latin titles give the same key as before.
+const songKey = (title, artist) => { const n = (t) => String(t || '').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s*[([（【].*?[)\]）】]/g, '').replace(/[^\p{L}\p{N}]/gu, ''); return n(title) + '|' + n(String(artist || '').split(/,| & | and | feat/i)[0]); };
 const allTimeKey = (w) => `${w.title}|${w.artist}`.toLowerCase();
 const allTimeMatches = readJSON(ALLTIME_MATCH_KEY) || {};
 const saveAllTime = debounce(() => { try { localStorage.setItem(ALLTIME_MATCH_KEY, JSON.stringify(allTimeMatches)); } catch {} }, 1200);
@@ -5598,6 +5679,7 @@ createApp({
             let url = s.previewUrl;
             if (!url && s.appleId) url = (await itunes('lookup', { id: s.appleId }))?.results?.[0]?.previewUrl;   // charts don't include the preview link
             if (!url && s.extId?.startsWith('am:')) url = (await itunes('lookup', { id: s.extId.slice(3) }))?.results?.[0]?.previewUrl;
+            if (!url && s.extId?.startsWith('dz:')) url = (await dzGet('track/' + s.extId.slice(3)))?.preview || null;   // v1.6.10
             return url || null;
         };
         const startPreview = async (s, tok, note = '') => {
@@ -7562,8 +7644,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.9';
+        const APP_VERSION = '1.6.10';
         const WHATS_NEW = {
+            '1.6.10': [
+                { icon: 'fa-compact-disc', t: 'Every song an artist has', d: 'Artist pages also show the releases Apple Music is missing (from Deezer), so you see what Spotify shows: Pan Piano went from 15 songs to all of them.' },
+                { icon: 'fa-user-group', t: 'Friends list fixed', d: 'Each friend shows once again: under Online now or under Offline, not both.' },
+            ],
             '1.6.9': [
                 { icon: 'fa-music', t: 'The right song, every time', d: 'Full songs no longer play another song by the same artist (that happened when YouTube Music’s version was a different length). Karaoke, covers and instrumentals are left out too, unless that’s the song.' },
                 { icon: 'fa-link', t: 'Wrong song? Fix it for everyone', d: 'The owner (and roles with “Manage songs”) can paste the right YouTube or YouTube Music link for a song, from the player or the song’s page. Everyone hears that one from then on.' },
@@ -8826,7 +8912,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const albumTracks = reactive({});       // album id → full track list (asked for when a release isn't complete yet)
         const albumLoading = reactive({});
         const loadAlbumTracks = async (al, quiet = false) => {
-            if (albumTracks[al.id] || albumLoading[al.id]) return;
+            if (albumTracks[al.id] || albumLoading[al.id] || al.dz) return;
             albumLoading[al.id] = true;
             try { albumTracks[al.id] = (await songApi.album(al.id)).sort(sortTracks); }
             catch (err) { if (!quiet) showToast(err.message || 'Could not load that release', 'error'); }
@@ -8855,7 +8941,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 const got = albumTracks[al.id] || [...(byAlbum.get(al.id) || [])].sort(sortTracks);
                 const seen = new Set();
                 const songs = got.filter(s => { const k = s.title.romaji.toLowerCase(); return !seen.has(k) && seen.add(k); });
-                return { ...al, name: al.name.replace(/ - (Single|EP)$/, ''), songs, complete: !!albumTracks[al.id] || songs.length >= (al.tracks || 0) };
+                return { ...al, name: al.name.replace(/ - (Single|EP)$/, ''), songs, complete: !!albumTracks[al.id] || !!al.dz || songs.length >= (al.tracks || 0) };
             });
             // "Popular releases" (like Spotify): the newest release, then the releases holding their most played songs
             const popIdx = new Map();
@@ -8979,7 +9065,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                 if (e.type === 'actor' || e.type === 'artist') {
                     const raw = e.type === 'actor' ? await loadActor(e.id) : await songApi.artist(e.id, artistNameHint[e.id] || null);
                     if (!raw) throw new Error(e.type === 'artist' ? 'That artist could not be found on Apple Music' : 'That person could not be found on TMDB');
-                    const { extras, more, ...d } = raw;
+                    const { extras, more, deezer, ...d } = raw;
                     entityCache.set(key, d);
                     const here = () => entity.value?.id === e.id && entity.value?.type === e.type;
                     if (here()) entityData.value = d;
@@ -8987,6 +9073,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
                     const merge = (x) => { const cur = entityCache.get(key) || d; const next = { ...cur, ...x, image: x.image || cur.image }; entityCache.set(key, next); if (here()) entityData.value = next; };
                     extras?.then(x => merge({ ...x, extrasPending: false })).catch(() => merge({ extrasPending: false }));
                     more?.then(x => { if (x) merge(x); }).catch(() => {});
+                    deezer?.then(x => { if (x) merge(x); }).catch(() => {});   // v1.6.10 (after Apple's full list)
                     return;
                 }
                 if (e.type === 'album') {

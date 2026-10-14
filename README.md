@@ -1527,3 +1527,15 @@ No SQL / Edge Function (the "own delete" policy already exists). The bell has **
 - **Wrong song?** (the link icon in the player, and the song's page; owner and roles with **Manage songs**): paste a
   YouTube / YouTube Music link; it goes in `song_links` (keyed like the remembered picks: title + first artist) and
   every player tries it first. **Back to automatic** removes it.
+
+## v1.6.10 — every song an artist has, and the friends list
+
+No SQL / Edge Function change.
+
+- **Artist pages:** Apple Music doesn't have everything (Pan Piano: 15 songs on Apple, 17 releases on Spotify / Deezer).
+  After Apple's list, the artist's Deezer releases that Apple doesn't have are added (only ones with a song Apple
+  doesn't have), with their songs. A Deezer song is `dz:<id>`: its page, preview (asked fresh, the links expire)
+  and full song (YouTube) work like the others. Apple's release list is read up to 200 (was 100).
+- **Song keys** (`songKey`, used for remembered YouTube picks and "Wrong song?" links) keep every script: Japanese /
+  Korean titles lost every letter, so all of an artist's songs in Japanese shared one key. Latin titles keep their key.
+- **Friends list:** each heading (Online now / Offline) listed every friend, so everyone showed up twice.
