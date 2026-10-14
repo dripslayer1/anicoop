@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.9">
+    <link rel="stylesheet" href="app.css?v=1.6.10">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.9" defer></script>
+    <script src="app.js?v=1.6.10" defer></script>
 </head>
 <body>
 
@@ -413,8 +413,8 @@
                                                             <h4 class="disc-title">{{ discOpenRelease.name }}</h4>
                                                             <div class="mt-2 flex flex-wrap items-center gap-3">
                                                                 <button v-if="discOpenRelease.songs.length" @click="playPreview(discOpenRelease.songs[0], discOpenRelease.songs)" class="sp-play !w-9 !h-9 !text-xs" title="Play the first song"><i class="fa-solid fa-play"></i></button>
-                                                                <button @click="openAlbumPage(discOpenRelease.id)" class="text-[11px] font-bold text-sub hover:text-volt"><i class="fa-solid fa-compact-disc mr-1"></i>Album page</button>
-                                                                <a v-if="discOpenRelease.url" :href="discOpenRelease.url" target="_blank" rel="noopener" class="text-[11px] text-mute hover:text-ink"><i class="fa-brands fa-apple mr-1"></i>Apple Music</a>
+                                                                <button v-if="!discOpenRelease.dz" @click="openAlbumPage(discOpenRelease.id)" class="text-[11px] font-bold text-sub hover:text-volt"><i class="fa-solid fa-compact-disc mr-1"></i>Album page</button>
+                                                                <a v-if="discOpenRelease.url" :href="discOpenRelease.url" target="_blank" rel="noopener" class="text-[11px] text-mute hover:text-ink"><i class="mr-1" :class="discOpenRelease.dz ? 'fa-solid fa-compact-disc' : 'fa-brands fa-apple'"></i>{{ discOpenRelease.dz ? 'Deezer' : 'Apple Music' }}</a>
                                                             </div>
                                                         </div>
                                                         <button @click="discOpen = null" class="icon-btn !w-9 !h-9 shrink-0" title="Close"><i class="fa-solid fa-xmark text-sm"></i></button>
@@ -3436,7 +3436,7 @@
                 <input v-if="friendsList.length > 6" v-model="friendsQuery" placeholder="Search friends" class="field !py-1.5 !rounded-xl !text-xs mx-1 my-1.5 !w-[calc(100%-.5rem)]">
                 <template v-for="grp in friendGroups" :key="grp.k">
                     <p v-if="grp.list.length" class="label px-2 pt-2 pb-1.5">{{ grp.l }} · {{ grp.list.length }}</p>
-                    <div v-for="f in friendsFiltered" :key="f.id" class="group flex items-center gap-2.5 p-2 rounded-xl hover:bg-overlay transition-colors">
+                    <div v-for="f in grp.list" :key="f.id" class="group flex items-center gap-2.5 p-2 rounded-xl hover:bg-overlay transition-colors">
                         <button @click="friendsOpen = false; openUser(f.id)" class="flex items-center gap-2.5 min-w-0 flex-grow text-left">
                             <span class="relative shrink-0"><user-avatar :user="f" :size="34"></user-avatar><span class="online-dot" :class="{ on: isOnline(f.id) }"></span></span>
                             <span class="min-w-0"><span class="flex items-center gap-1.5 text-sm font-semibold text-ink"><span class="truncate">{{ f.username }}</span><i v-if="buddyState(f.id) === 'buddies'" class="fa-solid fa-link text-[10px] text-lilac" title="Watch buddy"></i></span><span class="block text-[11px] text-mute truncate">{{ lastSeenText(f) }} · {{ friendCounts[f.id] || 0 }} title{{ friendCounts[f.id] === 1 ? '' : 's' }}</span></span>
