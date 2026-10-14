@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.6.8'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.6.9'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.6.8'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.6.9'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -489,6 +489,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.6** (no WHATS_NEW): no drawer any more: `PREFS.asideOpen` adds the 280px column to `.browse-layout` and shows the v1.6.3 aside (sticky, `.aside-shelf`); `.aside-handle` is a round fixed button (angles icon).
 - **v1.6.7** (no WHATS_NEW): layout back to before v1.6.0 (aside inside `#browse-results`, `.aside-align`, under Continue watching + the rows); `.browse-layout` / `.browse-main` / `.aside-handle` removed; `PREFS.asideOpen` unused.
 - **v1.6.8**: `clearNotifications` deletes the bell's notifications (not `INVITE_KINDS`) after a confirm.
+- **v1.6.9** (SQL `supabase/v1.6.9-song-links.sql`): `rankSongVideos` rewritten (`mNorm` any script, `songCore` strips "(Extended Mix)" / " - Remastered" / feat., `NOT_IT` karaoke / covers…, `OTHER_TAKE`): the title must match; an ATV must be credited to one of the artists; another length only for the artist's own upload of the title (`close: false`, no ATV bonus); `guess` = names in two scripts, dropped when anything is sure. `ytCandidatesRaw` adds YouTube unless 2 close YouTube Music hits, sorts by score. `YT_SONGS_KEY` v3. `song_links` (read: everyone; write: `has_perm('manage_songs')`): `songLinks` / `loadSongLinks` (5 min), tried first in `startSong` and the candidates; `openSongLink` / `saveSongLink` / `resetSongLink`; `player.ytId` = the upload playing.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync
