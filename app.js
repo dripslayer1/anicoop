@@ -5311,13 +5311,14 @@ createApp({
         // Full songs: each song is looked up on YouTube and played in YouTube's own player, kept out of sight (sound only;
         // "Video" shows it). Nothing is downloaded or converted. If YouTube has no match (or the owner blocks playing it
         // outside YouTube), Apple's 30-second preview plays instead. Volume, shuffle, repeat and "full songs" are remembered.
-        const VOL_KEY = 'anicoop_song_volume', PLAYER_KEY = 'anicoop_player_v1', YT_SONGS_KEY = 'anicoop_yt_songs_v2';   // v1.1.1 (v1 could hold wrong picks)
+        const VOL_KEY = 'anicoop_song_volume', PLAYER_KEY = 'anicoop_player_v1', YT_SONGS_KEY = 'anicoop_yt_songs_v3';   // v1.6.9 (v1 / v2 could hold wrong picks)
+        try { localStorage.removeItem('anicoop_yt_songs_v2'); } catch {}
         const pPrefs = readJSON(PLAYER_KEY) || {};
         const player = reactive({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
             vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
             queue: [], qi: -1, next: [], shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
-            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '',
+            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '', ytId: '',
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
         const saveVol = () => { try { localStorage.setItem(VOL_KEY, String(player.vol)); } catch {} };
@@ -5380,7 +5381,7 @@ createApp({
         let warmedSongs = false;
         const warmSongs = () => {
             if (warmedSongs || !player.full || !songsOn.value || !currentUser.value) return; warmedSongs = true;
-            const go = () => { ytPlayer().catch(() => {}); ytmSearch('official audio').catch(() => {}); };
+            const go = () => { ytPlayer().catch(() => {}); ytmSearch('official audio').catch(() => {}); loadSongLinks(); };
             (window.requestIdleCallback || ((f) => setTimeout(f, 1200)))(go);
         };
         watch(() => songsOn.value && !!currentUser.value && (section.value === 'songs' || music.open || !!player.song || selectedAnime.value?.type === 'SONG'), (on) => { if (on) warmSongs(); }, { immediate: true });
@@ -5411,37 +5412,82 @@ createApp({
         const saveYtSongs = debounce(() => { const k = Object.keys(ytSongs); if (k.length > 1500) k.slice(0, k.length - 1500).forEach(x => delete ytSongs[x]); try { localStorage.setItem(YT_SONGS_KEY, JSON.stringify(ytSongs)); } catch {} }, 800);
         const songYtKey = (s) => songKey(s?.title?.romaji, (s?.artists || [])[0]);
         const forgetYt = (s) => { delete ytSongs[songYtKey(s)]; saveYtSongs(); };
-        const BAD_TAKE = /\b(live|cover|karaoke|instrumental|remix|sped ?up|slowed|reverb|nightcore|8d|mashup|reaction|tutorial|lesson|piano|acoustic|extended|1 ?hour|loop)\b/i;
         // score every result; YouTube Music's official audio tracks ("atv") score highest
         // v1.1.1 stricter: a song with a common name ("Bounce") used to get another artist's song with the same name. Now
         // the upload must be by one of the song's artists (any of them, not only the first), and an official track must
         // be as long as the song (± 15 s; videos ± 35 s for intros). Nothing that fits = the 30-second preview, not a
         // wrong song. (Only an exact name at the exact length passes without an artist: names written differently.)
+        // v1.6.9 stricter again: "Paraboy (Extended Mix)" played another Leslie Parrish song. The right one (the normal
+        // version on YouTube Music) was 54 s shorter, so it was dropped, and a wrong title only cost points. Now:
+        // · the title must match (any script, so Japanese / Korean titles count too; 紅蓮華 - Gurenge matches both)
+        // · another length is fine for the artist's own upload of that title (another version of it), never another song
+        // · a YouTube Music track must be credited to one of the song's artists (karaoke / cover albums aren't)
+        // · karaoke, covers, instrumentals, nightcore… are left out unless the song itself is one
+        const mNorm = (t) => String(t || '').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        const NON_LATIN = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u;
+        const songCore = (t) => {   // "Song (Extended Mix)", "Song - Remastered 2011", "Song feat. X" → "song" (+ the version words)
+            const s = String(t || ''); const ver = [];
+            let core = s.replace(/\s*[([（【［「『](.*?)[)\]）】］」』]/g, (m, x) => { ver.push(x); return ' '; });
+            core = core.replace(/\s+[-–—~]\s+(.*)$/, (m, x) => { ver.push(x); return ''; }).replace(/\s+(?:feat|ft)\.?\s.*$/i, '');
+            return { core: mNorm(core) || mNorm(s), ver: mNorm(ver.join(' ')), parts: s.split(/\s+[-–—/|]\s+/).map(p => mNorm(p.replace(/\s*[([（【［「『].*?[)\]）】］」』]/g, ' '))).filter(Boolean) };
+        };
+        const FILLER = new Set('official audio video music mv pv lyric lyrics hd hq 4k 8k visualizer visualiser full version ver feat ft prod by the a an x and with topic explicit clean album single ost vietsub romaji eng sub subs subtitles legendado letra color coded original'.split(' '));
+        const VERSION_W = /^(remaster(ed)?|remix|mix|edit|live|acoustic|extended|radio|mono|stereo|demo|club|dub|unplugged|orchestral|version|ver|vip|rework|reprise|tv|size|short|long)$/;
+        // not the song (unless its own title says so) · another take of it (a lower score)
+        const NOT_IT = /\b(karaoke|instrumental|inst\.?|off ?vocal|cover(ed)?|originally performed|in the style of|made (popular|famous)|tribute|emulation|8 ?-?bit|music ?box|lullaby|nightcore|sped ?up|slowed|reverb|8d|reaction|tutorial|lesson|mashup|1 ?hour|loop|piano|guitar cover|fingerstyle|drum cover|dance practice|choreography|ringtone|parody|guide melody|original(ly)? by|orig\. by|hatsune miku)\b|カラオケ|歌ってみた|弾いてみた|オルゴール|原曲|初音ミク|커버/i;
+        const OTHER_TAKE = /\b(live|remix|acoustic|extended|demo|unplugged|orchestra|orchestral)\b/i;
         const rankSongVideos = (list, s) => {
-            const title = normTitle(String(s.title?.romaji || '').replace(/\s*[([].*?[)\]]/g, ''));
-            const artists = (s.artists || []).map(normTitle).filter(Boolean);
-            const want = s.durationMs ? s.durationMs / 1000 : null; const songText = normTitle(s.title?.romaji);
+            const songTitle = String(s.title?.romaji || ''), { core: tn, ver } = songCore(songTitle), songText = mNorm(songTitle);
+            const artists = (s.artists || []).map(mNorm).filter(Boolean);
+            const latinArtists = !artists.length || (s.artists || []).every(a => !NON_LATIN.test(a));
+            const want = s.durationMs ? s.durationMs / 1000 : null;
             const squash = (x) => x.replace(/ /g, '');
-            const has = (txt) => artists.some(ar => txt.includes(ar) || squash(txt).includes(squash(ar)));
+            const has = (txt) => artists.some(ar => (' ' + txt + ' ').includes(' ' + ar + ' ') || (squash(ar).length >= 5 && squash(txt).includes(squash(ar))));
+            const words = (x) => x.split(' ').filter(Boolean);
+            const tw = words(tn), artistWords = new Set(artists.flatMap(words));
+            const verWords = words(ver).filter(w => VERSION_W.test(w));
+            const songAll = songText + ' ' + artists.join(' ');
+            const notIt = (t) => { const m = NOT_IT.exec(t); return m && !songAll.includes(mNorm(m[0])); };
             return (list || []).map(v => {
-                if (!v.secs || v.secs > 20 * 60) return null;
-                const vt = normTitle(v.title), ch = normTitle(v.channel);
+                if (!v.secs || v.secs > 20 * 60 || notIt(v.title)) return null;
+                const vt = mNorm(v.title), ch = mNorm(v.channel);
                 const d = want ? Math.abs(v.secs - want) : null;
-                if (d != null && d > (v.atv ? 15 : 35)) return null;   // a different song (or version)
-                let sc = 0;
-                if (title && vt.includes(title)) sc += 30; else if (title && title.split(' ').filter(w => w.length > 2).every(w => vt.includes(w))) sc += 15; else sc -= 40;
-                if (v.atv) sc += 45;
+                // the title: 35 the same · 30 inside a longer name · 20 written together · 15 every word · 0 another script (紅蓮華 / Gurenge)
+                const vc = songCore(v.title);
+                let tl = 0;
+                if (vc.core === tn || vc.parts.includes(tn)) tl = 35;
+                else if ((' ' + vt + ' ').includes(' ' + tn + ' ')) tl = 30;
+                else if (squash(tn).length >= 4 && squash(vt).includes(squash(tn))) tl = 20;
+                else if (tw.length > 1 && tw.filter(w => w.length > 1).every(w => words(vt).includes(w))) tl = 15;
+                else if (NON_LATIN.test(v.title) === NON_LATIN.test(songTitle)) return null;   // another song
+                // a YouTube Music track is just the song's name: other words in it = another song
+                const extra = words(v.atv ? vc.core : vt).filter(w => !tw.includes(w) && !artistWords.has(w) && !FILLER.has(w) && !VERSION_W.test(w) && !/^\d{4}$/.test(w));
+                if (v.atv && tl && tl < 35 && extra.length) return null;
+                // who it's by: one of the song's artists (a YouTube Music track: one of its credits; a video: the channel, or the title)
+                const topic = / topic$/.test(ch), official = v.atv || topic;   // "Artist - Topic" = YouTube's own copy of the official audio
+                const take = OTHER_TAKE.exec(v.title), otherTake = !!take && !songText.includes(mNorm(take[0]));
                 let by = 0;
-                if (/ topic$/.test(ch) && artists.some(ar => ch.startsWith(ar))) by = 45;
-                else if (has(ch)) by = 25;
-                else if (has(vt)) by = 10;
-                if (!by && artists.length && !(d != null && d <= 3 && vt === title)) return null;   // someone else's song
-                sc += by;
+                if (topic && artists.some(ar => ch.startsWith(ar))) by = 45;
+                else if (v.atv ? String(v.channel || '').split(/\s*,\s*|\s+&\s+/).map(mNorm).some(c => artists.some(ar => ar === c || squash(ar) === squash(c))) : has(ch)) by = 25;
+                else if (!v.atv && has(vt)) by = 10;
+                // names in two scripts (Kenshi Yonezu / 米津玄師) can't be compared: then the same title at the same length,
+                // only kept when nothing is surely by the artist ("guess")
+                const guess = !by && artists.length > 0;
+                if (guess && !(ch && NON_LATIN.test(v.channel) === latinArtists && d != null && d <= 3 && tl === 35 && !otherTake)) return null;
+                if (!tl && !(by >= 25 && d != null && d <= 3)) return null;
+                let sc = tl + by, close = true;
+                if (d != null) {
+                    if (d <= (official ? 15 : 35)) sc += d <= 3 ? 25 : d <= 10 ? 12 : 0;
+                    else if (tl >= 30 && by >= 25 && d <= Math.min(120, want * 0.5)) { sc -= 30; close = false; }   // another version (extended, radio edit…)
+                    else return null;
+                }
+                if (v.atv && close) sc += 45;   // (another version: the right length elsewhere goes first)
                 if (v.badge === 'artist') sc += 10;
                 if (/\bofficial audio\b/i.test(v.title)) sc += 8;
-                const bad = BAD_TAKE.exec(v.title); if (bad && !songText.includes(normTitle(bad[0]))) sc -= 45;
-                if (d != null) sc += d <= 3 ? 25 : d <= 10 ? 12 : 0;
-                return sc >= 20 ? { id: v.id, sc } : null;
+                if (verWords.length && verWords.every(w => words(vt).includes(w))) sc += 12;   // the very version (Extended Mix…)
+                if (otherTake) sc -= 45;
+                if (!v.atv && extra.length > 2) sc -= Math.min(20, (extra.length - 2) * 4);
+                return sc >= 20 ? { id: v.id, sc, close, guess } : null;
             }).filter(Boolean).sort((x, y) => y.sc - x.sc);
         };
         // the uploads to try, best first: YouTube Music's songs, then YouTube's videos. Several are kept because
@@ -5462,11 +5508,85 @@ createApp({
             let found = [], err = null;
             const all = (s.artists || []).slice(0, 3).join(' ') || artist;
             try { found = rankSongVideos(await ytmSearch(`${all} ${title}`), s); } catch (e) { err = e; }
-            if (found.length < 3) { try { found = [...found, ...rankSongVideos(await ytSearch(`${artist} - ${title}`), s)]; } catch (e) { err = err || e; } }
-            const known = ytSongs[songYtKey(s)];
-            const ids = [...new Set([...(known ? [known] : []), ...found.map(x => x.id)])];
+            // v1.6.9 YouTube's videos too unless YouTube Music had 2 at the right length; then best first across both,
+            // and the "guesses" (names in two scripts) only when nothing is surely by the artist
+            if (found.filter(x => x.close && !x.guess).length < 2) { try { found = [...found, ...rankSongVideos(await ytSearch(`${artist} - ${title}`), s)]; } catch (e) { err = err || e; } }
+            found.sort((x, y) => y.sc - x.sc);
+            if (found.some(x => !x.guess)) found = found.filter(x => !x.guess);
+            const fixed = songLinks[songYtKey(s)]?.id, known = ytSongs[songYtKey(s)];
+            const ids = [...new Set([...(fixed ? [fixed] : []), ...(known ? [known] : []), ...found.map(x => x.id)])];
             if (!ids.length && err) throw err;   // the searches failed (not "nothing found")
             return ids.slice(0, 5);
+        };
+        // v1.6.9 "Wrong song?": the owner (and roles with "Manage songs") paste the right YouTube / YouTube Music link,
+        // and everyone's player uses it from then on (table song_links, keyed like the remembered picks: title + first artist)
+        const songLinks = reactive({});   // songYtKey → { id, by, at }
+        let songLinksAt = 0, songLinksLoading = null, songLinksMissing = false;
+        const loadSongLinks = (force = false) => {
+            if (songLinksLoading) return songLinksLoading;
+            if (!force && Date.now() - songLinksAt < 5 * 60e3) return Promise.resolve();
+            songLinksLoading = (async () => {
+                const { data, error } = await selectAll(() => sb.from('song_links').select('song_key, video_id, set_by, updated_at').order('song_key'));
+                songLinksAt = Date.now();
+                if (error && !data) { songLinksMissing = /song_links|schema cache|does not exist/i.test(error.message || ''); return; }
+                songLinksMissing = false;
+                const seen = new Set();
+                for (const r of data || []) { seen.add(r.song_key); songLinks[r.song_key] = { id: r.video_id, by: r.set_by, at: r.updated_at }; }
+                for (const k of Object.keys(songLinks)) if (!seen.has(k)) delete songLinks[k];
+            })().catch(() => {}).finally(() => { songLinksLoading = null; });
+            return songLinksLoading;
+        };
+        const canSongLink = computed(() => can('manage_songs'));
+        const ytIdFrom = (txt) => {
+            const t = String(txt || '').trim(); if (/^[\w-]{11}$/.test(t)) return t;
+            const m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/i.exec(t);
+            return m ? m[1] : null;
+        };
+        const songLink = reactive({ open: false, song: null, url: '', busy: false, err: '' });
+        const songLinkNow = computed(() => songLink.song ? songLinks[songYtKey(songLink.song)] || null : null);
+        // the upload playing now for that song (or the one it'd start with)
+        const songLinkPlaying = computed(() => { const s = songLink.song; if (!s) return ''; return (player.song && songYtKey(player.song) === songYtKey(s) && player.ytId) || songLinks[songYtKey(s)]?.id || ytSongs[songYtKey(s)] || ''; });
+        const songLinkSearchUrl = computed(() => { const s = songLink.song; return s ? 'https://music.youtube.com/search?q=' + encodeURIComponent(((s.artists || [])[0] || '') + ' ' + (s.title?.romaji || '')) : ''; });
+        const openSongLink = (s) => {
+            if (!s || !canSongLink.value) return;
+            Object.assign(songLink, { open: true, song: s, url: '', busy: false, err: '' });
+            loadSongLinks(true);
+        };
+        const linkLabel = (s) => `${s.title?.romaji || ''} — ${(s.artists || []).join(', ')}`.slice(0, 300);
+        const songLinkErr = (error) => songLinksMissing || /song_links|schema cache|does not exist/i.test(error?.message || '') ? 'Run supabase/v1.6.9-song-links.sql in Supabase first (see README, v1.6.9)'
+            : /row-level security|permission|policy/i.test(error?.message || '') ? 'Only the owner and roles with “Manage songs” can change a song’s link' : (error?.message || 'Couldn’t save it');
+        // after a change: forget what was searched for it, and play it again if it's the song playing
+        const songLinkChanged = (s) => {
+            const k = songYtKey(s); candCache.delete(k);
+            if (player.song && songYtKey(player.song) === k && player.full) { fullDown = null; lastNote = ''; startSong(player.song); }
+        };
+        const saveSongLink = async () => {
+            const s = songLink.song, id = ytIdFrom(songLink.url);
+            if (!s) return;
+            if (!id) { songLink.err = 'That isn’t a YouTube or YouTube Music link (it looks like music.youtube.com/watch?v=… or youtu.be/…)'; return; }
+            const k = songYtKey(s);
+            songLink.busy = true; songLink.err = '';
+            const row = { song_key: k, video_id: id, label: linkLabel(s), set_by: uid(), updated_at: new Date().toISOString() };
+            const { error } = await sb.from('song_links').upsert(row, { onConflict: 'song_key' });
+            songLink.busy = false;
+            if (error) { songLink.err = songLinkErr(error); return; }
+            songLinks[k] = { id, by: uid(), at: row.updated_at };
+            ytSongs[k] = id; saveYtSongs();
+            songLink.open = false;
+            showToast('Saved: everyone gets this upload for this song now');
+            songLinkChanged(s);
+        };
+        const resetSongLink = async () => {
+            const s = songLink.song; if (!s) return;
+            const k = songYtKey(s);
+            songLink.busy = true; songLink.err = '';
+            const { error } = await sb.from('song_links').delete().eq('song_key', k);
+            songLink.busy = false;
+            if (error) { songLink.err = songLinkErr(error); return; }
+            delete songLinks[k]; forgetYt(s);
+            songLink.open = false;
+            showToast('Back to automatic: the player finds this song by itself again');
+            songLinkChanged(s);
         };
         // when full songs can't work at all here (old Edge Function, YouTube blocked), songs go straight to the preview
         // for 10 minutes instead of waiting on YouTube every time
@@ -5495,7 +5615,7 @@ createApp({
         const startSong = async (s) => {
             const tok = ++playTok; loadStart = Date.now(); newListen();
             stopEngines();
-            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null, status: '', why: '' });
+            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null, status: '', why: '', ytId: '' });
             let song = s;
             if (s.pending && s.wiki) { try { const m = await songApi.matchAllTime(s.wiki); if (m) song = { ...m }; } catch {} if (tok !== playTok) return; player.song = song; }
             addHistory(song, { key: 'play', label: player.full ? 'Played' : 'Played the preview', sub: (song.artists || []).join(', ') });
@@ -5506,7 +5626,11 @@ createApp({
                 try {
                     player.status = 'Finding it on YouTube Music…';
                     // a song played before starts straight away (no search); the search only runs if that upload fails
-                    const known = ytSongs[songYtKey(song)];
+                    // v1.6.9 a link set by hand ("Wrong song?") comes first, for everyone
+                    if (!songLinksAt) await withTimeout(loadSongLinks(), 2500).catch(() => {}); else loadSongLinks();
+                    if (tok !== playTok) return;
+                    const fixed = songLinks[songYtKey(song)]?.id;
+                    const known = fixed || ytSongs[songYtKey(song)];
                     const [ids, yp] = await Promise.all([known ? Promise.resolve([known]) : withTimeout(ytCandidates(song), 12000, 'search took too long'), ytPlayer()]);
 
                     if (tok !== playTok) return;
@@ -5525,9 +5649,10 @@ createApp({
                         ytTick();
                         const r = await ytTry(yp, id);
                         if (tok !== playTok) return;
-                        if (r === 'ok') { ytSongs[songYtKey(song)] = id; saveYtSongs(); fullDown = null; player.why = ''; prefetchNextSong(); return; }
-                        if (r === 'tap') { player.loading = false; player.status = ''; ytSongs[songYtKey(song)] = id; showToast('Tap play to start the song'); return; }
+                        if (r === 'ok') { ytSongs[songYtKey(song)] = id; saveYtSongs(); fullDown = null; player.why = ''; player.ytId = id; prefetchNextSong(); return; }
+                        if (r === 'tap') { player.loading = false; player.status = ''; ytSongs[songYtKey(song)] = id; player.ytId = id; showToast('Tap play to start the song'); return; }
                         if (ytSongs[songYtKey(song)] === id) forgetYt(song);
+                        if (id === fixed && r === 'error' && canSongLink.value) showToast('The link set for this song can’t play outside YouTube (its label blocks it). Pick another upload: “Wrong song?”', 'error');
                     }
                     why = ids.length ? 'The record label only allows this song on YouTube itself' : 'Not found on YouTube Music';
                 } catch (err) {
@@ -7437,8 +7562,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.8';
+        const APP_VERSION = '1.6.9';
         const WHATS_NEW = {
+            '1.6.9': [
+                { icon: 'fa-music', t: 'The right song, every time', d: 'Full songs no longer play another song by the same artist (that happened when YouTube Music’s version was a different length). Karaoke, covers and instrumentals are left out too, unless that’s the song.' },
+                { icon: 'fa-link', t: 'Wrong song? Fix it for everyone', d: 'The owner (and roles with “Manage songs”) can paste the right YouTube or YouTube Music link for a song, from the player or the song’s page. Everyone hears that one from then on.' },
+            ],
             '1.6.8': [
                 { icon: 'fa-trash-can', t: 'Delete all notifications', d: 'The bell has a “Delete all” button next to “Mark all read”. Friend requests and invites in ✉ stay.' },
             ],
@@ -12155,7 +12284,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             // v5
             compareSel, compareAddStatus, compareAdding, toggleCompareSel, compareAllSelected, toggleCompareAll, addFromCompare, addSelectedFromCompare,
             tagGroups, STAT_KEYS, statRule, setStatMode, setAllStatModes, toggleStatHide, statPicker, personSearch, personSearchBusy, statPeople, findPerson,
-            favStaff, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopFilter, topTagOpts, topTagLabel, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, createPlaylist, togglePlaylistSong, inPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, artistQ, artistHits, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
+            favStaff, isFavStaff, toggleFavStaff, entity, entityData, entityLoading, openCharacter, openStaff, entityIsVA, entityIsActor, openActor, PERSON_BASE, TOP_SUBS, setTopFilter, topTagOpts, topTagLabel, setTopSub, fmtTopScore, openTopItem, shelfRows, shelfSub, seeShelf, playlists, plOpen, plMissing, createPlaylist, togglePlaylistSong, inPlaylist, renamePlaylist, deletePlaylist, movePlaylistSong, openPlaylist, plOpenList, plCovers, plLength, player, playPreview, isPlaying, setVolume, toggleMute, seekPreview, seekKey, closePlayer, hidePlayer, showPlayer, togglePlay, nextSong, prevSong, toggleShuffle, cycleRepeat, toggleFullSongs, srcBadge, songLink, songLinkNow, songLinkPlaying, songLinkSearchUrl, canSongLink, openSongLink, saveSongLink, resetSongLink, playQueueAt, removeFromQueue, openArtist, openArtistByName, openSongArtist, openSongAlbum, openAlbumPage, albumSongs, songSearchArtist, openTrackArtist, albumTracks, albumLoading, loadAlbumTracks, discTab, discShown, artistDiscog, discReleases, discOpen, openRelease, discOpenRelease, artistPopularShown, artistQ, artistHits, songView, songGroupBy, SONG_GROUPS, songBrowseGroups, SONG_TAG_GROUPS, entityInfo, entityRoles, toggleEntityFav, entityIsFav,
             detailMore, loadAllCredits, shownCharacters, shownStaff, moreChars, moreStaff, showAllEpisodes, detailEpisodes, setProgressTo,
             COMPOSER_KINDS, POLL_DURATIONS, FEED_KINDS, composer, resetComposer, openComposer, mediaInput, onMediaFiles, addLink, removeAttachment, linkHost, safeHref,
             picker, openPicker, choosePick, addOption, removeOption, canPost, submitComposer, pollInfo, votePoll, isActSpoiler, revealedActs, repliesSorted, markBest, lightbox, playVideoLink,

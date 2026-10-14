@@ -1512,3 +1512,18 @@ No SQL / Edge Function, no What's new. No button on the right: Quick stats / Top
 ## v1.6.8 — delete all notifications
 
 No SQL / Edge Function (the "own delete" policy already exists). The bell has **Delete all** (asks first); invites in ✉ (follow, buddy_request, party_invite) stay.
+
+## v1.6.9 — the right song, and "Wrong song?"
+
+**SQL:** run `supabase/v1.6.9-song-links.sql` once (also in `supabase_setup.sql`). No Edge Function change.
+
+- **Matching:** "Paraboy (Extended Mix)" played another Leslie Parrish song: YouTube Music's Paraboy is the normal
+  version (54 s shorter), so it was dropped for being the wrong length, and other songs by the artist at about the
+  right length got in because a wrong title only cost points. Now the title has to match (in any script: 紅蓮華 and
+  "Gurenge" both match 紅蓮華 - Gurenge), a YouTube Music track has to be credited to one of the song's artists, the
+  artist's own upload of the title may be another length (another version of the song, a lower score), and karaoke /
+  covers / instrumentals / nightcore… are left out unless the song is one. YouTube's videos are searched too unless
+  YouTube Music had two at the right length. The remembered picks start over (`anicoop_yt_songs_v3`).
+- **Wrong song?** (the link icon in the player, and the song's page; owner and roles with **Manage songs**): paste a
+  YouTube / YouTube Music link; it goes in `song_links` (keyed like the remembered picks: title + first artist) and
+  every player tries it first. **Back to automatic** removes it.
