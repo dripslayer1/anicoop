@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.6.10'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.6.11'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.6.10'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.6.11'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -491,6 +491,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.8**: `clearNotifications` deletes the bell's notifications (not `INVITE_KINDS`) after a confirm.
 - **v1.6.9** (SQL `supabase/v1.6.9-song-links.sql`): `rankSongVideos` rewritten (`mNorm` any script, `songCore` strips "(Extended Mix)" / " - Remastered" / feat., `NOT_IT` karaoke / covers…, `OTHER_TAKE`): the title must match; an ATV must be credited to one of the artists; another length only for the artist's own upload of the title (`close: false`, no ATV bonus); `guess` = names in two scripts, dropped when anything is sure. `ytCandidatesRaw` adds YouTube unless 2 close YouTube Music hits, sorts by score. `YT_SONGS_KEY` v3. `song_links` (read: everyone; write: `has_perm('manage_songs')`): `songLinks` / `loadSongLinks` (5 min), tried first in `startSong` and the candidates; `openSongLink` / `saveSongLink` / `resetSongLink`; `player.ytId` = the upload playing.
 - **v1.6.10**: Deezer fills in artists: `dzGet` / `normDeezer` (`dz:<id>`, `albumId 'dz…'`), `songApi.artist` returns `deezer` (after `more`): Deezer releases not on Apple (`relKey`, any script) with a song Apple lacks → `albums` (`dz: true`, complete) + `songs` / `tracks`; `details` + `previewUrlOf` handle `dz:`; `songPlayerId` skips `dz:`. `songKey` keeps every script. Friends panel loops `grp.list` (was `friendsFiltered`: everyone twice).
+- **v1.6.11**: `playTrailer(anime, list)`: list cards (your status groups, series rows, a friend's list, Browse shelf rows) pass their list as the song queue.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

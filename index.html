@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.10">
+    <link rel="stylesheet" href="app.css?v=1.6.11">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.10" defer></script>
+    <script src="app.js?v=1.6.11" defer></script>
 </head>
 <body>
 
@@ -1501,7 +1501,7 @@
                                             <div :class="posterGrid()">
                                                 <poster-card v-for="(item, i) in group.slice(0, shownIn('them' + status))" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="soloEntry(item.anime.id)" :own-list="false" :i="i % 24" :quick="true" :menu-open="quickMenuFor === item.anime.id"
                                                     :selectable="selectMode && theirList.type === 'SONG'" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
-                                                    @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
+                                                    @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime, group)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
                                             </div>
                                             <div v-if="group.length > shownIn('them' + status)" v-infinite="() => moreIn('them' + status)" class="h-px" aria-hidden="true"></div>
                                         </section>
@@ -1934,7 +1934,7 @@
                             <div class="shelf-row">
                                 <div v-for="(g, i) in s.items" :key="s.k + g.id" class="shelf-item" :class="{ 'is-sq': g.type === 'SONG' }">
                                     <poster-card :anime="g" :entry="myEntry(g.id)" :solo="soloEntry(g.id)" :i="i % 12" :quick="true" :menu-open="quickMenuFor === g.id"
-                                        @open="fetchAnimeDetails(g)" @trailer="playTrailer(g)" @action="quickSolo(g, $event)" @edit="openEditor(g)" @toggle="onPlusClick(g)"></poster-card>
+                                        @open="fetchAnimeDetails(g)" @trailer="playTrailer(g, s.items)" @action="quickSolo(g, $event)" @edit="openEditor(g)" @toggle="onPlusClick(g)"></poster-card>
                                     <p v-if="(s.k === 'soon' || s.k === 'upcoming') && g.releaseDate" class="mt-1.5 font-mono text-[10px] text-sub text-center">{{ new Date(g.releaseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }}</p>
                                 </div>
                             </div>
@@ -2922,7 +2922,7 @@
                                             <div class="series-strip">
                                                 <poster-card v-for="(item, i) in g.items" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="item" :i="i % 24" :people="posterTags(item.anime.id)" :quick="true" :menu-open="quickMenuFor === item.anime.id"
                                                     :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
-                                                    @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
+                                                    @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime, g.items)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
                                             </div>
                                         </div>
                                     </div>
@@ -2933,7 +2933,7 @@
                                     <div :class="posterGrid()">
                                         <poster-card v-for="(item, i) in listSeries.single.slice(0, shownIn('single'))" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="item" :i="i % 24" :people="posterTags(item.anime.id)" :quick="true" :menu-open="quickMenuFor === item.anime.id"
                                             :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
-                                            @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
+                                            @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime, listSeries.single)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
                                     </div>
                                     <div v-if="listSeries.single.length > shownIn('single')" v-infinite="() => moreIn('single')" class="h-px" aria-hidden="true"></div>
                                 </section>
@@ -2949,7 +2949,7 @@
                                 <div :class="posterGrid()">
                                     <poster-card v-for="(item, i) in group.slice(0, shownIn(status))" :key="item.anime.id" :anime="item.anime" :entry="item" :solo="item" :i="i % 24" :people="posterTags(item.anime.id)" :quick="true" :menu-open="quickMenuFor === item.anime.id"
                                         :selectable="selectMode" :selected="isSelected(item.anime.id)" @select="toggleSelect(item.anime)"
-                                        @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
+                                        @open="fetchAnimeDetails(item.anime)" @trailer="playTrailer(item.anime, group)" @action="quickSolo(item.anime, $event)" @edit="openEditor(item.anime)" @toggle="onPlusClick(item.anime)"></poster-card>
                                 </div>
                                 <div v-if="group.length > shownIn(status)" v-infinite="() => moreIn(status)" class="h-px" aria-hidden="true"></div>
                             </section>

@@ -1539,3 +1539,9 @@ No SQL / Edge Function change.
 - **Song keys** (`songKey`, used for remembered YouTube picks and "Wrong song?" links) keep every script: Japanese /
   Korean titles lost every letter, so all of an artist's songs in Japanese shared one key. Latin titles keep their key.
 - **Friends list:** each heading (Online now / Offline) listed every friend, so everyone showed up twice.
+
+## v1.6.11 — lists keep playing
+
+No SQL / Edge Function change. A song started from a card on your list (Liked…, also "Group seasons" rows), a friend's
+list or a Browse row gets that list as its queue (`playTrailer(anime, list)`), so the next song plays when it ends.
+Before, only the Browse grid did; anywhere else the queue was just that one song.

@@ -5190,7 +5190,9 @@ createApp({
             const t = trailerOf.value?.trailer; if (!t?.id) return '';
             return t.site === 'dailymotion' ? `https://www.dailymotion.com/video/${t.id}` : `https://www.youtube.com/watch?v=${t.id}`;
         });
-        const playTrailer = (anime) => { if (anime?.type === 'SONG') { const grid = (gridResults.value || []).map(x => x?.anime || x); playPreview(anime, grid.some(x => x?.id === anime.id) ? grid : null); return; } if (anime?.trailer?.id) { quickMenuFor.value = null; pauseSong(); trailerOf.value = anime; } };
+        // v1.6.11 a song from a list (your Liked, a friend's list, a row in Browse) gets that list as its queue, so the next
+        // one plays when it ends (before, only the Browse grid did: anywhere else the queue was just that song)
+        const playTrailer = (anime, list = null) => { if (anime?.type === 'SONG') { const grid = (list || gridResults.value || []).map(x => x?.anime || x); playPreview(anime, grid.some(x => x?.id === anime.id) ? grid : null); return; } if (anime?.trailer?.id) { quickMenuFor.value = null; pauseSong(); trailerOf.value = anime; } };
 
         // ---------- playlists: your own "albums" of songs (Songs → Solo list) ----------
         // Saved in the playlists table (songs kept inside it, in order). Friends who can see your songs can see them.
@@ -7644,8 +7646,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.10';
+        const APP_VERSION = '1.6.11';
         const WHATS_NEW = {
+            '1.6.11': [
+                { icon: 'fa-forward-step', t: 'Your Liked songs keep playing', d: 'Play a song from your Liked list (or any list, a friend’s too) and the next one plays when it ends, with shuffle and repeat.' },
+            ],
             '1.6.10': [
                 { icon: 'fa-compact-disc', t: 'Every song an artist has', d: 'Artist pages also show the releases Apple Music is missing (from Deezer), so you see what Spotify shows: Pan Piano went from 15 songs to all of them.' },
                 { icon: 'fa-user-group', t: 'Friends list fixed', d: 'Each friend shows once again: under Online now or under Offline, not both.' },
