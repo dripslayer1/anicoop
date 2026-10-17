@@ -1545,3 +1545,14 @@ No SQL / Edge Function change.
 No SQL / Edge Function change. A song started from a card on your list (Liked…, also "Group seasons" rows), a friend's
 list or a Browse row gets that list as its queue (`playTrailer(anime, list)`), so the next song plays when it ends.
 Before, only the Browse grid did; anywhere else the queue was just that one song.
+
+## v1.6.12 — feedback comments, a +N badge and notifications
+
+**SQL:** run `supabase/v1.6.12-feedback-comments.sql` once (also in `supabase_setup.sql`). No Edge Function change.
+
+- **Comments** on every feedback post (`feedback_comments`: everyone reads, you post as you, delete your own; "Manage
+  feedback" deletes any). Beside each commenter's name: whether they upvoted / downvoted the post.
+- **+N badge** on the 💡 Feedback buttons: posts + comments by others since you last opened Feedback (`PREFS.fbSeen`,
+  synced; never opened = the last 14 days). New posts / comments are marked "New"; opening Feedback clears it.
+- **Notifications** (database triggers, so they always go out): new feedback → everyone; a comment → the post's author
+  and everyone who commented on or voted on it. Pref `feedback` (Settings → Notifications). `notifications.feedback_id`.

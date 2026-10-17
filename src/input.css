@@ -2306,3 +2306,16 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
 .free-body { display: flex; flex-direction: column; flex-grow: 1; padding: 12px 14px 14px; }
 .free-chip { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; color: rgb(var(--c-sub)); background: rgb(var(--c-raised)); }
 .free-get { margin-top: 12px; align-self: flex-start; font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 999px; color: rgb(var(--c-onvolt)); background: rgb(var(--c-volt)); }
+
+/* v1.6.12 feedback: +N badge, "New", comments with the commenter's vote */
+.fb-badge { position: absolute; top: -5px; right: -7px; min-width: 20px; height: 18px; padding: 0 5px; border-radius: 999px; background: rgb(var(--c-pink, 255 77 141)); color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px rgb(var(--c-base)); pointer-events: none; }
+.fb-badge.\!static { position: static; box-shadow: none; }
+.fb-new { padding: 1px 6px; border-radius: 6px; background: rgb(var(--c-volt) / .15); color: rgb(var(--c-volt)); font-family: "Geist Mono", monospace; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.fb-thread { margin-top: 10px; padding: 10px 0 2px 12px; border-left: 2px solid rgb(var(--c-line)); display: flex; flex-direction: column; gap: 10px; }
+.fb-comment { display: flex; gap: 9px; align-items: flex-start; }
+.fb-comment.is-new { background: rgb(var(--c-volt) / .05); border-radius: 10px; margin-left: -6px; padding: 4px 6px; }
+.fb-voted { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 6px; font-size: 10px; font-weight: 700; }
+.fb-voted.up { color: rgb(var(--c-volt)); background: rgb(var(--c-volt) / .12); }
+.fb-voted.down { color: #818cf8; background: rgb(129 140 248 / .14); }
+.fb-flash { animation: fb-flash 2s ease-out; }
+@keyframes fb-flash { 0%, 30% { box-shadow: 0 0 0 2px rgb(var(--c-volt) / .8); } 100% { box-shadow: 0 0 0 2px transparent; } }
