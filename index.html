@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.11">
+    <link rel="stylesheet" href="app.css?v=1.6.12">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.11" defer></script>
+    <script src="app.js?v=1.6.12" defer></script>
 </head>
 <body>
 
@@ -123,7 +123,7 @@
                 <div class="home-icons flex items-center gap-2">
                     <button @click.stop="toggleHeaderSearch()" class="icon-btn !w-9 !h-9" :class="{ '!bg-ink !text-inv': hs.open }" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
                     <button @click.stop="openSettings()" class="icon-btn !w-9 !h-9" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
-                    <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
+                    <button @click.stop="openTracker('feedback')" class="icon-btn !w-9 !h-9 relative" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i><span v-if="fbBadge" class="fb-badge">{{ fbBadge }}</span></button>
                     <span class="hdr-space" aria-hidden="true"></span>
                     <button v-if="songsOn" @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
                     <button @click.stop="notifOpen = !notifOpen; friendsOpen = false; invOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
@@ -249,7 +249,7 @@
                                     <button @click="sectionMenu = false; goHome()" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-house text-[11px] w-7 text-center"></i> Home</button>
                                     <!-- on phones, settings + feedback live here instead of the header -->
                                     <button @click="sectionMenu = false; openSettings()" class="qa-row text-sub hover:text-ink sm-only"><i class="fa-solid fa-gear text-[11px] w-7 text-center"></i> Settings</button>
-                                    <button @click="sectionMenu = false; openTracker('feedback')" class="qa-row text-sub hover:text-ink sm-only"><i class="fa-solid fa-lightbulb text-[11px] w-7 text-center"></i> Feedback</button>
+                                    <button @click="sectionMenu = false; openTracker('feedback')" class="qa-row text-sub hover:text-ink sm-only"><i class="fa-solid fa-lightbulb text-[11px] w-7 text-center"></i> Feedback<span v-if="fbBadge" class="fb-badge !static ml-auto">{{ fbBadge }}</span></button>
                                 </div>
                             </transition>
                         </div>
@@ -263,7 +263,7 @@
                     <div class="hdr-side flex items-center justify-end gap-2">
                         <button @click.stop="toggleHeaderSearch()" class="icon-btn !w-9 !h-9 hdr-search" :class="{ '!bg-ink !text-inv': hs.open }" :title="'Search ' + currentSection.label.toLowerCase()"><i class="fa-solid fa-magnifying-glass text-sm"></i></button>
                         <button @click="openSettings()" class="icon-btn !w-9 !h-9 hdr-extra" title="Settings"><i class="fa-solid fa-gear text-sm"></i></button>
-                        <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i></button>
+                        <button @click="openTracker('feedback')" class="icon-btn !w-9 !h-9 hdr-extra relative" :class="{ '!bg-ink !text-inv': activeTab === 'feedback' && !selectedAnime && !viewUserId }" title="Feedback — ideas &amp; bugs"><i class="fa-solid fa-lightbulb text-sm"></i><span v-if="fbBadge" class="fb-badge">{{ fbBadge }}</span></button>
                         <span class="hdr-space hdr-extra" aria-hidden="true"></span>
                         <button v-if="songsOn" @click.stop="openMusic()" class="icon-btn !w-9 !h-9" title="Music"><i class="fa-solid fa-music text-sm"></i></button>
                     <button @click.stop="notifOpen = !notifOpen; friendsOpen = false; invOpen = false" class="icon-btn !w-9 !h-9 relative" title="Notifications">
@@ -1792,7 +1792,7 @@
                     <p v-if="fb.error" class="mt-6 panel !rounded-2xl px-4 py-3 text-sm text-sub"><i class="fa-solid fa-triangle-exclamation mr-2 text-mute"></i>{{ fb.error }}</p>
                     <div class="mt-5 space-y-2.5">
                         <div v-if="fb.loading && !fb.list.length" class="h-24 rounded-2xl skeleton"></div>
-                        <article v-for="f in fbShown" :key="f.id" class="fb-card">
+                        <article v-for="f in fbShown" :key="f.id" :id="'fb-' + f.id" class="fb-card">
                             <div class="fb-vote">
                                 <button @click="voteFeedback(f, 1)" class="fb-arrow" :class="{ up: fbMine(f) === 1 }" title="Upvote"><i class="fa-solid fa-arrow-up"></i></button>
                                 <span class="font-display font-bold text-sm" :class="fbMine(f) === 1 ? 'text-volt' : fbMine(f) === -1 ? 'text-[#818cf8]' : 'text-ink'">{{ fbScore(f) }}</span>
@@ -1804,12 +1804,38 @@
                                     <span class="px-1.5 py-0.5 rounded font-mono text-[9px] font-bold uppercase tracking-wider" :style="{ color: FB_STATUS[f.status][1], background: FB_STATUS[f.status][1] + '22' }">{{ FB_STATUS[f.status][0] }}</span>
                                     <button @click="openUser(f.user_id)" class="text-sub hover:text-ink">{{ f.user_id === currentUser?.id ? 'you' : personOf(f.user_id).username }}</button>
                                     <span class="text-mute">· {{ timeAgo(f.created_at) }}</span>
+                                    <span v-if="fbIsNew(f)" class="fb-new">New</span>
                                 </div>
                                 <h3 class="mt-1.5 text-ink font-semibold leading-snug break-words">{{ f.title }}</h3>
                                 <p v-if="f.body" class="mt-1 text-sm text-sub whitespace-pre-line break-words">{{ f.body }}</p>
-                                <div v-if="can('manage_feedback') || f.user_id === currentUser?.id" class="mt-2.5 flex flex-wrap items-center gap-2">
+                                <div class="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                    <!-- v1.6.12 comments -->
+                                    <button @click="toggleFbComments(f)" class="text-[11px] font-bold hover:text-ink" :class="fb.open[f.id] ? 'text-ink' : 'text-sub'"><i class="fa-solid fa-comment mr-1"></i>{{ fbComments(f).length ? fbComments(f).length + ' comment' + (fbComments(f).length === 1 ? '' : 's') : 'Comment' }}<span v-if="fbComments(f).some(fbIsNew)" class="fb-new ml-1.5">New</span></button>
                                     <div v-if="can('manage_feedback')" class="chip-wrap"><select :value="f.status" @change="setFeedbackStatus(f, $event.target.value)" class="chip !h-8 !text-[11px]"><option v-for="(s, k) in FB_STATUS" :key="k" :value="k">{{ s[0] }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
-                                    <button @click="deleteFeedback(f)" class="text-[11px] font-bold text-mute hover:text-rose-400"><i class="fa-solid fa-trash-can mr-1"></i>Delete</button>
+                                    <button v-if="can('manage_feedback') || f.user_id === currentUser?.id" @click="deleteFeedback(f)" class="text-[11px] font-bold text-mute hover:text-rose-400"><i class="fa-solid fa-trash-can mr-1"></i>Delete</button>
+                                </div>
+                                <div v-if="fb.open[f.id]" class="fb-thread">
+                                    <div v-for="c in fbComments(f)" :key="c.id" class="fb-comment" :class="{ 'is-new': fbIsNew(c) }">
+                                        <user-avatar :user="personOf(c.user_id)" :size="26"></user-avatar>
+                                        <div class="min-w-0 flex-grow">
+                                            <div class="flex flex-wrap items-center gap-x-1.5 text-[11px]">
+                                                <button @click="openUser(c.user_id)" class="font-semibold text-ink hover:underline">{{ c.user_id === currentUser?.id ? 'you' : personOf(c.user_id).username }}</button>
+                                                <!-- how they voted on the post -->
+                                                <span v-if="fbVoteOf(f, c.user_id) === 1" class="fb-voted up" title="Upvoted this"><i class="fa-solid fa-arrow-up"></i> upvoted</span>
+                                                <span v-else-if="fbVoteOf(f, c.user_id) === -1" class="fb-voted down" title="Downvoted this"><i class="fa-solid fa-arrow-down"></i> downvoted</span>
+                                                <span v-if="c.user_id === f.user_id" class="text-mute">· posted this</span>
+                                                <span class="text-mute">· {{ timeAgo(c.created_at) }}</span>
+                                                <span v-if="fbIsNew(c)" class="fb-new">New</span>
+                                                <button v-if="c.user_id === currentUser?.id || can('manage_feedback')" @click="deleteFbComment(f, c)" class="ml-auto text-mute hover:text-rose-400" title="Delete"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                                            </div>
+                                            <p class="mt-0.5 text-sm text-sub whitespace-pre-line break-words">{{ c.body }}</p>
+                                        </div>
+                                    </div>
+                                    <p v-if="!fbComments(f).length" class="text-xs text-mute">No comments yet.</p>
+                                    <form @submit.prevent="postFbComment(f)" class="flex items-end gap-2 mt-1">
+                                        <textarea v-model="fb.drafts[f.id]" rows="1" maxlength="2000" placeholder="Write a comment…" class="field !py-2 !text-sm resize-none flex-grow" @keydown.enter.exact.prevent="postFbComment(f)"></textarea>
+                                        <button type="submit" :disabled="!String(fb.drafts[f.id] || '').trim() || fb.sending[f.id]" class="btn-primary !py-2 !px-3.5 !text-xs shrink-0"><i class="fa-solid" :class="fb.sending[f.id] ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'"></i></button>
+                                    </form>
                                 </div>
                             </div>
                         </article>

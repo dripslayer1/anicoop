@@ -143,6 +143,7 @@ const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
     msgSound: true,   // v2.1 a short chime with the message pop-up
+    fbSeen: null,   // v1.6.12 when you last opened Feedback (the +N badge counts what's newer)
     asideOpen: false,   // (v1.6.4–1.6.6 Browse side panel toggle; since v1.6.7 the panel always shows, unused)
     fixedRuns: false,   // v2.8 the one-time repair of new watches left in the rewatch slots has run
     contOrder: {},   // v2.1 your own order of Continue watching / reading, per section: { anime: [media ids] }
@@ -3262,6 +3263,7 @@ createApp({
                 applyTheme();
             }
             settingsLoaded = true;
+            refreshFbBadge();   // v1.6.12
             // first time: upload what this browser had (v1.5 minus another account's Steam link, GIFs and tour on this browser)
             if (!data) { Object.assign(PREFS, { steam: null, savedGifs: [], tourDone: false }); saveSettings(); }
         };
@@ -3396,6 +3398,7 @@ createApp({
                 { key: 'friend_comment', label: 'When a friend posts in the Comments' },
                 { key: 'squad', label: 'When a friend invites me to watch something together, joins or drops one, or adds me to a playlist' },
                 { key: 'friend_post', label: 'When a friend posts, starts a poll or asks a question' },
+                { key: 'feedback', label: 'New feedback, and comments on feedback I posted, commented on or voted on' },
                 { key: 'poll_ended', label: 'When a poll I made or voted in ends (with the winner)' },
             ] },
             { title: 'Site Data Changes', note: 'anicoop checks the shows on your lists against AniList once a day.', items: [
@@ -4048,12 +4051,14 @@ createApp({
                 case 'media_episode': return `${title}: ${n.text || 'new episode'}`;
                 case 'friend_tierlist': return `${who} made a tier list`;
                 case 'friend_debate': return `${who} started a debate`;
+                case 'feedback_new': return `${who} posted feedback: “${n.media_title || ''}”`;   // v1.6.12
+                case 'feedback_comment': return `${who} commented on the feedback “${n.media_title || ''}”`;
                 default: return n.text || 'New activity';
             }
         };
-        const NOTIF_QUOTE = ['friend_tierlist', 'friend_debate', 'comment', 'comment_reply', 'comment_mention', 'comment_like', 'activity_reply', 'activity_mention', 'reply_like', 'friend_post', 'friend_poll', 'friend_question', 'best_answer'];
+        const NOTIF_QUOTE = ['feedback_comment', 'friend_tierlist', 'friend_debate', 'comment', 'comment_reply', 'comment_mention', 'comment_like', 'activity_reply', 'activity_mention', 'reply_like', 'friend_post', 'friend_poll', 'friend_question', 'best_answer'];
         const notifQuote = (n) => n.text && NOTIF_QUOTE.includes(n.kind) ? `“${n.text}”` : ((n.kind?.startsWith('media_') || n.kind === 'poll_ended') ? n.text : '');
-        const notifIcon = (n) => isFreeNote(n) ? 'fa-gift' : ({ media_related: 'fa-diagram-project', media_changed: 'fa-rotate', media_removed: 'fa-triangle-exclamation', poll_ended: 'fa-square-poll-horizontal', media_episode: 'fa-tv' })[n.kind] || 'fa-bell';
+        const notifIcon = (n) => isFreeNote(n) ? 'fa-gift' : n.kind?.startsWith('feedback_') ? 'fa-lightbulb' : ({ media_related: 'fa-diagram-project', media_changed: 'fa-rotate', media_removed: 'fa-triangle-exclamation', poll_ended: 'fa-square-poll-horizontal', media_episode: 'fa-tv' })[n.kind] || 'fa-bell';
         const systemNotifOn = ref(typeof Notification !== 'undefined' && Notification.permission === 'granted');
         // ---------- v2.1 new messages: a card in the bottom-right corner (click it to open the chat) + a short chime ----------
         const msgPops = ref([]);   // newest first, at most 3; one card per chat (a new message in it updates the card)
@@ -4132,6 +4137,7 @@ createApp({
             if (!n.read) { n.read = true; sb.from('notifications').update({ read: true }).eq('id', n.id).then(() => {}, () => {}); }
             if (n.kind === 'message' || n.kind === 'message_request') { openChat(n.actor_id); return; }
             if (isFreeNote(n)) { openFreeGames(); return; }   // v1.6.4
+            if (n.kind?.startsWith('feedback_')) { openFeedbackPost(n.feedback_id, n.kind === 'feedback_comment'); return; }   // v1.6.12
             if (n.kind === 'group_message') { openGroup(n.group_id); return; }
             if (n.kind === 'buddy_request' || n.kind === 'buddy_accept') { fetchBuddies(); openUser(n.actor_id); return; }
             if (n.kind === 'follow' || n.kind === 'friend_accept') { openTracker('profile'); setTimeout(() => document.getElementById('friends')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); return; }
@@ -7646,8 +7652,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.11';
+        const APP_VERSION = '1.6.12';
         const WHATS_NEW = {
+            '1.6.12': [
+                { icon: 'fa-comments', t: 'Comment on feedback', d: 'Every feedback post has comments now. Beside each name you see if they upvoted or downvoted the post.' },
+                { icon: 'fa-lightbulb', t: 'See what’s new in Feedback', d: 'The 💡 Feedback button shows +1, +2… for new posts and comments since you last looked, and new ones are marked “New”.' },
+                { icon: 'fa-bell', t: 'Feedback notifications', d: 'You get a notification when someone posts feedback, and when someone comments on feedback you posted, commented on or voted on (Settings → Notifications to turn it off).' },
+            ],
             '1.6.11': [
                 { icon: 'fa-forward-step', t: 'Your Liked songs keep playing', d: 'Play a song from your Liked list (or any list, a friend’s too) and the next one plays when it ends, with shuffle and repeat.' },
             ],
@@ -11139,25 +11150,43 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         const fetchOwnerId = async () => { const { data } = await sb.from('app_admins').select('user_id').limit(1); ownerId.value = data?.[0]?.user_id || null; };
 
         // ---------- feedback board: anyone posts, everyone sees, up/down votes like Reddit ----------
-        const fb = reactive({ list: [], votes: {}, sort: 'top', cat: 'ALL', loading: false, draft: { title: '', body: '', category: 'idea' }, posting: false, error: '' });
+        const fb = reactive({ list: [], votes: {}, sort: 'top', cat: 'ALL', loading: false, draft: { title: '', body: '', category: 'idea' }, posting: false, error: '',
+            comments: {}, voters: {}, open: {}, drafts: {}, sending: {}, since: null, noComments: false, unseen: 0 });   // v1.6.12
         const FB_CATS = [{ v: 'idea', l: 'Idea', icon: 'fa-lightbulb', c: '#D4FF3A' }, { v: 'bug', l: 'Bug', icon: 'fa-bug', c: '#f87171' }, { v: 'other', l: 'Other', icon: 'fa-comment', c: '#B490F5' }];
         const FB_STATUS = { open: ['Open', '#8b8b99'], planned: ['Planned', '#3b82f6'], done: ['Done', '#22c55e'], declined: ['Declined', '#ef4444'] };
         const fetchFeedback = async () => {
             if (!uid()) return;
             fb.loading = true; fb.error = '';
-            const [{ data, error }, { data: votes }] = await Promise.all([
+            const [{ data, error }, { data: votes }, { data: comments, error: cErr }] = await Promise.all([
                 sb.from('feedback').select('*').order('created_at', { ascending: false }).limit(300),
                 selectAll(() => sb.from('feedback_votes').select('feedback_id, user_id, value')),
+                selectAll(() => sb.from('feedback_comments').select('id, feedback_id, user_id, body, created_at').order('created_at')),
             ]);
             fb.loading = false;
             if (error) { fb.error = /feedback/.test(error.message) ? 'The feedback board needs the latest database update — run supabase_setup.sql in Supabase.' : error.message; return; }
-            const v = {};
-            (votes || []).forEach(r => { const x = v[r.feedback_id] || (v[r.feedback_id] = { score: 0, mine: 0 }); x.score += r.value; if (r.user_id === uid()) x.mine = r.value; });
-            fb.votes = v; fb.list = data || [];
-            ensureProfiles(fb.list.map(f => f.user_id));
+            const v = {}, who = {};
+            (votes || []).forEach(r => {
+                const x = v[r.feedback_id] || (v[r.feedback_id] = { score: 0, mine: 0 }); x.score += r.value; if (r.user_id === uid()) x.mine = r.value;
+                (who[r.feedback_id] || (who[r.feedback_id] = {}))[r.user_id] = r.value;   // v1.6.12 shown beside a commenter's name
+            });
+            fb.votes = v; fb.voters = who; fb.list = data || [];
+            // v1.6.12 comments (before supabase/v1.6.12-feedback-comments.sql is run there's no table: no comments yet)
+            fb.noComments = !!cErr;
+            const byPost = {}; (comments || []).forEach(c => { (byPost[c.feedback_id] || (byPost[c.feedback_id] = [])).push(c); });
+            fb.comments = byPost;
+            ensureProfiles([...fb.list.map(f => f.user_id), ...(comments || []).map(c => c.user_id)]);
         };
         const fbScore = (f) => fb.votes[f.id]?.score || 0;
         const fbMine = (f) => fb.votes[f.id]?.mine || 0;
+        // v1.6.12 from a notification: Feedback, that post (its comments open), scrolled to
+        const openFeedbackPost = async (id, comments = false) => {
+            fb.sort = 'new'; fb.cat = 'ALL';
+            if (id && comments) fb.open[id] = true;
+            openTracker('feedback');
+            let tries = 0;
+            const go = () => { const el = document.getElementById('fb-' + id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('fb-flash'); setTimeout(() => el.classList.remove('fb-flash'), 2200); } else if (++tries < 30) setTimeout(go, 150); };
+            if (id) setTimeout(go, 200);
+        };
         const fbShown = computed(() => {
             const list = fb.list.filter(f => fb.cat === 'ALL' || f.category === fb.cat);
             if (fb.sort === 'new') return list;
@@ -11169,6 +11198,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const cur = fbMine(f); const next = cur === value ? 0 : value;
             const v = fb.votes[f.id] || (fb.votes[f.id] = { score: 0, mine: 0 });
             v.score += next - cur; v.mine = next;
+            const w = fb.voters[f.id] || (fb.voters[f.id] = {}); if (next) w[uid()] = next; else delete w[uid()];
             const { error } = next === 0
                 ? await sb.from('feedback_votes').delete().eq('feedback_id', f.id).eq('user_id', uid())
                 : await sb.from('feedback_votes').upsert({ feedback_id: f.id, user_id: uid(), value: next }, { onConflict: 'feedback_id,user_id' });
@@ -11182,7 +11212,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             fb.posting = false;
             if (error) { showToast('Could not post: ' + error.message, 'error'); return; }
             fb.list = [data, ...fb.list];
-            fb.votes[data.id] = { score: 1, mine: 1 };
+            fb.votes[data.id] = { score: 1, mine: 1 }; fb.voters[data.id] = { [uid()]: 1 };
             sb.from('feedback_votes').upsert({ feedback_id: data.id, user_id: uid(), value: 1 }, { onConflict: 'feedback_id,user_id' }).then(() => {}, () => {});   // you upvote your own post, like Reddit
             Object.assign(fb.draft, { title: '', body: '' });
             showToast('Thanks! Your feedback is up for everyone to see');
@@ -11198,7 +11228,50 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (error) { showToast(error.message, 'error'); return; }
             f.status = status;
         };
-        watch(() => currentAppView.value === 'tracker' && activeTab.value === 'feedback' && !selectedAnime.value && !viewUserId.value, (on) => { if (on) fetchFeedback(); });
+        // v1.6.12 comments: everyone can comment; beside each name, how they voted on the post
+        const fbComments = (f) => fb.comments[f.id] || [];
+        const fbVoteOf = (f, userId) => fb.voters[f.id]?.[userId] || 0;
+        const toggleFbComments = (f) => { fb.open[f.id] = !fb.open[f.id]; };
+        const postFbComment = async (f) => {
+            const body = String(fb.drafts[f.id] || '').trim();
+            if (!body || fb.sending[f.id]) return;
+            if (fb.noComments) { showToast('Comments need supabase/v1.6.12-feedback-comments.sql run in Supabase first', 'error'); return; }
+            fb.sending[f.id] = true;
+            const { data, error } = await sb.from('feedback_comments').insert({ feedback_id: f.id, user_id: uid(), body: body.slice(0, 2000) }).select().single();
+            fb.sending[f.id] = false;
+            if (error) { showToast('Could not comment: ' + error.message, 'error'); return; }
+            (fb.comments[f.id] || (fb.comments[f.id] = [])).push(data);
+            fb.drafts[f.id] = '';
+        };
+        const deleteFbComment = async (f, c) => {
+            if (!(await askConfirm({ title: 'Delete this comment?', body: c.body.slice(0, 120), ok: 'Delete' }))) return;
+            const { error } = await sb.from('feedback_comments').delete().eq('id', c.id);
+            if (error) { showToast(error.message, 'error'); return; }
+            fb.comments[f.id] = fbComments(f).filter(x => x.id !== c.id);
+        };
+        // v1.6.12 what's new since you last opened Feedback: a +N on the Feedback buttons for everyone, "New" on the posts
+        // and comments; opening Feedback clears it. (Never opened: the last 14 days count.)
+        const fbSinceIso = () => PREFS.fbSeen || new Date(Date.now() - 14 * 864e5).toISOString();
+        const fbIsNew = (x) => !!fb.since && x.user_id !== uid() && x.created_at > fb.since;
+        const refreshFbBadge = async () => {
+            if (!uid() || !settingsLoaded) return;
+            const since = fbSinceIso();
+            const [p, c] = await Promise.all([
+                sb.from('feedback').select('id', { count: 'exact', head: true }).gt('created_at', since).neq('user_id', uid()),
+                sb.from('feedback_comments').select('id', { count: 'exact', head: true }).gt('created_at', since).neq('user_id', uid()),
+            ]);
+            fb.unseen = (p.error ? 0 : p.count || 0) + (c.error ? 0 : c.count || 0);
+        };
+        const fbBadge = computed(() => fb.unseen > 99 ? '99+' : fb.unseen ? '+' + fb.unseen : '');
+        watch(() => currentAppView.value === 'tracker' && activeTab.value === 'feedback' && !selectedAnime.value && !viewUserId.value, (on) => {
+            if (!on) return;
+            fb.since = fbSinceIso();   // what's newer than this gets "New" while you're here
+            PREFS.fbSeen = new Date().toISOString(); fb.unseen = 0;
+            fetchFeedback();
+        });
+        // the badge: after sign-in (once your settings are in), every 5 minutes, and when a feedback notification arrives
+        setInterval(() => { if (!document.hidden) refreshFbBadge(); }, 5 * 60e3);
+        watch(() => notifications.value.filter(n => n.kind?.startsWith('feedback_')).length, () => refreshFbBadge());
 
         // ---------- game page extras: Steam info, time to beat, whole franchise, characters ----------
         const gameExtra = reactive({ id: null, steam: null, ttb: null, series: [], seriesOpts: [], seriesIdx: 0, seriesLoading: false, storyIds: [], seriesView: 'release', chars: [], linkFallback: null });
@@ -12323,7 +12396,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             reader, readInfo, readLangs, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, ytVol, setYtVol, ytQuality, ytNative, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,
-            fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback,
+            fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback, fbComments, fbVoteOf, toggleFbComments, postFbComment, deleteFbComment, fbIsNew, fbBadge,
             gameExtra, pickSeries, seriesShown, seriesTotals, movieTotals, fmtMins, storyEdit, storySort, openGameLink, playVideo, scrollRow, shotViewer, openShot, closeShot, stepShot, fmtHours,
             FAV_SECTIONS, favTab, favsIn, favSectionOf, openFavChar, activityOpen, toggleMyActivity, openViewedActivity, setActivityHidden, activityLine, openActivity, checkGames,
             STATUS_ORDER, statusPick, MAX_REPEATS, lilBro, setFormStatus, repeatNow, STATUS_LABELS, STATUS_SHORT, STATUS_COLORS, UNIT, ACCENTS, tabs,
