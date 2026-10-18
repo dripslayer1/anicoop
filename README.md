@@ -1562,3 +1562,7 @@ Before, only the Browse grid did; anywhere else the queue was just that one song
 No SQL / Edge Function change. Movies & TV → Lists has a **Movies | TV shows** switch at the top (with counts); the
 list, its status groups and counts show only that kind. Remembered in your settings (`PREFS.tvListKind`). The old
 "type" dropdown is hidden there (the switch does it).
+
+## v1.6.14 — the Movies | TV shows switch fits its buttons
+
+No SQL / Edge Function, no What's new. The switch stretched to the width of the title above it (an empty gap on its right); it's as wide as its two buttons now (`w-fit`).

@@ -7659,7 +7659,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.13';
+        const APP_VERSION = '1.6.14';
         const WHATS_NEW = {
             '1.6.13': [
                 { icon: 'fa-film', t: 'Movies and TV shows, two lists', d: 'In Movies & TV → Lists, a switch at the top picks your Movies list or your TV shows list (it remembers which).' },
