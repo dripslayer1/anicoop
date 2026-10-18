@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.12">
+    <link rel="stylesheet" href="app.css?v=1.6.13">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.12" defer></script>
+    <script src="app.js?v=1.6.13" defer></script>
 </head>
 <body>
 
@@ -2764,7 +2764,11 @@
                     <div class="flex flex-wrap items-end justify-between gap-4">
                         <div>
                             <p class="kicker">// {{ currentSection.short.toLowerCase() }} · {{ strictSolo ? 'just you' : listWith.length ? 'with ' + joinNames(listWith.map(id => personOf(id).username)) : 'everything you track' }}</p>
-                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ adultView && (section === 'manga' || section === 'anime') ? 'Your 18+ ' + (section === 'anime' ? 'anime' : 'manga') : 'Your list' }}</h1>
+                            <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">{{ adultView && (section === 'manga' || section === 'anime') ? 'Your 18+ ' + (section === 'anime' ? 'anime' : 'manga') : tvKindOn ? (PREFS.tvListKind === 'SHOW' ? 'Your TV shows' : 'Your movies') : 'Your list' }}</h1>
+                            <!-- v1.6.13 movies and TV shows are two lists -->
+                            <div v-if="tvKindOn" class="seg mt-4 tv-kind" role="tablist" aria-label="Movies or TV shows">
+                                <button v-for="k in [['MOVIE', 'Movies', 'fa-film'], ['SHOW', 'TV shows', 'fa-tv']]" :key="k[0]" @click="setTvKind(k[0])" class="seg-btn !px-4" :class="{ 'is-on': (PREFS.tvListKind === 'SHOW' ? 'SHOW' : 'MOVIE') === k[0] }" role="tab" :aria-selected="(PREFS.tvListKind === 'SHOW' ? 'SHOW' : 'MOVIE') === k[0]"><i class="fa-solid mr-1.5" :class="k[2]"></i>{{ k[1] }} <span class="font-mono text-[10px] opacity-70 ml-1">{{ tvKindCounts[k[0]] }}</span></button>
+                            </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
                             <!-- v1.4.1 the 18+ titles of this section: a small switch (only with 18+ access / Track 18+, and only when you have some) -->

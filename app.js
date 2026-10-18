@@ -143,7 +143,8 @@ const defaultPrefs = () => ({
     theme: 'dark', accent: '#D4FF3A', posterSize: 'm', titleLang: 'romaji',
     scoreFormat: 'POINT_10_DECIMAL', listOrder: 'updated', friendsVisibility: 'friends', showOnline: true, whatsNewOff: false,
     msgSound: true,   // v2.1 a short chime with the message pop-up
-    fbSeen: null,   // v1.6.12 when you last opened Feedback (the +N badge counts what's newer)
+    fbSeen: null,
+    tvListKind: 'MOVIE',   // v1.6.13 Movies & TV → Lists shows the movies ('MOVIE') or the TV shows ('SHOW')   // v1.6.12 when you last opened Feedback (the +N badge counts what's newer)
     asideOpen: false,   // (v1.6.4–1.6.6 Browse side panel toggle; since v1.6.7 the panel always shows, unused)
     fixedRuns: false,   // v2.8 the one-time repair of new watches left in the rewatch slots has run
     contOrder: {},   // v2.1 your own order of Continue watching / reading, per section: { anime: [media ids] }
@@ -6036,7 +6037,12 @@ createApp({
             if (a.type === 'MANGA') return a.format === 'NOVEL' || a.format === 'ONE_SHOT' ? a.format : a.countryOfOrigin === 'KR' ? 'MANHWA' : ['CN', 'TW'].includes(a.countryOfOrigin) ? 'MANHUA' : 'MANGA';
             return (a.type || 'ANIME') === 'ANIME' ? (a.format || '') : '';
         };
+        // v1.6.13 Movies & TV → Lists: movies and TV shows are two separate lists (the switch at the top picks one)
+        const tvKindOn = computed(() => activeTab.value === 'solo' && mediaType.value === 'TV');
+        const tvKindCounts = computed(() => { const c = { MOVIE: 0, SHOW: 0 }; (secSolo.value || []).forEach(i => { const k = formatKey(i.anime); if (k in c) c[k]++; }); return c; });
+        const setTvKind = (k) => { if (PREFS.tvListKind !== k) { PREFS.tvListKind = k; listFilterStatus.value = 'ALL'; } };
         const listFormats = computed(() => {
+            if (tvKindOn.value) return [];   // (the switch does it)
             const n = new Map();
             (secSolo.value || []).forEach(i => { const k = formatKey(i.anime); if (k) n.set(k, (n.get(k) || 0) + 1); });
             return n.size < 2 && !listFormat.value ? [] : [...n.entries()].sort((a, b) => b[1] - a[1]).map(([k, c]) => ({ k, l: FORMAT_LABELS[k] || k, c }));
@@ -6051,7 +6057,8 @@ createApp({
             let items = secSolo.value || [];
             if (strictSolo.value) items = items.filter(i => !tagsOf(i.anime.id));
             else if (listWith.value.length) items = items.filter(i => { const ids = new Set((tagsOf(i.anime.id) || []).map(t => t.id)); return listWith.value.every(id => ids.has(id)); });
-            if (listFormat.value) items = items.filter(i => formatKey(i.anime) === listFormat.value);
+            if (tvKindOn.value) items = items.filter(i => formatKey(i.anime) === (PREFS.tvListKind === 'SHOW' ? 'SHOW' : 'MOVIE'));
+            else if (listFormat.value) items = items.filter(i => formatKey(i.anime) === listFormat.value);
             if (listFilterGenre.value) items = items.filter(i => (i.anime?.genres || []).includes(listFilterGenre.value));
             if (listSearchQuery.value) {
                 const q = listSearchQuery.value.toLowerCase();
@@ -6863,7 +6870,7 @@ createApp({
             finally { compareAdding.value = false; }
         };
         const addSelectedFromCompare = () => addFromCompare(compareAddable.value.filter(r => compareSel.value.has(r.anime.id)));
-        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFormat.value, listWith.value.join(','), strictSolo.value, groupSeasons.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q, compareTab.value, compareType.value, compareQ.value].join('|'), () => { if (navRestoring) return; for (const k in listShown) delete listShown[k]; });   // (v1.7 not when you come back: the page is as long as you left it)
+        watch(() => [activeTab.value, section.value, listFilterStatus.value, listFormat.value, PREFS.tvListKind, listWith.value.join(','), strictSolo.value, groupSeasons.value, listFilterGenre.value, listSearchQuery.value, viewUserId.value, theirList.type, theirList.status, theirList.q, compareTab.value, compareType.value, compareQ.value].join('|'), () => { if (navRestoring) return; for (const k in listShown) delete listShown[k]; });   // (v1.7 not when you come back: the page is as long as you left it)
 
         // ---------- navigation + BACK button ----------
         const navIndex = ref(0);
@@ -7652,8 +7659,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.12';
+        const APP_VERSION = '1.6.13';
         const WHATS_NEW = {
+            '1.6.13': [
+                { icon: 'fa-film', t: 'Movies and TV shows, two lists', d: 'In Movies & TV → Lists, a switch at the top picks your Movies list or your TV shows list (it remembers which).' },
+            ],
             '1.6.12': [
                 { icon: 'fa-comments', t: 'Comment on feedback', d: 'Every feedback post has comments now. Beside each name you see if they upvoted or downvoted the post.' },
                 { icon: 'fa-lightbulb', t: 'See what’s new in Feedback', d: 'The 💡 Feedback button shows +1, +2… for new posts and comments since you last looked, and new ones are marked “New”.' },
@@ -12411,7 +12421,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             listFilterStatus, listSearchQuery, filteredGroupedList, statusCounts, listFiltersOn, clearListFilters,
             groupSeasons, seriesOn, seriesState, listSeries, seriesSummary, retrySeries, compareQ, compareRows, compareSeries, compareCount,
             togetherCount, plMine, plPeople, plShared, plInvite, plInviteList, plInviteFriends, openPlInvite, togglePlMember, leavePlaylist, groupPicBusy, changeGroupPic, chatQ, chatFriendHits, chatNewFriends, chatOthers, openChatHit, REPEAT_TYPES,
-            listFormat, listFormats, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
+            listFormat, listFormats, tvKindOn, tvKindCounts, setTvKind, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
             debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails,             profileStats, profileStatCards, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
