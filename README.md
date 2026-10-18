@@ -1556,3 +1556,9 @@ Before, only the Browse grid did; anywhere else the queue was just that one song
   synced; never opened = the last 14 days). New posts / comments are marked "New"; opening Feedback clears it.
 - **Notifications** (database triggers, so they always go out): new feedback → everyone; a comment → the post's author
   and everyone who commented on or voted on it. Pref `feedback` (Settings → Notifications). `notifications.feedback_id`.
+
+## v1.6.13 — movies and TV shows, two lists
+
+No SQL / Edge Function change. Movies & TV → Lists has a **Movies | TV shows** switch at the top (with counts); the
+list, its status groups and counts show only that kind. Remembered in your settings (`PREFS.tvListKind`). The old
+"type" dropdown is hidden there (the switch does it).
