@@ -1566,3 +1566,8 @@ list, its status groups and counts show only that kind. Remembered in your setti
 ## v1.6.14 — the Movies | TV shows switch fits its buttons
 
 No SQL / Edge Function, no What's new. The switch stretched to the width of the title above it (an empty gap on its right); it's as wide as its two buttons now (`w-fit`).
+
+## v1.6.15 — movies show their year
+
+No SQL / Edge Function change. Movie cards (Browse, Lists, rows, a friend's list) show the year under the name, and
+the side panel's Top 5 rows after it (`movieYear`: a movie's `seasonYear`, already saved on list entries).

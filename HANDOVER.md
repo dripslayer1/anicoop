@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.6.14'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.6.15'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.6.14'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.6.15'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -495,6 +495,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.12** (SQL `supabase/v1.6.12-feedback-comments.sql`): `feedback_comments` + triggers `notify_feedback_post` (everyone, kind `feedback_new`) / `notify_feedback_comment` (author + commenters + voters, `feedback_comment`), pref `feedback`, `notifications.feedback_id`. Client: `fb.comments` / `fb.voters` (vote beside a commenter's name), `postFbComment` / `deleteFbComment`, `refreshFbBadge` / `fbBadge` (`PREFS.fbSeen`), `fbIsNew`, `openFeedbackPost` from a notification.
 - **v1.6.13**: Movies & TV → Lists: `tvKindOn` / `PREFS.tvListKind` ('MOVIE' | 'SHOW') filters `baseListItems` by `formatKey`; switch `.tv-kind` under the title (`setTvKind`, `tvKindCounts`); `listFormats` empty there.
 - **v1.6.14**: `.tv-kind` switch gets `w-fit` (it stretched to the title's width).
+- **v1.6.15**: `movieYear(a)` (module level, also in PosterCard): the year under a movie's name on cards and after it in the side panel.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

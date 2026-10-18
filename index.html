@@ -32,12 +32,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.14">
+    <link rel="stylesheet" href="app.css?v=1.6.15">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.14" defer></script>
+    <script src="app.js?v=1.6.15" defer></script>
 </head>
 <body>
 
@@ -2076,7 +2076,7 @@
                                             <button v-if="a.type === 'SONG'" @click.stop="playPreview(a, trendingTop.filter(notHidden))" class="aside-play" :class="{ on: isPlaying(a) }" :title="isPlaying(a) ? 'Pause' : 'Play'" :aria-label="isPlaying(a) ? 'Pause' : 'Play'"><i class="fa-solid" :class="isPlaying(a) ? 'fa-pause' : 'fa-play'"></i></button>
                                         </span>
                                         <span class="min-w-0 flex-grow">
-                                            <span class="block text-ink text-xs font-semibold truncate group-hover:text-lilac transition-colors">{{ titleOf(a) }}</span>
+                                            <span class="block text-ink text-xs font-semibold truncate group-hover:text-lilac transition-colors">{{ titleOf(a) }}<span v-if="movieYear(a)" class="text-mute font-normal"> · {{ movieYear(a) }}</span></span>
                                             <span class="block font-mono text-[10px] text-mute mt-0.5"><i v-if="a.averageScore" class="fa-solid fa-star star mr-1"></i>{{ formatAvg(a.averageScore) || '–' }}<span v-if="epBadge(a)"> · {{ epBadge(a) }}</span></span>
                                         </span>
                                         <button @click.stop="asideAdd(a, $event)" class="aside-add" :class="{ on: !!soloEntry(a.id) }" :title="a.type === 'SONG' ? 'Add to a playlist' : soloEntry(a.id) ? 'On your list: edit' : 'Add to your list'"><i class="fa-solid" :class="soloEntry(a.id) && a.type !== 'SONG' ? 'fa-check' : 'fa-plus'"></i></button>
@@ -2093,7 +2093,7 @@
                                             <button v-if="t.anime.type === 'SONG'" @click.stop="playPreview(t.anime, friendsTrending.map(x => x.anime))" class="aside-play" :class="{ on: isPlaying(t.anime) }" :title="isPlaying(t.anime) ? 'Pause' : 'Play'" :aria-label="isPlaying(t.anime) ? 'Pause' : 'Play'"><i class="fa-solid" :class="isPlaying(t.anime) ? 'fa-pause' : 'fa-play'"></i></button>
                                         </span>
                                         <span class="min-w-0 flex-grow">
-                                            <span class="block text-ink text-xs font-semibold truncate group-hover:text-lilac transition-colors">{{ titleOf(t.anime) }}</span>
+                                            <span class="block text-ink text-xs font-semibold truncate group-hover:text-lilac transition-colors">{{ titleOf(t.anime) }}<span v-if="movieYear(t.anime)" class="text-mute font-normal"> · {{ movieYear(t.anime) }}</span></span>
                                             <span class="flex items-center mt-1">
                                                 <span class="flex -space-x-1.5">
                                                     <user-avatar v-for="p in t.people.slice(0, 3)" :key="p.id" :user="p" :size="18"></user-avatar>

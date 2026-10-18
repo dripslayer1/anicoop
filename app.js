@@ -2373,6 +2373,8 @@ const QuickAdd = {
 };
 
 /* <poster-card>: one anime poster, used on Browse, lists and friend profiles */
+// v1.6.15 a movie's year under its name (lots of movies share a name: "Dune" 1984 / 2021)
+const movieYear = (a) => a?.type === 'TV' && (a.format === 'MOVIE' || a.kind === 'movie') && a.seasonYear ? a.seasonYear : null;
 const PosterCard = {
     props: { anime: Object, entry: Object, solo: Object, i: { type: Number, default: 0 }, tag: String, people: Array, quick: Boolean, menuOpen: Boolean, selectable: Boolean, selected: Boolean, editable: { type: Boolean, default: true }, ownList: { type: Boolean, default: true } },
     emits: ['open', 'action', 'edit', 'toggle', 'trailer', 'select'],
@@ -2394,7 +2396,7 @@ const PosterCard = {
         onMounted(() => { if (props.anime?.type === 'MANGA' && root.value) { root.value._manga = props.anime; mdSeen.observe(root.value); } });
         Vue.onBeforeUnmount(() => { if (root.value) mdSeen.unobserve(root.value); });
         const onClick = () => emit(props.selectable ? 'select' : 'open');
-        return { STATUS_COLORS, STATUS_SHORT, UNIT, titleOf, rating, badge, pct, shownProgress, onClick, mStatus, total, root, fmtChapter, ach };
+        return { STATUS_COLORS, STATUS_SHORT, UNIT, titleOf, rating, badge, pct, shownProgress, onClick, mStatus, total, root, fmtChapter, ach, movieYear };
     },
     template: `
     <div class="poster-hit group" @click.self="onClick">
@@ -2417,6 +2419,7 @@ const PosterCard = {
         <div class="absolute bottom-0 inset-x-0 p-3.5 pr-14 z-10 pointer-events-none">
             <p class="text-ink font-semibold text-sm leading-snug line-clamp-2">{{ titleOf(anime) }}</p>
             <p v-if="anime.type === 'SONG' && (anime.artists || []).length" class="text-[11px] text-sub truncate mt-0.5">{{ anime.artists.join(', ') }}</p>
+            <p v-else-if="movieYear(anime)" class="text-[11px] text-sub mt-0.5 font-mono">{{ movieYear(anime) }}</p>
             <template v-if="entry">
                 <p v-if="anime.type === 'GAME'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }">{{ entry.progress || 0 }} HRS<span v-if="ach" class="poster-ach" :title="'Steam achievements: ' + ach.done + ' of ' + ach.total"><i class="fa-solid fa-trophy"></i>{{ ach.done }}/{{ ach.total }}</span></p>
                 <p v-else-if="anime.type === 'SONG'" class="mt-1 font-mono text-[10px] font-bold tracking-wide" :style="{ color: STATUS_COLORS[entry.status] }"><i class="fa-solid fa-play text-[8px] mr-1"></i>{{ entry.progress || 0 }} {{ entry.progress === 1 ? 'PLAY' : 'PLAYS' }}</p>
@@ -7659,8 +7662,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.14';
+        const APP_VERSION = '1.6.15';
         const WHATS_NEW = {
+            '1.6.15': [
+                { icon: 'fa-calendar', t: 'Movies show their year', d: 'Every movie shows the year it came out under its name, so two movies with the same name are easy to tell apart.' },
+            ],
             '1.6.13': [
                 { icon: 'fa-film', t: 'Movies and TV shows, two lists', d: 'In Movies & TV → Lists, a switch at the top picks your Movies list or your TV shows list (it remembers which).' },
             ],
@@ -12421,7 +12427,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             listFilterStatus, listSearchQuery, filteredGroupedList, statusCounts, listFiltersOn, clearListFilters,
             groupSeasons, seriesOn, seriesState, listSeries, seriesSummary, retrySeries, compareQ, compareRows, compareSeries, compareCount,
             togetherCount, plMine, plPeople, plShared, plInvite, plInviteList, plInviteFriends, openPlInvite, togglePlMember, leavePlaylist, groupPicBusy, changeGroupPic, chatQ, chatFriendHits, chatNewFriends, chatOthers, openChatHit, REPEAT_TYPES,
-            listFormat, listFormats, tvKindOn, tvKindCounts, setTvKind, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
+            movieYear, listFormat, listFormats, tvKindOn, tvKindCounts, setTvKind, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
             debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails,             profileStats, profileStatCards, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
