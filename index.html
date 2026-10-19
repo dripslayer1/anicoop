@@ -32,12 +32,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.6.15">
+    <link rel="stylesheet" href="app.css?v=1.7.0">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="app.js?v=1.6.15" defer></script>
+    <script src="gym.js?v=1.7.0" defer></script>
+    <script src="app.js?v=1.7.0" defer></script>
 </head>
 <body>
 
@@ -150,7 +151,7 @@
                     <p class="mt-6 text-lg md:text-xl text-sub leading-relaxed intro-el i-rise" style="--d:2">Track anime, manga, movies<template v-if="songsOn">, games &amp; music</template><template v-else> &amp; games</template> together.<br class="hidden sm:block"> Built by fans, for fans + content creators.</p>
                     <p class="label mt-9 mb-3 intro-el i-late" style="--d:0">Pick your world</p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                        <button v-for="(s, n) in sectionList" :key="s.id" @click.stop="openSection(s.id)" @mouseenter="warmSection(s.id)" @touchstart.passive="warmSection(s.id)" class="tile intro-el i-late" :class="{ 'tile-wide': sectionList.length % 2 === 1 && n === sectionList.length - 1 }" :style="{ '--d': n, '--c': s.color }">
+                        <button v-for="(s, n) in sectionList" :key="s.id" @click.stop="openSection(s.id)" @mouseenter="warmSection(s.id)" @touchstart.passive="warmSection(s.id)" class="tile intro-el i-late" :style="{ '--d': n, '--c': s.color }">
                             <span class="tile-icon"><i :class="s.icon" class="fa-solid"></i></span>
                             <span class="min-w-0 text-left">
                                 <span class="flex items-center gap-2 flex-wrap">
@@ -159,6 +160,15 @@
                                     <span v-else class="tile-badge soon">soon</span>
                                 </span>
                                 <span class="block text-xs text-sub mt-1 line-clamp-1">{{ s.blurb }}</span>
+                            </span>
+                            <i class="fa-solid fa-arrow-right text-xs text-mute ml-auto tile-arrow"></i>
+                        </button>
+                        <!-- v1.7.0 the Gym -->
+                        <button @click.stop="openGym" class="tile intro-el i-late" :class="{ 'tile-wide': sectionList.length % 2 === 0 }" :style="{ '--d': sectionList.length, '--c': GYM_TILE.color }">
+                            <span class="tile-icon"><i :class="GYM_TILE.icon" class="fa-solid"></i></span>
+                            <span class="min-w-0 text-left">
+                                <span class="flex items-center gap-2 flex-wrap"><span class="font-display font-semibold text-volt text-[15px] leading-tight">{{ GYM_TILE.label }}</span><span class="tile-badge">new</span></span>
+                                <span class="block text-xs text-sub mt-1 line-clamp-1">{{ GYM_TILE.blurb }}</span>
                             </span>
                             <i class="fa-solid fa-arrow-right text-xs text-mute ml-auto tile-arrow"></i>
                         </button>
@@ -231,9 +241,9 @@
                         </button>
                         <span class="hdr-divider" aria-hidden="true"></span>
                         <div class="relative shrink-0" @click.stop>
-                            <button @click="sectionMenu = !sectionMenu" class="section-switch" :class="{ 'is-open': sectionMenu }" :style="{ '--c': currentSection.color }" title="Switch section">
-                                <span class="section-switch-icon"><i :class="currentSection.icon" class="fa-solid"></i></span>
-                                <span class="font-display text-[14px] font-bold text-ink whitespace-nowrap section-switch-name"><span class="sw-full">{{ currentSection.short }}</span><span class="sw-tiny">{{ currentSection.tiny || currentSection.short }}</span></span>
+                            <button @click="sectionMenu = !sectionMenu" class="section-switch" :class="{ 'is-open': sectionMenu }" :style="{ '--c': activeTab === 'gym' ? GYM_TILE.color : currentSection.color }" title="Switch section">
+                                <span class="section-switch-icon"><i :class="activeTab === 'gym' ? GYM_TILE.icon : currentSection.icon" class="fa-solid"></i></span>
+                                <span class="font-display text-[14px] font-bold text-ink whitespace-nowrap section-switch-name"><span class="sw-full">{{ activeTab === 'gym' ? 'Gym' : currentSection.short }}</span><span class="sw-tiny">{{ activeTab === 'gym' ? 'Gym' : currentSection.tiny || currentSection.short }}</span></span>
                                 <i class="fa-solid fa-chevron-down text-[10px] ml-1 transition-transform duration-200" :class="{ 'rotate-180': sectionMenu }"></i>
                             </button>
                             <transition name="pop">
@@ -244,6 +254,11 @@
                                         {{ s.label }}
                                         <span v-if="!s.live" class="ml-auto font-mono text-[9px] font-bold text-volt">SOON</span>
                                         <i v-else-if="section === s.id" class="fa-solid fa-check ml-auto text-[10px]"></i>
+                                    </button>
+                                    <button @click="openGym" class="qa-row" :class="{ 'bg-overlay': activeTab === 'gym' }">
+                                        <span class="w-7 h-7 rounded-lg flex items-center justify-center text-onaccent text-[11px] shrink-0" :style="{ background: GYM_TILE.color }"><i class="fa-solid fa-dumbbell"></i></span>
+                                        Gym
+                                        <i v-if="activeTab === 'gym'" class="fa-solid fa-check ml-auto text-[10px]"></i>
                                     </button>
                                     <div class="h-px bg-line my-1 mx-1"></div>
                                     <button @click="sectionMenu = false; goHome()" class="qa-row text-sub hover:text-ink"><i class="fa-solid fa-house text-[11px] w-7 text-center"></i> Home</button>
@@ -1761,6 +1776,10 @@
                 </main>
 
                 <!-- ===== FEEDBACK (everyone sees it, up/down votes) ===== -->
+                <!-- v1.7.0 the Gym (gym.js) -->
+                <main v-else-if="activeTab === 'gym'" key="gym" class="w-full max-w-5xl mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
+                    <gym-section :user="currentUser?.id || ''" :toast="showToast" :confirm="askConfirm"></gym-section>
+                </main>
                 <main v-else-if="activeTab === 'feedback'" key="feedback" class="w-full max-w-3xl mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-28 md:pb-20">
                     <p class="kicker">// help build anicoop</p>
                     <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Feedback</h1>
@@ -5678,5 +5697,481 @@
 </div>
 
 <noscript><p style="color:#fff;font-family:sans-serif;padding:2rem">anicoop needs JavaScript turned on.</p></noscript>
+    <!-- ============ v1.7.0 GYM (gym.js) ============ -->
+    <script type="text/x-template" id="gym-template">
+    <div class="gym">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+                <p class="kicker">// train · eat · grow</p>
+                <h1 class="mt-2 font-display font-bold text-ink text-4xl md:text-5xl tracking-tight">Gym</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="seg"><button v-for="u in ['kg', 'lb']" :key="u" @click="setUnits(u)" class="seg-btn !px-3" :class="{ 'is-on': S.settings.units === u }">{{ u }}</button></div>
+                <button @click="sett.open = true" class="icon-btn !w-10 !h-10" title="Gym settings"><i class="fa-solid fa-sliders text-xs"></i></button>
+            </div>
+        </div>
+        <nav class="gym-tabs mt-6" role="tablist">
+            <button v-for="t in GYM_TABS" :key="t[0]" @click="tab = t[0]" class="gym-tab" :class="{ on: tab === t[0] }" role="tab" :aria-selected="tab === t[0]">
+                <i class="fa-solid" :class="t[2]"></i><span>{{ t[1] }}</span><span v-if="t[0] === 'workout' && active" class="gym-live"></span>
+            </button>
+        </nav>
+
+        <div v-if="S.missing" class="gym-note mt-6"><i class="fa-solid fa-database"></i><span>The gym needs its database tables: run <b>supabase/v1.7.0-gym.sql</b> in Supabase → SQL Editor once, then reload.</span></div>
+        <div v-else-if="S.error" class="gym-note mt-6"><i class="fa-solid fa-triangle-exclamation"></i><span>{{ S.error }}</span></div>
+        <div v-else-if="S.loading" class="mt-8 grid gap-3"><div class="h-24 rounded-2xl skeleton"></div><div class="h-40 rounded-2xl skeleton"></div></div>
+
+        <template v-else>
+        <!-- ===== TODAY ===== -->
+        <section v-if="tab === 'today'" class="mt-6 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <div class="gym-card">
+                <p class="label">{{ GYM_DAYS[new Date().getDay()] }} · today’s training</p>
+                <template v-if="active">
+                    <h2 class="gym-h2 mt-2"><i class="fa-solid fa-circle text-[8px] text-[#22c55e] mr-2 align-middle"></i>{{ active.name }} is on</h2>
+                    <p class="text-sm text-sub mt-1">{{ elapsed }} · {{ active.exercises.length }} exercises</p>
+                    <button @click="tab = 'workout'" class="btn-primary mt-4"><i class="fa-solid fa-dumbbell"></i> Back to it</button>
+                </template>
+                <template v-else-if="todayRoutine">
+                    <h2 class="gym-h2 mt-2">{{ todayRoutine.name }}</h2>
+                    <ul class="gym-list mt-3">
+                        <li v-for="e in todayRoutine.exercises" :key="e.name"><span class="text-ink">{{ e.name }}</span><span class="text-mute">{{ e.sets }} × {{ e.reps || '—' }}</span></li>
+                    </ul>
+                    <button @click="startWorkout(todayRoutine)" class="btn-primary mt-4"><i class="fa-solid fa-play"></i> Start workout</button>
+                </template>
+                <template v-else>
+                    <h2 class="gym-h2 mt-2">{{ S.routines.length ? 'Rest day' : 'No plan yet' }}</h2>
+                    <p class="text-sm text-sub mt-1">{{ S.routines.length ? 'Nothing planned today. Recover, or train anyway.' : 'Pick a ready plan (Push / Pull / Legs, Upper / Lower…) or make your own routines in Plan.' }}</p>
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        <button @click="startWorkout()" class="btn-primary"><i class="fa-solid fa-plus"></i> Empty workout</button>
+                        <button @click="tab = 'plan'" class="btn-ghost"><i class="fa-solid fa-calendar-week"></i> {{ S.routines.length ? 'My plan' : 'Make a plan' }}</button>
+                    </div>
+                </template>
+            </div>
+            <div class="grid gap-4">
+                <div class="gym-card">
+                    <div class="flex items-center justify-between"><p class="label">Food today</p><button @click="tab = 'food'" class="text-xs font-bold text-sub hover:text-ink">Log food <i class="fa-solid fa-arrow-right text-[10px]"></i></button></div>
+                    <div class="gym-bar mt-3"><span>Calories</span><b>{{ Math.round(todayTotals.kcal) }} / {{ S.settings.targets.kcal }}</b><div><i :style="{ width: pctOf(todayTotals.kcal, S.settings.targets.kcal) + '%' }"></i></div></div>
+                    <div class="gym-bar mt-2 p"><span>Protein</span><b>{{ Math.round(todayTotals.p) }} / {{ S.settings.targets.p }} g</b><div><i :style="{ width: pctOf(todayTotals.p, S.settings.targets.p) + '%' }"></i></div></div>
+                </div>
+                <div class="gym-card">
+                    <p class="label">Body weight</p>
+                    <p v-if="today.weight" class="gym-big mt-2">{{ showW(today.weight) }} <small>{{ unit }}</small> <span class="text-xs text-mute font-normal">today</span></p>
+                    <form @submit.prevent="logWeight()" class="flex gap-2 mt-2">
+                        <input v-model="weightIn" type="number" step="0.1" inputmode="decimal" :placeholder="today.weight ? 'Change today’s weight' : 'Weigh in (' + unit + ')'" class="field !py-2">
+                        <button class="btn-primary !px-4 shrink-0" :disabled="!weightIn">Save</button>
+                    </form>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="gym-stat"><b>{{ thisWeek.length }}</b><span>this week</span></div>
+                    <div class="gym-stat"><b>{{ streak }}</b><span>week streak</span></div>
+                    <div class="gym-stat"><b>{{ S.workouts.length }}</b><span>workouts</span></div>
+                </div>
+            </div>
+            <div v-if="S.workouts.length" class="gym-card lg:col-span-2">
+                <p class="label">Last workout</p>
+                <div class="flex flex-wrap items-baseline gap-x-3 mt-2"><h3 class="text-ink font-semibold">{{ S.workouts[0].name }}</h3><span class="text-xs text-mute">{{ fmtDate(S.workouts[0].started_at) }} · {{ S.workouts[0].exercises.length }} exercises · {{ Math.round(show(workoutVol(S.workouts[0]))) }} {{ unit }} lifted</span></div>
+                <p class="text-xs text-sub mt-1 line-clamp-2">{{ S.workouts[0].exercises.map(e => e.name).join(' · ') }}</p>
+            </div>
+        </section>
+
+        <!-- ===== WORKOUT ===== -->
+        <section v-if="tab === 'workout'" class="mt-6">
+            <template v-if="active">
+                <div class="gym-card gym-wk-head">
+                    <input v-model="active.name" maxlength="80" class="gym-title-in" aria-label="Workout name">
+                    <span class="gym-timer"><i class="fa-regular fa-clock"></i> {{ elapsed }}</span>
+                    <div class="flex gap-2 ml-auto">
+                        <button @click="discard" class="btn-ghost !px-3" title="Discard"><i class="fa-solid fa-trash-can"></i></button>
+                        <button @click="finish" class="btn-primary"><i class="fa-solid fa-flag-checkered"></i> Finish</button>
+                    </div>
+                </div>
+                <div v-for="(e, i) in active.exercises" :key="i + e.name" class="gym-card mt-3">
+                    <div class="flex items-start gap-2">
+                        <div class="min-w-0 flex-grow">
+                            <h3 class="text-ink font-semibold">{{ e.name }} <span class="gym-tag">{{ e.muscle }}</span><span v-if="e.reps" class="gym-tag">target {{ e.reps }}</span></h3>
+                            <p v-if="lastText(e.name)" class="text-[11px] text-mute mt-0.5">Last time: {{ lastText(e.name) }}</p>
+                            <p v-if="e.hint" class="gym-hint" :class="{ up: e.up }"><i class="fa-solid" :class="e.up ? 'fa-arrow-trend-up' : 'fa-repeat'"></i>{{ e.hint }}</p>
+                        </div>
+                        <button @click="moveEx(i, -1)" :disabled="i === 0" class="icon-btn !w-8 !h-8" title="Move up"><i class="fa-solid fa-arrow-up text-[10px]"></i></button>
+                        <button @click="moveEx(i, 1)" :disabled="i === active.exercises.length - 1" class="icon-btn !w-8 !h-8" title="Move down"><i class="fa-solid fa-arrow-down text-[10px]"></i></button>
+                        <button @click="removeEx(i)" class="icon-btn !w-8 !h-8" title="Remove"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </div>
+                    <div class="gym-sets mt-3">
+                        <div class="gym-set head"><span>Set</span><span>Previous</span><span>{{ fieldLabel(e.kind, 0) || '' }}</span><span>{{ fieldLabel(e.kind, 1) }}</span><span></span></div>
+                        <div v-for="(s, k) in e.sets" :key="k" class="gym-set" :class="{ done: s.done }">
+                            <span class="font-mono text-xs text-mute">{{ k + 1 }}</span>
+                            <span class="text-[11px] text-mute truncate">{{ prevOf(e, k) }}</span>
+                            <input v-if="fieldLabel(e.kind, 0)" v-model="s.w" type="number" step="any" inputmode="decimal" class="gym-in" :aria-label="fieldLabel(e.kind, 0)"><span v-else></span>
+                            <input v-model="s.r" type="number" step="1" inputmode="numeric" class="gym-in" :placeholder="e.reps ? String(e.reps).split('-')[0] : ''" :aria-label="fieldLabel(e.kind, 1)">
+                            <span class="flex gap-1 justify-end">
+                                <button @click="toggleDone(e, s)" class="gym-check" :class="{ on: s.done }" :title="s.done ? 'Not done' : 'Done (starts the rest timer)'"><i class="fa-solid fa-check"></i></button>
+                                <button @click="removeSet(e, k)" class="gym-x" title="Remove set"><i class="fa-solid fa-minus"></i></button>
+                            </span>
+                        </div>
+                    </div>
+                    <button @click="addSet(e)" class="gym-add mt-2"><i class="fa-solid fa-plus"></i> Add set</button>
+                </div>
+                <button @click="openPicker('workout')" class="gym-add-big mt-3"><i class="fa-solid fa-plus"></i> Add exercise</button>
+                <textarea v-model="active.notes" rows="2" maxlength="2000" placeholder="Notes (how it felt, anything to remember)" class="field mt-3 resize-none"></textarea>
+            </template>
+            <template v-else>
+                <div class="gym-card text-center py-8">
+                    <i class="fa-solid fa-dumbbell text-3xl text-mute"></i>
+                    <h2 class="gym-h2 mt-3">Start a workout</h2>
+                    <p class="text-sm text-sub mt-1">Weights and reps from last time are filled in, with what to aim for today.</p>
+                    <div class="flex flex-wrap justify-center gap-2 mt-4">
+                        <button v-if="todayRoutine" @click="startWorkout(todayRoutine)" class="btn-primary"><i class="fa-solid fa-play"></i> {{ todayRoutine.name }} (today)</button>
+                        <button v-for="r in S.routines.filter(r => r !== todayRoutine)" :key="r.id" @click="startWorkout(r)" class="btn-ghost">{{ r.name }}</button>
+                        <button @click="startWorkout()" class="btn-ghost"><i class="fa-solid fa-plus"></i> Empty</button>
+                    </div>
+                </div>
+            </template>
+            <h3 class="label mt-8 mb-3">History · {{ S.workouts.length }}</h3>
+            <p v-if="!S.workouts.length" class="text-sm text-mute">Finished workouts show up here.</p>
+            <div v-for="w in S.workouts.slice(0, 60)" :key="w.id" class="gym-hist">
+                <button @click="openWorkout = openWorkout === w.id ? null : w.id" class="flex items-center gap-3 w-full text-left">
+                    <span class="gym-date"><b>{{ new Date(w.started_at).getDate() }}</b><small>{{ new Date(w.started_at).toLocaleDateString(undefined, { month: 'short' }) }}</small></span>
+                    <span class="min-w-0 flex-grow"><span class="block text-ink font-semibold text-sm truncate">{{ w.name }}</span><span class="block text-[11px] text-mute truncate">{{ w.exercises.length }} exercises · {{ w.exercises.reduce((a, e) => a + e.sets.length, 0) }} sets{{ w.ended_at ? ' · ' + fmtDur(new Date(w.ended_at) - new Date(w.started_at)) : '' }} · {{ Math.round(show(workoutVol(w))) }} {{ unit }}</span></span>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-mute transition-transform" :class="{ 'rotate-180': openWorkout === w.id }"></i>
+                </button>
+                <div v-if="openWorkout === w.id" class="mt-3 pl-1">
+                    <div v-for="e in w.exercises" :key="e.name" class="flex gap-3 text-xs py-1"><span class="text-ink font-semibold w-40 shrink-0 truncate">{{ e.name }}</span><span class="text-sub">{{ e.sets.map(s => setText(s, e.kind)).join(' · ') }}</span></div>
+                    <p v-if="w.notes" class="text-xs text-sub mt-2 whitespace-pre-line">“{{ w.notes }}”</p>
+                    <div class="flex gap-3 mt-3"><button @click="startWorkout(null, w)" class="text-xs font-bold text-sub hover:text-ink"><i class="fa-solid fa-rotate-right mr-1"></i>Do it again</button><button @click="deleteWorkout(w)" class="text-xs font-bold text-mute hover:text-rose-400"><i class="fa-solid fa-trash-can mr-1"></i>Delete</button></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== PLAN ===== -->
+        <section v-if="tab === 'plan'" class="mt-6 grid gap-4">
+            <div class="gym-card">
+                <p class="label">Your week</p>
+                <div class="gym-week mt-3">
+                    <div v-for="d in weekOrder" :key="d" class="gym-day" :class="{ today: d === new Date().getDay(), rest: !S.settings.schedule[d] }">
+                        <span class="gym-day-n">{{ GYM_DAYS[d].slice(0, 3) }}</span>
+                        <div class="chip-wrap w-full"><select :value="S.settings.schedule[d] || ''" @change="setDay(d, $event.target.value)" class="chip w-full !text-xs" :aria-label="GYM_DAYS[d]"><option value="">Rest</option><option v-for="r in S.routines" :key="r.id" :value="r.id">{{ r.name }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="gym-card">
+                <div class="flex items-center justify-between gap-2"><p class="label">Routines · {{ S.routines.length }}</p><button @click="openRoutine()" class="btn-primary !py-2 !px-4 !text-xs"><i class="fa-solid fa-plus"></i> New routine</button></div>
+                <p v-if="!S.routines.length" class="text-sm text-mute mt-3">No routines yet: make one, or add a ready plan below.</p>
+                <div class="grid sm:grid-cols-2 gap-3 mt-3">
+                    <div v-for="r in S.routines" :key="r.id" class="gym-routine">
+                        <div class="flex items-start gap-2"><h3 class="text-ink font-semibold flex-grow">{{ r.name }}</h3><span class="text-[11px] text-mute">{{ weekOrder.filter(d => S.settings.schedule[d] === r.id).map(d => GYM_DAYS[d].slice(0, 3)).join(' · ') }}</span></div>
+                        <p class="text-xs text-sub mt-1 line-clamp-2">{{ r.exercises.map(e => e.name + ' ' + e.sets + '×' + (e.reps || '?')).join(' · ') || 'No exercises yet' }}</p>
+                        <div class="flex gap-3 mt-3"><button @click="startWorkout(r)" class="text-xs font-bold text-volt"><i class="fa-solid fa-play mr-1"></i>Start</button><button @click="openRoutine(r)" class="text-xs font-bold text-sub hover:text-ink"><i class="fa-solid fa-pen mr-1"></i>Edit</button><button @click="deleteRoutine(r)" class="text-xs font-bold text-mute hover:text-rose-400 ml-auto"><i class="fa-solid fa-trash-can"></i></button></div>
+                    </div>
+                </div>
+            </div>
+            <div class="gym-card">
+                <p class="label">Ready plans</p>
+                <p class="text-xs text-sub mt-1">Adds the routines and fills in your week. Change anything after.</p>
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                    <button v-for="t in GYM_TEMPLATES" :key="t.id" @click="applyTemplate(t)" class="gym-tpl"><b>{{ t.name }}</b><span>{{ t.note }} · {{ t.routines.map(r => r[0]).join(', ') }}</span></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== PROGRESS ===== -->
+        <section v-if="tab === 'progress'" class="mt-6 grid gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="gym-stat"><b>{{ thisWeek.length }}</b><span>workouts this week</span></div>
+                <div class="gym-stat"><b>{{ streak }}</b><span>week streak</span></div>
+                <div class="gym-stat"><b>{{ weeks[weeks.length - 1].vol.toLocaleString() }}</b><span>{{ unit }} lifted this week</span></div>
+                <div class="gym-stat"><b>{{ S.workouts.length }}</b><span>workouts in total</span></div>
+            </div>
+            <div class="gym-card">
+                <div class="flex flex-wrap items-center gap-2">
+                    <p class="label flex-grow">Strength · progressive overload</p>
+                    <div class="chip-wrap"><select v-model="prog.ex" class="chip !text-xs" aria-label="Exercise"><option v-for="x in loggedExercises" :key="x.name" :value="x.name">{{ x.name }} ({{ x.n }})</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                </div>
+                <p v-if="!loggedExercises.length" class="text-sm text-mute mt-3">Finish a workout and your progress shows here.</p>
+                <template v-else>
+                    <p class="text-[11px] text-mute mt-2">{{ isWeighted(progKind) ? 'Best estimated 1-rep max per workout (' + unit + ')' : 'Best per workout' }}</p>
+                    <svg v-if="progChart" :viewBox="'0 0 ' + progChart.w + ' ' + progChart.h" class="gym-chart" role="img" aria-label="Progress chart">
+                        <line v-for="t in progChart.ticks" :key="t.y" x1="34" :x2="progChart.w - 8" :y1="t.y" :y2="t.y" class="grid" /><text v-for="t in progChart.ticks" :key="'l' + t.y" x="0" :y="t.y + 3" class="tick">{{ t.v }}</text>
+                        <path :d="progChart.area" class="area" /><path :d="progChart.d" class="line" />
+                        <circle v-for="(p, i) in progChart.dots" :key="i" :cx="p.x" :cy="p.y" r="3.5" class="dot"><title>{{ fmtDate(p.at) }}: {{ p.v }}</title></circle>
+                    </svg>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3">
+                        <div v-for="p in prs" :key="p.l" class="gym-pr"><span>{{ p.l }}</span><b>{{ p.v }}</b><small v-if="p.at">{{ fmtDate(p.at) }}</small></div>
+                    </div>
+                    <div class="mt-4">
+                        <div v-for="s in progSessions.slice(-8).reverse()" :key="s.id" class="flex gap-3 text-xs py-1.5 border-t border-line"><span class="text-mute w-24 shrink-0">{{ fmtDate(s.at) }}</span><span class="text-sub">{{ s.sets.map(x => setText(x, progKind)).join(' · ') }}</span></div>
+                    </div>
+                </template>
+            </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+                <div class="gym-card">
+                    <p class="label">Volume per week ({{ unit }})</p>
+                    <div class="gym-cols mt-4"><div v-for="w in weeks" :key="w.s" class="gym-col" :title="w.n + ' workouts · ' + w.vol.toLocaleString() + ' ' + unit"><i :style="{ height: Math.max(3, w.pct) + '%' }"></i><span>{{ w.label }}</span></div></div>
+                </div>
+                <div class="gym-card">
+                    <p class="label">Sets per muscle this week</p>
+                    <div class="mt-3 grid gap-1.5">
+                        <div v-for="m in muscleSets" :key="m.m" class="gym-mbar"><span>{{ m.m }}</span><div><i :style="{ width: m.pct + '%' }"></i></div><b>{{ m.n }}</b></div>
+                    </div>
+                    <p class="text-[11px] text-mute mt-2">About 10–20 hard sets per muscle a week works for most people.</p>
+                </div>
+            </div>
+            <div class="gym-card">
+                <p class="label">Last 16 weeks</p>
+                <div class="gym-heat mt-3">
+                    <div v-for="(col, c) in heat" :key="c" class="gym-heat-col"><span v-for="d in col" :key="d.d" :class="['l' + Math.min(d.n, 3), { future: d.future }]" :title="fmtDay(d.d) + (d.n ? ': ' + d.n + ' workout' + (d.n > 1 ? 's' : '') : '')"></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== FOOD ===== -->
+        <section v-if="tab === 'food'" class="mt-6 grid gap-4">
+            <div class="flex items-center gap-2">
+                <button @click="goDay(-1)" class="icon-btn !w-10 !h-10" title="Day before"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                <button @click="goDay(0)" class="font-display font-bold text-ink text-lg px-2">{{ fmtDay(S.foodsDay) }}</button>
+                <button @click="goDay(1)" class="icon-btn !w-10 !h-10" title="Day after"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                <div class="ml-auto flex gap-2">
+                    <button @click="copyYesterday" class="btn-ghost !py-2 !px-3 !text-xs" title="Copy everything from the day before"><i class="fa-regular fa-copy"></i> <span class="hidden sm:inline">Copy day before</span></button>
+                    <button @click="tg.open = true" class="btn-ghost !py-2 !px-3 !text-xs"><i class="fa-solid fa-bullseye"></i> <span class="hidden sm:inline">Targets</span></button>
+                </div>
+            </div>
+            <div class="gym-card">
+                <div class="gym-kcal">
+                    <div class="gym-ring" :style="{ '--p': pctOf(totals.kcal, S.settings.targets.kcal) }"><b>{{ Math.round(totals.kcal) }}</b><span>of {{ S.settings.targets.kcal }} kcal</span></div>
+                    <div class="grid gap-2 flex-grow">
+                        <div class="gym-bar p"><span>Protein</span><b>{{ Math.round(totals.p) }} / {{ S.settings.targets.p }} g</b><div><i :style="{ width: pctOf(totals.p, S.settings.targets.p) + '%' }"></i></div></div>
+                        <div class="gym-bar c"><span>Carbs</span><b>{{ Math.round(totals.c) }} / {{ S.settings.targets.c }} g</b><div><i :style="{ width: pctOf(totals.c, S.settings.targets.c) + '%' }"></i></div></div>
+                        <div class="gym-bar f"><span>Fat</span><b>{{ Math.round(totals.f) }} / {{ S.settings.targets.f }} g</b><div><i :style="{ width: pctOf(totals.f, S.settings.targets.f) + '%' }"></i></div></div>
+                        <p class="text-[11px] text-mute">{{ totals.kcal <= S.settings.targets.kcal ? Math.round(S.settings.targets.kcal - totals.kcal) + ' kcal left' : Math.round(totals.kcal - S.settings.targets.kcal) + ' kcal over' }}</p>
+                    </div>
+                </div>
+            </div>
+            <div v-for="m in GYM_MEALS" :key="m[0]" class="gym-card">
+                <div class="flex items-center gap-2"><i class="fa-solid text-mute text-xs" :class="m[2]"></i><h3 class="text-ink font-semibold flex-grow">{{ m[1] }}</h3><span class="text-xs text-mute">{{ mealKcal(m[0]) }} kcal</span><button @click="openFood(m[0])" class="icon-btn !w-8 !h-8" :title="'Add to ' + m[1].toLowerCase()"><i class="fa-solid fa-plus text-xs"></i></button></div>
+                <div v-for="f in mealFoods(m[0])" :key="f.id" class="gym-food">
+                    <span class="min-w-0 flex-grow"><span class="block text-sm text-ink truncate">{{ f.name }}</span><span class="block text-[11px] text-mute">{{ f.grams ? Math.round(f.grams) + ' g · ' : '' }}P {{ r1(f.protein) }} · C {{ r1(f.carbs) }} · F {{ r1(f.fat) }}</span></span>
+                    <b class="text-sm text-ink shrink-0">{{ Math.round(f.kcal) }}</b>
+                    <button @click="removeFood(f)" class="gym-x" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="gym-card">
+                <div class="flex items-center gap-2"><i class="fa-solid fa-droplet text-[#38bdf8]"></i><h3 class="text-ink font-semibold flex-grow">Water</h3><span class="text-xs text-mute">{{ (water / 1000).toFixed(2) }} / {{ (S.settings.targets.water / 1000).toFixed(1) }} L</span></div>
+                <div class="gym-bar w mt-2"><div><i :style="{ width: pctOf(water, S.settings.targets.water) + '%' }"></i></div></div>
+                <div class="flex gap-2 mt-3"><button v-for="ml in [250, 500]" :key="ml" @click="addWater(ml)" class="btn-ghost !py-2 !px-3 !text-xs">+{{ ml }} ml</button><button @click="addWater(-250)" :disabled="!water" class="btn-ghost !py-2 !px-3 !text-xs">−250</button></div>
+            </div>
+        </section>
+
+        <!-- ===== BODY ===== -->
+        <section v-if="tab === 'body'" class="mt-6 grid gap-4">
+            <div class="gym-card">
+                <form @submit.prevent="logWeight()" class="flex flex-wrap items-center gap-2">
+                    <p class="label flex-grow">Weigh in today</p>
+                    <input v-model="weightIn" type="number" step="0.1" inputmode="decimal" :placeholder="unit" class="field !py-2 !w-32">
+                    <button class="btn-primary !px-4" :disabled="!weightIn">Save</button>
+                </form>
+                <div v-if="bodyStats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    <div class="gym-stat"><b>{{ bodyStats.now }}</b><span>{{ unit }} · {{ fmtDay(bodyStats.day) }}</span></div>
+                    <div class="gym-stat"><b>{{ bodyStats.avg }}</b><span>7-day average</span></div>
+                    <div class="gym-stat"><b>{{ bodyStats.change == null ? '–' : (bodyStats.change > 0 ? '+' : '') + bodyStats.change }}</b><span>vs 4 weeks ago</span></div>
+                    <div class="gym-stat"><b>{{ bodyStats.left == null ? '–' : Math.abs(bodyStats.left) }}</b><span>{{ bodyStats.goal ? unit + ' to ' + bodyStats.goal + ' ' + unit : 'set a goal in ⚙' }}</span></div>
+                </div>
+            </div>
+            <div class="gym-card">
+                <div class="flex items-center gap-2"><p class="label flex-grow">Weight ({{ unit }})</p><div class="seg"><button v-for="n in [30, 90, 365]" :key="n" @click="bodyRange = n" class="seg-btn !px-2.5 !text-xs" :class="{ 'is-on': bodyRange === n }">{{ n === 365 ? '1y' : n + 'd' }}</button></div></div>
+                <p v-if="!weightChart" class="text-sm text-mute mt-3">Weigh in a few times and your trend shows here (the line is the 7-day average: it evens out water weight).</p>
+                <svg v-else :viewBox="'0 0 ' + weightChart.w + ' ' + weightChart.h" class="gym-chart mt-2" role="img" aria-label="Weight chart">
+                    <line v-for="t in weightChart.ticks" :key="t.y" x1="34" :x2="weightChart.w - 8" :y1="t.y" :y2="t.y" class="grid" /><text v-for="t in weightChart.ticks" :key="'l' + t.y" x="0" :y="t.y + 3" class="tick">{{ t.v }}</text>
+                    <circle v-for="(p, i) in weightChart.dots" :key="i" :cx="p.x" :cy="p.y" r="2.5" class="dot faint"><title>{{ fmtDate(p.at) }}: {{ p.v }}</title></circle>
+                    <path :d="weightChart.avg" class="line" />
+                </svg>
+            </div>
+            <div class="gym-card">
+                <p class="label">Log</p>
+                <div v-for="d in weights.slice(-30).reverse()" :key="d.day" class="flex items-center gap-3 text-sm py-1.5 border-t border-line first:border-0">
+                    <span class="text-mute w-28">{{ fmtDay(d.day) }}</span><b class="text-ink">{{ showW(d.weight) }} {{ unit }}</b><span v-if="d.bodyfat" class="text-xs text-mute">{{ d.bodyfat }}% fat</span>
+                    <button @click="saveDay(d.day, { weight: null })" class="gym-x ml-auto" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <p v-if="!weights.length" class="text-sm text-mute">Nothing yet.</p>
+            </div>
+        </section>
+
+        <!-- ===== TOOLS ===== -->
+        <section v-if="tab === 'tools'" class="mt-6 grid gap-4 lg:grid-cols-2">
+            <div class="gym-card">
+                <p class="label">1-rep max</p>
+                <div class="flex gap-2 mt-3"><input v-model="orm.w" type="number" step="any" inputmode="decimal" :placeholder="'Weight (' + unit + ')'" class="field !py-2"><input v-model="orm.r" type="number" inputmode="numeric" placeholder="Reps" class="field !py-2 !w-24"></div>
+                <template v-if="ormValue">
+                    <p class="gym-big mt-3">{{ Math.round(ormValue * 2) / 2 }} <small>{{ unit }}</small> <span class="text-xs text-mute font-normal">estimated 1RM</span></p>
+                    <div class="grid grid-cols-5 gap-1.5 mt-3"><div v-for="x in ormTable" :key="x.p" class="gym-pr !p-2"><span>{{ x.p }}% · {{ x.r }}</span><b>{{ x.w }}</b></div></div>
+                </template>
+            </div>
+            <div class="gym-card">
+                <p class="label">Plates &amp; warm-up</p>
+                <div class="flex gap-2 mt-3"><input v-model="plate.target" type="number" step="any" inputmode="decimal" :placeholder="'Weight on the bar (' + unit + ')'" class="field !py-2"><input v-model.number="S.settings.bar" @change="saveSettings" type="number" step="any" class="field !py-2 !w-28" :title="'The bar (' + unit + ')'" :placeholder="'Bar ' + unit"></div>
+                <template v-if="plateResult">
+                    <p v-if="plateResult.err" class="text-sm text-rose-400 mt-3">{{ plateResult.err }}</p>
+                    <template v-else>
+                        <p class="text-xs text-mute mt-3">On each side of the {{ plateResult.bar }} {{ unit }} bar:</p>
+                        <div class="gym-plates mt-2"><span v-for="(p, i) in plateResult.side" :key="i" class="gym-plate" :style="{ height: (34 + Math.min(p, 25) * 2) + 'px' }">{{ p }}</span><span v-if="!plateResult.side.length" class="text-sm text-sub">Just the bar</span></div>
+                        <p v-if="plateResult.rest" class="text-[11px] text-mute mt-1">{{ plateResult.rest }} {{ unit }} can’t be made with your plates.</p>
+                        <p class="text-xs text-mute mt-4">Warm-up</p>
+                        <div class="grid grid-cols-4 gap-1.5 mt-1.5"><div v-for="x in warmups" :key="x.p" class="gym-pr !p-2"><span>{{ x.p }}% × {{ x.r }}</span><b>{{ x.w }}</b></div></div>
+                    </template>
+                </template>
+            </div>
+        </section>
+        </template>
+
+        <!-- rest timer -->
+        <transition name="pop"><div v-if="rest.on" class="gym-rest" role="timer">
+            <svg viewBox="0 0 36 36" class="gym-rest-ring"><circle cx="18" cy="18" r="15.5" class="bg" /><circle cx="18" cy="18" r="15.5" class="fg" :style="{ strokeDashoffset: 97.4 * (1 - rest.left / rest.total) }" /></svg>
+            <div class="min-w-0"><p class="text-[10px] font-mono font-bold tracking-widest text-mute">REST</p><p class="font-display font-bold text-ink text-xl leading-none">{{ clock(rest.left) }}</p></div>
+            <button @click="restAdd(-15)" class="gym-rbtn">−15</button><button @click="restAdd(15)" class="gym-rbtn">+15</button><button @click="stopRest" class="gym-rbtn" title="Skip"><i class="fa-solid fa-forward"></i></button>
+        </div></transition>
+
+        <!-- pick an exercise -->
+        <div v-if="picker.open" class="modal-back !z-[80]" @click.self="picker.open = false">
+            <div class="modal-card max-w-lg p-5 gym-modal">
+                <div class="flex items-center gap-2"><h3 class="font-display font-bold text-ink text-lg flex-grow">Add an exercise</h3><button @click="picker.open = false" class="icon-btn !w-8 !h-8" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button></div>
+                <input v-model="picker.q" placeholder="Search (bench, curl, legs…)" class="field mt-3" v-focus-select>
+                <div class="flex flex-wrap gap-1.5 mt-2"><button @click="picker.muscle = ''" class="gym-chip" :class="{ on: !picker.muscle }">All</button><button v-for="m in GYM_MUSCLES" :key="m" @click="picker.muscle = picker.muscle === m ? '' : m" class="gym-chip" :class="{ on: picker.muscle === m }">{{ m }}</button></div>
+                <div class="gym-pick-list mt-3">
+                    <button v-for="e in pickerList" :key="e.name" @click="pickEx(e)" class="gym-pick"><span class="min-w-0 flex-grow"><span class="block text-sm text-ink">{{ e.name }}</span><span class="block text-[11px] text-mute">{{ e.muscle }} · {{ e.eq }}</span></span><span v-if="usedCount[e.name]" class="text-[10px] text-mute">{{ usedCount[e.name] }}×</span></button>
+                    <p v-if="!pickerList.length" class="text-sm text-mute p-3">Not in the list: add it below.</p>
+                </div>
+                <div class="mt-3 border-t border-line pt-3">
+                    <button v-if="!picker.adding" @click="picker.adding = true; picker.custom.name = picker.q" class="text-xs font-bold text-sub hover:text-ink"><i class="fa-solid fa-plus mr-1"></i>My own exercise</button>
+                    <form v-else @submit.prevent="addCustom" class="grid gap-2">
+                        <input v-model="picker.custom.name" maxlength="60" placeholder="Name" class="field !py-2">
+                        <div class="flex gap-2">
+                            <div class="chip-wrap flex-1"><select v-model="picker.custom.muscle" class="chip w-full !text-xs"><option v-for="m in GYM_MUSCLES" :key="m">{{ m }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                            <div class="chip-wrap flex-1"><select v-model="picker.custom.kind" class="chip w-full !text-xs"><option value="w">Weight × reps</option><option value="bw">Bodyweight reps</option><option value="t">Time (seconds)</option><option value="c">Cardio (km + min)</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                        </div>
+                        <button class="btn-primary !py-2" :disabled="!picker.custom.name.trim()">Add</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- a routine -->
+        <div v-if="editR.open" class="modal-back !z-[75]" @click.self="editR.open = false">
+            <div class="modal-card max-w-lg p-5 gym-modal">
+                <div class="flex items-center gap-2"><h3 class="font-display font-bold text-ink text-lg flex-grow">{{ editR.id ? 'Edit routine' : 'New routine' }}</h3><button @click="editR.open = false" class="icon-btn !w-8 !h-8" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button></div>
+                <input v-model="editR.name" maxlength="80" placeholder="Name (Push, Leg day…)" class="field mt-3">
+                <div class="gym-pick-list mt-3">
+                    <div v-for="(e, i) in editR.exercises" :key="i" class="gym-rx">
+                        <span class="min-w-0 flex-grow text-sm text-ink truncate">{{ e.name }}</span>
+                        <label class="gym-mini"><span>sets</span><input v-model="e.sets" type="number" min="1" max="20" inputmode="numeric"></label>
+                        <label class="gym-mini"><span>reps</span><input v-model="e.reps" maxlength="12" placeholder="8-12"></label>
+                        <label class="gym-mini"><span>rest s</span><input v-model="e.rest" type="number" inputmode="numeric" :placeholder="String(S.settings.restSec)"></label>
+                        <span class="flex flex-col"><button @click="moveREx(i, -1)" class="gym-x !h-4" title="Up"><i class="fa-solid fa-caret-up"></i></button><button @click="moveREx(i, 1)" class="gym-x !h-4" title="Down"><i class="fa-solid fa-caret-down"></i></button></span>
+                        <button @click="editR.exercises.splice(i, 1)" class="gym-x" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <p v-if="!editR.exercises.length" class="text-sm text-mute p-2">No exercises yet.</p>
+                </div>
+                <button @click="openPicker('routine')" class="gym-add mt-2"><i class="fa-solid fa-plus"></i> Add exercise</button>
+                <p class="text-[11px] text-mute mt-2">Reps as a range (8-12): once you hit the top on every set, the workout tells you to go up in weight.</p>
+                <div class="flex gap-2 mt-4"><button @click="editR.open = false" class="btn-ghost flex-1 !py-2.5">Cancel</button><button @click="saveRoutine" :disabled="editR.saving" class="btn-primary flex-1 !py-2.5">Save</button></div>
+            </div>
+        </div>
+
+        <!-- add food -->
+        <div v-if="fd.open" class="modal-back !z-[75]" @click.self="fd.open = false">
+            <div class="modal-card max-w-lg p-5 gym-modal">
+                <div class="flex items-center gap-2"><h3 class="font-display font-bold text-ink text-lg flex-grow">Add to {{ GYM_MEALS.find(m => m[0] === fd.meal)[1].toLowerCase() }}</h3><button @click="fd.open = false" class="icon-btn !w-8 !h-8" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button></div>
+                <template v-if="fd.pick">
+                    <div class="gym-card !p-4 mt-3">
+                        <p class="text-ink font-semibold">{{ fd.pick.name }}</p>
+                        <p v-if="fd.pick.per100" class="text-[11px] text-mute mt-0.5">Per 100 g: {{ fd.pick.per100.kcal }} kcal · P {{ fd.pick.per100.p }} · C {{ fd.pick.per100.c }} · F {{ fd.pick.per100.f }}</p>
+                        <div v-if="fd.pick.per100" class="flex items-center gap-2 mt-3">
+                            <input v-model="fd.grams" type="number" step="any" inputmode="decimal" class="field !py-2 !w-28" v-focus-select aria-label="Grams"><span class="text-sm text-sub">g</span>
+                            <button v-if="fd.pick.serving" @click="fd.grams = fd.pick.serving" class="gym-chip">1 serving ({{ fd.pick.serving }} g)</button>
+                            <button v-for="g in [50, 100, 200]" :key="g" @click="fd.grams = g" class="gym-chip">{{ g }} g</button>
+                        </div>
+                        <p v-if="pickMacros" class="mt-3 text-sm"><b class="text-ink text-lg">{{ pickMacros.kcal }}</b> kcal · <span class="text-sub">P {{ pickMacros.p }} g · C {{ pickMacros.c }} g · F {{ pickMacros.f }} g</span></p>
+                    </div>
+                    <div class="flex gap-2 mt-4"><button @click="fd.pick = null" class="btn-ghost flex-1 !py-2.5">Back</button><button @click="addPicked" class="btn-primary flex-1 !py-2.5">Add</button></div>
+                </template>
+                <template v-else-if="fd.quick">
+                    <form @submit.prevent="addQuick" class="grid gap-2 mt-3">
+                        <input v-model="fd.qk.name" maxlength="120" placeholder="What did you eat?" class="field !py-2" v-focus-select>
+                        <div class="grid grid-cols-4 gap-2"><label class="gym-mini !w-auto"><span>kcal</span><input v-model="fd.qk.kcal" type="number" step="any" inputmode="decimal"></label><label class="gym-mini !w-auto"><span>protein</span><input v-model="fd.qk.p" type="number" step="any" inputmode="decimal"></label><label class="gym-mini !w-auto"><span>carbs</span><input v-model="fd.qk.c" type="number" step="any" inputmode="decimal"></label><label class="gym-mini !w-auto"><span>fat</span><input v-model="fd.qk.f" type="number" step="any" inputmode="decimal"></label></div>
+                        <div class="flex gap-2 mt-2"><button type="button" @click="fd.quick = false" class="btn-ghost flex-1 !py-2.5">Back</button><button class="btn-primary flex-1 !py-2.5">Add</button></div>
+                    </form>
+                </template>
+                <template v-else>
+                    <div class="flex gap-2 mt-3">
+                        <input v-model="fd.q" placeholder="Search food (chicken, oats, a brand…)" class="field" v-focus-select>
+                        <button @click="fd.quick = true; fd.qk.name = fd.q" class="btn-ghost !px-3 shrink-0" title="Quick add: type the calories yourself"><i class="fa-solid fa-pen"></i></button>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <input v-model="fd.code" @keydown.enter.prevent="lookupCode(fd.code)" inputmode="numeric" placeholder="Barcode number" class="field !py-2 !text-sm">
+                        <button @click="lookupCode(fd.code)" :disabled="!fd.code" class="btn-ghost !px-3 !py-2 !text-xs shrink-0">Look up</button>
+                        <button v-if="canScan" @click="fd.scanning ? stopScan() : startScan()" class="btn-ghost !px-3 !py-2 shrink-0" title="Scan a barcode"><i class="fa-solid fa-barcode"></i></button>
+                    </div>
+                    <video v-show="fd.scanning" id="gym-scan" class="gym-scan mt-2" muted playsinline></video>
+                    <p v-if="fd.err" class="text-xs text-rose-400 mt-2">{{ fd.err }}</p>
+                    <div class="gym-pick-list mt-3">
+                        <template v-if="recentHits.length"><p class="gym-sub">{{ fd.q.trim() ? 'You had' : 'Recent' }}</p><button v-for="r in recentHits" :key="'r' + r.name" @click="chooseRecent(r)" class="gym-pick"><span class="min-w-0 flex-grow"><span class="block text-sm text-ink truncate">{{ r.name }}</span><span class="block text-[11px] text-mute">{{ r.grams ? Math.round(r.grams) + ' g · ' : '' }}{{ Math.round(r.kcal) }} kcal · P {{ r1(r.protein) }}</span></span></button></template>
+                        <template v-if="basicHits.length"><p class="gym-sub">Basics</p><button v-for="f in basicHits" :key="'b' + f.name" @click="choose(f)" class="gym-pick"><span class="min-w-0 flex-grow"><span class="block text-sm text-ink truncate">{{ f.name }}</span><span class="block text-[11px] text-mute">per 100 g · {{ f.per100.kcal }} kcal · P {{ f.per100.p }} · C {{ f.per100.c }} · F {{ f.per100.f }}</span></span></button></template>
+                        <template v-if="fd.results.length"><p class="gym-sub">Open Food Facts</p><button v-for="(f, i) in fd.results" :key="'o' + i" @click="choose(f)" class="gym-pick"><span class="min-w-0 flex-grow"><span class="block text-sm text-ink truncate">{{ f.name }}</span><span class="block text-[11px] text-mute">per 100 g · {{ f.per100.kcal }} kcal · P {{ f.per100.p }} · C {{ f.per100.c }} · F {{ f.per100.f }}</span></span></button></template>
+                        <p v-if="fd.searching" class="text-xs text-mute p-2"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>Searching…</p>
+                        <p v-else-if="fd.q.trim().length >= 3 && !fd.results.length && !basicHits.length" class="text-xs text-mute p-2">Nothing found: use quick add (✎).</p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- macro targets -->
+        <div v-if="tg.open" class="modal-back !z-[75]" @click.self="tg.open = false">
+            <div class="modal-card max-w-md p-5 gym-modal">
+                <div class="flex items-center gap-2"><h3 class="font-display font-bold text-ink text-lg flex-grow">Daily targets</h3><button @click="tg.open = false" class="icon-btn !w-8 !h-8" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button></div>
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                    <label class="gym-mini !w-auto"><span>calories</span><input v-model.number="S.settings.targets.kcal" @change="saveSettings" type="number"></label>
+                    <label class="gym-mini !w-auto"><span>protein g</span><input v-model.number="S.settings.targets.p" @change="saveSettings" type="number"></label>
+                    <label class="gym-mini !w-auto"><span>carbs g</span><input v-model.number="S.settings.targets.c" @change="saveSettings" type="number"></label>
+                    <label class="gym-mini !w-auto"><span>fat g</span><input v-model.number="S.settings.targets.f" @change="saveSettings" type="number"></label>
+                    <label class="gym-mini !w-auto col-span-2"><span>water ml</span><input v-model.number="S.settings.targets.water" @change="saveSettings" type="number" step="250"></label>
+                </div>
+                <button @click="tg.calc = !tg.calc" class="text-xs font-bold text-sub hover:text-ink mt-4"><i class="fa-solid fa-calculator mr-1"></i>Work them out for me</button>
+                <div v-if="tg.calc" class="gym-card !p-4 mt-2 grid gap-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="seg !flex"><button v-for="s in [['m', 'Male'], ['f', 'Female']]" :key="s[0]" @click="S.settings.profile.sex = s[0]" class="seg-btn flex-1 !text-xs" :class="{ 'is-on': S.settings.profile.sex === s[0] }">{{ s[1] }}</button></div>
+                        <label class="gym-mini !w-auto"><span>age</span><input v-model.number="S.settings.profile.age" type="number"></label>
+                        <label class="gym-mini !w-auto"><span>height cm</span><input v-model.number="S.settings.profile.height" type="number"></label>
+                        <label class="gym-mini !w-auto"><span>weight {{ unit }}</span><input v-model="calcWeight" type="number" step="any" :placeholder="weights.length ? String(showW(weights[weights.length - 1].weight)) : ''"></label>
+                    </div>
+                    <div class="chip-wrap w-full"><select v-model.number="S.settings.profile.activity" class="chip w-full !text-xs"><option v-for="a in GYM_ACTIVITY" :key="a[0]" :value="a[0]">{{ a[1] }}</option></select><i class="fa-solid fa-chevron-down"></i></div>
+                    <div class="seg !flex"><button v-for="g in [['cut', 'Lose fat'], ['maintain', 'Maintain'], ['bulk', 'Build muscle']]" :key="g[0]" @click="S.settings.profile.goal = g[0]" class="seg-btn flex-1 !text-xs" :class="{ 'is-on': S.settings.profile.goal === g[0] }">{{ g[1] }}</button></div>
+                    <p class="text-sm mt-1"><b class="text-ink">{{ calcResult.kcal }} kcal</b> <span class="text-sub">· P {{ calcResult.p }} g · C {{ calcResult.c }} g · F {{ calcResult.f }} g</span></p>
+                    <p class="text-[11px] text-mute">Burn about {{ calcResult.tdee }} kcal a day ({{ calcResult.bmr }} at rest). A guide, not a rule: adjust after 2–3 weeks by how your weight moves.</p>
+                    <button @click="useCalc" class="btn-primary !py-2">Use these</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- settings -->
+        <div v-if="sett.open" class="modal-back !z-[75]" @click.self="sett.open = false">
+            <div class="modal-card max-w-md p-5 gym-modal">
+                <div class="flex items-center gap-2"><h3 class="font-display font-bold text-ink text-lg flex-grow">Gym settings</h3><button @click="sett.open = false" class="icon-btn !w-8 !h-8" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button></div>
+                <div class="grid gap-3 mt-3">
+                    <div class="flex items-center justify-between gap-3"><span class="text-sm text-ink">Units</span><div class="seg"><button v-for="u in ['kg', 'lb']" :key="u" @click="setUnits(u)" class="seg-btn !px-3" :class="{ 'is-on': S.settings.units === u }">{{ u }}</button></div></div>
+                    <label class="flex items-center justify-between gap-3"><span class="text-sm text-ink">Rest timer (seconds)</span><input v-model.number="S.settings.restSec" @change="saveSettings" type="number" step="15" min="0" class="field !py-2 !w-28"></label>
+                    <label class="flex items-center justify-between gap-3"><span class="text-sm text-ink">Goal weight ({{ unit }})</span><input :value="S.settings.goalWeight ? showW(S.settings.goalWeight) : ''" @change="S.settings.goalWeight = $event.target.value ? (lb ? num($event.target.value) / 2.20462 : num($event.target.value)) : null; saveSettings()" type="number" step="0.1" class="field !py-2 !w-28"></label>
+                    <p class="text-[11px] text-mute">Your gym data is private: only you can see it.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- workout done -->
+        <div v-if="summary" class="modal-back !z-[80]" @click.self="summary = null">
+            <div class="modal-card max-w-sm p-6 text-center">
+                <i class="fa-solid fa-trophy text-4xl text-volt"></i>
+                <h3 class="font-display font-bold text-ink text-xl mt-3">{{ summary.name }} done!</h3>
+                <div class="grid grid-cols-3 gap-2 mt-4"><div class="gym-stat"><b>{{ summary.dur }}</b><span>time</span></div><div class="gym-stat"><b>{{ summary.sets }}</b><span>sets</span></div><div class="gym-stat"><b>{{ summary.vol.toLocaleString() }}</b><span>{{ unit }} lifted</span></div></div>
+                <div v-if="summary.prs.length" class="mt-4 text-left"><p class="label mb-1.5">New records</p><p v-for="p in summary.prs" :key="p" class="text-sm text-ink py-0.5"><i class="fa-solid fa-medal text-volt mr-1.5"></i>{{ p }}</p></div>
+                <button @click="summary = null" class="btn-primary w-full mt-5">Nice</button>
+            </div>
+        </div>
+    </div>
+    </script>
 </body>
 </html>
