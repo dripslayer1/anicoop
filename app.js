@@ -1,6 +1,7 @@
 /* ==================================================================
    anicoop v6 — app logic (Vue 3 + Supabase + AniList)
    ================================================================== */
+/* global GymSection */   // (v1.7.0 gym.js, loaded before this file)
 const { createApp, ref, shallowRef, reactive, computed, onMounted, watch, nextTick, markRaw } = Vue;
 
 // The publishable key is safe to expose – security comes from the RLS policies in supabase_setup.sql
@@ -104,6 +105,8 @@ const SECTIONS = {
     songs:  { id: 'songs',  label: 'Songs', short: 'Songs', type: 'SONG', live: true, color: '#1DB954', icon: 'fa-music',
               blurb: 'Songs you love, like & your own playlists.' },
 };
+// v1.7.0 the Gym isn't a media section: its own page (gym.js), opened from Home, the section menu and the header
+const GYM_TILE = { id: 'gym', label: 'Gym', short: 'Gym', color: '#f97316', icon: 'fa-dumbbell', blurb: 'Workouts, progressive overload, your plan & macros.' };
 const SECTION_OF_TYPE = { ANIME: 'anime', MANGA: 'manga', GAME: 'games', TV: 'movies', SONG: 'songs' };
 // short word for a media type, used in sentences ("this game", "plans to play")
 const TYPE_WORD = { ANIME: 'anime', MANGA: 'manga', GAME: 'game', TV: 'show', SONG: 'song' };
@@ -6907,6 +6910,7 @@ createApp({
             else if (currentAppView.value !== 'home') goHome();
         };
         const goHome = () => navigate(() => { currentAppView.value = 'home'; selectedAnime.value = null; viewUserId.value = null; entity.value = null; resetSelection(); });
+        const openGym = () => { sectionMenu.value = false; openTracker('gym'); };   // v1.7.0
         const openTracker = (tab) => navigate(() => { currentAppView.value = 'tracker'; activeTab.value = tab; selectedAnime.value = null; viewUserId.value = null; entity.value = null; });
         const switchTab = (tab) => navigate(() => {
             if (activeTab.value !== tab) { clearListFilters(); resetSelection(); }
@@ -7662,8 +7666,14 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.6.15';
+        const APP_VERSION = '1.7.0';
         const WHATS_NEW = {
+            '1.7.0': [
+                { icon: 'fa-dumbbell', t: 'The Gym', d: 'A new Gym page (Home, or the section menu): log workouts set by set with last time’s numbers and what to aim for today (progressive overload), a rest timer, records and strength charts.' },
+                { icon: 'fa-calendar-week', t: 'Your plan', d: 'Make routines and put them in your week, or start from a ready plan: Push / Pull / Legs, Upper / Lower, Full body, 5 × 5, Bro split.' },
+                { icon: 'fa-apple-whole', t: 'Food & macros', d: 'Log what you eat by meal (search, barcodes, quick add), see calories, protein, carbs and fat against your targets (it can work them out for you), and water.' },
+                { icon: 'fa-weight-scale', t: 'Body & tools', d: 'Your weight with a 7-day average trend, plus a 1-rep max calculator, a plate calculator and warm-up sets.' },
+            ],
             '1.6.15': [
                 { icon: 'fa-calendar', t: 'Movies show their year', d: 'Every movie shows the year it came out under its name, so two movies with the same name are easy to tell apart.' },
             ],
@@ -12427,7 +12437,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             listFilterStatus, listSearchQuery, filteredGroupedList, statusCounts, listFiltersOn, clearListFilters,
             groupSeasons, seriesOn, seriesState, listSeries, seriesSummary, retrySeries, compareQ, compareRows, compareSeries, compareCount,
             togetherCount, plMine, plPeople, plShared, plInvite, plInviteList, plInviteFriends, openPlInvite, togglePlMember, leavePlaylist, groupPicBusy, changeGroupPic, chatQ, chatFriendHits, chatNewFriends, chatOthers, openChatHit, REPEAT_TYPES,
-            movieYear, listFormat, listFormats, tvKindOn, tvKindCounts, setTvKind, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
+            movieYear, GYM_TILE, openGym, showToast, askConfirm, listFormat, listFormats, tvKindOn, tvKindCounts, setTvKind, listWith, listWithFriends, toggleListWith, strictSolo, partyType, partyMissing, partyInvites, posterTags, tagsOf, partyDraft, openPartyDraft, partyFriends, togglePartyPick, partyHas, partyDraftCompleted, recentSquads, sendPartyInvites, answerInvite, inviteFor, cancelInvite, leaveParty, detailParty, partyHooks, inviteFrom, invitePeople, sectionInvites, openGroupList, PARTY_STATE_LABEL, joinNames, sharedWith, openSharedWith, batchInvite,
             friendsList, pendingRequests, sentRequests, friendUsername, friendBusy, addFriend, acceptRequest, deleteFriendship, removeFriend,
             debouncedSearch, fetchMainList, openEditor, closeEditor, saveEditor, saveInline, fetchAnimeDetails,             profileStats, profileStatCards, favCharacters, toggleFavChar, isFavChar, isOnMyList, daysActive,
             continueWatching, progressPct, bumpEpisode, removeEverywhere,
@@ -12484,7 +12494,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             loadMoreBrowse, moreError, quickFormats, checkListMedia, genreOptions, GAME_PLATFORMS, platformFamilies, CHART_COUNTRIES, typeWord, isAniListType, fmtDuration, mediaType, songPlayerId, songSpotifyUrl, addMulti, removeMulti, hasMulti, activeChips, TV_TAGS, TV_TAG_GROUPS,
         };
     }
-}).component('quick-add', QuickAdd).component('track-row', TrackRow).component('poster-card', PosterCard).component('user-avatar', UserAvatar).component('score-input', ScoreInput).directive('infinite', InfiniteScroll).directive('dock-height', DockHeight).directive('drag-fab', DragFab).directive('focus-select', { mounted: (el) => setTimeout(() => { el.focus(); el.select?.(); }, 60) }).mount('#app');
+}).component('gym-section', typeof GymSection !== 'undefined' ? GymSection : { template: '<p class="p-8 text-sub">The gym didn’t load: reload the page.</p>' }).component('quick-add', QuickAdd).component('track-row', TrackRow).component('poster-card', PosterCard).component('user-avatar', UserAvatar).component('score-input', ScoreInput).directive('infinite', InfiniteScroll).directive('dock-height', DockHeight).directive('drag-fab', DragFab).directive('focus-select', { mounted: (el) => setTimeout(() => { el.focus(); el.select?.(); }, 60) }).mount('#app');
 
 // Offline support + "install as app"
 // (v1.5 not on this computer's own test server: app.js is served from the saved copy until its ?v= changes, which would

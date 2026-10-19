@@ -1571,3 +1571,24 @@ No SQL / Edge Function, no What's new. The switch stretched to the width of the 
 
 No SQL / Edge Function change. Movie cards (Browse, Lists, rows, a friend's list) show the year under the name, and
 the side panel's Top 5 rows after it (`movieYear`: a movie's `seasonYear`, already saved on list entries).
+
+## v1.7.0 — the Gym
+
+**SQL:** run `supabase/v1.7.0-gym.sql` once (also in `supabase_setup.sql`). No Edge Function change. New file
+`gym.js` (loaded before `app.js`, cached by the service worker); its template is `#gym-template` at the end of
+`index.html`.
+
+A Gym page (Home tile, the section menu; the header switch says Gym), not a media section: `activeTab = 'gym'`.
+Tabs: **Today** (today's routine, food and weight at a glance), **Workout** (log sets with last time's numbers and the
+next step, rest timer, records when you finish, history), **Plan** (routines, the week, 5 ready plans), **Progress**
+(estimated 1RM chart and records per exercise, volume per week, sets per muscle this week, 16-week calendar, streak),
+**Food** (meals, search: built-in basics + Open Food Facts through our server, barcodes typed or scanned where the
+browser can, quick add, recent, copy the day before, targets + a calculator, water), **Body** (weight with a 7-day
+average, change over 4 weeks, goal) and **Tools** (1RM table, plates, warm-up sets). kg or lb (stored in kg).
+
+- Tables (all private: `auth.uid() = user_id`): `gym_settings` (units, rest timer, week, targets, custom exercises),
+  `gym_routines`, `gym_workouts` (exercises jsonb with their sets), `gym_foods`, `gym_days` (weight / body fat /
+  water per day).
+- Progressive overload ("double progression"): every set at the top of the rep range (8-12 → 12) → more weight
+  (+2.5 kg; +5 kg for legs; +2 kg dumbbells; lb: +5 / +10), else the same weight and one more rep. No range: 12 reps.
+- The workout you're doing is kept in this browser (`anicoop_gym_active:<you>`) until you finish or discard it.
