@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.7.0'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.7.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.7.0'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.7.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -307,7 +307,7 @@ These are cumulative; the README has one section per version.
   elements inside one `<transition>`.** **Resume reading:** readPos records `n` (pages in the chapter) and is also
   saved to the row (`media_data.rp`, `readPos` in listRow / entryData / withRepeats) by `syncReadPos` — a plain
   `update` 5 s after the last page turn, or when the reader closes / the tab hides (no AniList / MAL push).
-  `resumeReading` takes the newest of local / account; last page reached → next chapter; only if progress passed it
+  `backToReading` takes the newest of local / account; last page reached → next chapter; only if progress passed it
   and the row was updated after it → `continueChapter`. Tested with MangaDex (Ki ni Natteru Hito ga Otoko ja Nakatta).
 - **v1.3 Steam account** (Edge Function changed; secret `STEAM_API_KEY` added by the owner): endpoint `steamuser` —
   `verify` (OpenID 2.0 `check_authentication` against steamcommunity.com, claimed_id → 17-digit SteamID, then
@@ -497,6 +497,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.14**: `.tv-kind` switch gets `w-fit` (it stretched to the title's width).
 - **v1.6.15**: `movieYear(a)` (module level, also in PosterCard): the year under a movie's name on cards and after it in the side panel.
 - **v1.7.0** (SQL `supabase/v1.7.0-gym.sql`): the Gym. `gym.js` = `GymSection` (props user / toast / confirm; uses app.js's `sb` + `siteFetch` at run time), template `#gym-template` (x-template at the end of index.html, outside #app), registered as `<gym-section>` in `activeTab === 'gym'` (`openGym`, `GYM_TILE`). Data: `gym_settings` / `gym_routines` / `gym_workouts` / `gym_foods` / `gym_days`, own rows only. Lifts kept in kg (`show` / `toKg`), body weight `showW`. `suggest()` = double progression; `sessionsOf` / `prs` / `chart()` (inline SVG). sw.js caches gym.js; bump its `?v=` with app.js.
+- **v1.7.1**: `rdResume` / `backToReading` / `dropResume` + `.rd-peek` (closeReader keeps your place); `rdList` (the reader's own chapter list, `openChapter(…, { list })`). Song sheet: `sheetAction` PLAY / LIKE / PLAYLIST / OPEN. Phones: `askVideoTap` shows the YouTube video for one tap (`player.needTap`) instead of "tap play" → preview.
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

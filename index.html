@@ -32,13 +32,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.7.0">
+    <link rel="stylesheet" href="app.css?v=1.7.1">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="gym.js?v=1.7.0" defer></script>
-    <script src="app.js?v=1.7.0" defer></script>
+    <script src="gym.js?v=1.7.1" defer></script>
+    <script src="app.js?v=1.7.1" defer></script>
 </head>
 <body>
 
@@ -3231,6 +3231,14 @@
     <!-- ============ FRIENDS PANEL ============ -->
         <!-- profile page background (Settings → Profile → Page background), behind everything -->
         <teleport to="body"><transition name="fade"><div v-if="pageBg" class="profile-bg" :class="pageBg.cls" :style="pageBg.style" aria-hidden="true"></div></transition></teleport>
+        <!-- v1.7.1 back to the chapter you were reading (from anywhere) -->
+        <transition name="to-top"><div v-if="rdResume && !rd.open && currentUser" class="rd-peek-wrap" v-drag-fab:reading>
+            <button @click="backToReading" class="rd-peek" :title="'Back to ' + titleOf(rdResume.manga) + (rdResume.chapter.ch ? ' · chapter ' + rdResume.chapter.ch : '') + ' · page ' + (rdResume.page + 1)" :aria-label="'Back to reading ' + titleOf(rdResume.manga)">
+                <img v-if="rdResume.manga?.coverImage?.large" :src="rdResume.manga.coverImage.large" alt="">
+                <span class="rd-peek-badge"><i class="fa-solid fa-book-open"></i><template v-if="rdResume.chapter.ch">{{ rdResume.chapter.ch }}</template></span>
+            </button>
+            <button @click.stop="dropResume" class="rd-peek-x" title="Forget my place" aria-label="Forget my place"><i class="fa-solid fa-xmark"></i></button>
+        </div></transition>
         <!-- back to top: shows once you've scrolled a good way down -->
         <transition name="to-top"><button v-if="showToTop && currentUser && currentAppView !== 'home'" @click="scrollToTop" class="to-top" title="Back to top" aria-label="Back to top"><i class="fa-solid fa-arrow-up"></i></button></transition>
         <!-- song preview mini player (the same audio as every play button; the volume is remembered) -->
@@ -4874,6 +4882,26 @@
         <div v-if="sheetAnime" class="fixed inset-0 z-[78] bg-black/60" @click="closeSheet">
             <div class="sheet-panel absolute bottom-0 inset-x-0 bg-surface border-t border-line rounded-t-[28px] px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]" @click.stop>
                 <div class="w-10 h-1 rounded-full bg-line2 mx-auto mb-5"></div>
+                <!-- v1.7.1 a song: its own menu -->
+                <template v-if="sheetAnime.type === 'SONG'">
+                    <div class="flex items-center gap-3.5 mb-5">
+                        <img :src="sheetAnime.coverImage?.large" class="w-14 h-14 rounded-xl object-cover ring-1 ring-line2" alt="">
+                        <div class="min-w-0">
+                            <p class="label">Song</p>
+                            <p class="text-ink font-semibold truncate mt-0.5">{{ titleOf(sheetAnime) }}</p>
+                            <p class="text-[12px] text-sub truncate mt-0.5">{{ (sheetAnime.artists || []).join(', ') }}<span v-if="soloEntry(sheetAnime.id)?.progress" class="font-mono text-mute"> · ▶ {{ soloEntry(sheetAnime.id).progress }}</span></p>
+                        </div>
+                    </div>
+                    <button @click="sheetAction('PLAY')" class="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-volt text-onvolt font-bold active:scale-[.98] transition-transform"><i class="fa-solid" :class="isPlaying(sheetAnime) ? 'fa-pause' : 'fa-play'"></i> {{ isPlaying(sheetAnime) ? 'Pause' : 'Play now' }}</button>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <button @click="sheetAction('LIKE')" :class="isLikedSong(sheetAnime) ? 'bg-overlay ring-1 ring-line2 text-ink' : 'bg-raised text-sub'" class="py-3.5 rounded-2xl text-sm font-semibold active:scale-95 transition-transform"><i class="fa-heart mr-2" :class="isLikedSong(sheetAnime) ? 'fa-solid text-[#ff4d8d]' : 'fa-regular'"></i>{{ isLikedSong(sheetAnime) ? 'Liked' : 'Like' }}</button>
+                        <button @click="sheetAction('PLAYLIST')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold active:scale-95 transition-transform"><i class="fa-solid fa-circle-plus mr-2 text-xs"></i>Add to playlist</button>
+                        <button v-if="player.song && !isPlaying(sheetAnime)" @click="sheetAction('NEXT')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold active:scale-95 transition-transform"><i class="fa-solid fa-forward-step mr-2 text-xs text-volt"></i>Play next</button>
+                        <button @click="sheetAction('OPEN')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold active:scale-95 transition-transform" :class="{ 'col-span-2': !player.song || isPlaying(sheetAnime) }"><i class="fa-solid fa-music mr-2 text-xs"></i>Song page</button>
+                        <button v-if="isOnMyList(sheetAnime.id)" @click="sheetAction('REMOVE')" class="py-3.5 rounded-2xl bg-rose-500/10 text-rose-300 text-sm font-semibold col-span-2"><i class="fa-solid fa-trash-can mr-2 text-xs"></i>Remove from my songs</button>
+                    </div>
+                </template>
+                <template v-else>
                 <div class="flex items-center gap-3.5 mb-5">
                     <img :src="sheetAnime.coverImage?.large" class="w-12 h-[72px] rounded-xl object-cover ring-1 ring-line2" alt="">
                     <div class="min-w-0">
@@ -4883,7 +4911,6 @@
                     </div>
                 </div>
                 <!-- v3.5 songs: play it after the one that's playing -->
-                <button v-if="sheetAnime.type === 'SONG'" @click="sheetAction('NEXT')" class="w-full flex items-center justify-center gap-2 py-3.5 mb-2 rounded-2xl bg-raised text-ink font-semibold active:scale-[.98] transition-transform"><i class="fa-solid fa-forward-step text-sm text-volt"></i> {{ player.song ? 'Play next' : 'Play now' }}</button>
                 <button @click="sheetAction('EP')" class="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-volt text-onvolt font-bold active:scale-[.98] transition-transform"><span class="font-mono">+1</span> {{ UNIT.ep }}</button>
                 <div class="grid grid-cols-3 gap-2 mt-2">
                     <button v-for="s in ['PLANNING','WATCHING','COMPLETED']" :key="s" @click="sheetAction(s)" :class="soloEntry(sheetAnime.id)?.status === s ? 'bg-overlay ring-1 ring-line2 text-ink' : 'bg-raised text-sub'" class="flex flex-col items-center gap-2 py-3.5 rounded-2xl active:scale-95 transition-transform">
@@ -4906,6 +4933,7 @@
                     <button @click="sheetAction('EDIT')" class="py-3.5 rounded-2xl bg-raised text-ink text-sm font-semibold"><i class="fa-solid fa-pen mr-2 text-xs"></i>Edit & more</button>
                     <button @click="sheetAction('REMOVE')" :disabled="!isOnMyList(sheetAnime.id)" class="py-3.5 rounded-2xl bg-rose-500/10 text-rose-300 text-sm font-semibold disabled:opacity-30"><i class="fa-solid fa-trash-can mr-2 text-xs"></i>Remove all</button>
                 </div>
+                </template>
             </div>
         </div>
     </transition>
