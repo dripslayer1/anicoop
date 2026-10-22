@@ -1592,3 +1592,16 @@ average, change over 4 weeks, goal) and **Tools** (1RM table, plates, warm-up se
 - Progressive overload ("double progression"): every set at the top of the rep range (8-12 → 12) → more weight
   (+2.5 kg; +5 kg for legs; +2 kg dumbbells; lb: +5 / +10), else the same weight and one more rep. No range: 12 reps.
 - The workout you're doing is kept in this browser (`anicoop_gym_active:<you>`) until you finish or discard it.
+
+## v1.7.1 — back to your chapter, the song menu on phones, full songs on phones
+
+No SQL / Edge Function change.
+
+- **Back to your chapter:** closing the reader in the middle of a chapter keeps your place (`rdResume`: the chapter,
+  the page, the manga's chapter list); a round cover button (bottom-left, draggable, × to forget) reopens it at that page.
+  The reader keeps its own chapter list (`rdList`), so next / previous follow the manga you read even after browsing others.
+- **Song menu on phones:** the + sheet for a song is the song's own: Play now / Pause, Like, Add to playlist, Play next,
+  Song page, Remove (it had the watching statuses: +1 Play, Saved, Liked twice, On Hold…).
+- **Full songs on phones:** phones (iPhones above all) only start YouTube with sound from a tap on YouTube's own player.
+  When it won't start by itself, the small video shows up and asks for one tap (`askVideoTap`); before, it asked for
+  the app's play button (which phones don't count) and then played the 30-second preview.

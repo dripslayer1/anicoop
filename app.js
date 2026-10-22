@@ -5414,7 +5414,7 @@ createApp({
             song: null, playing: false, loading: false, t: 0, dur: 30, muted: false,
             vol: (() => { try { const v = parseFloat(localStorage.getItem(VOL_KEY)); return isNaN(v) ? 0.7 : clamp(v, 0, 1); } catch { return 0.7; } })(),
             queue: [], qi: -1, next: [], shuffle: !!pPrefs.shuffle, repeat: ['off', 'all', 'one'].includes(pPrefs.repeat) ? pPrefs.repeat : 'off',
-            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '', ytId: '',
+            full: pPrefs.full !== false, mode: null, video: false, queueOpen: false, hidden: false, status: '', why: '', ytId: '', needTap: false,
         });
         const savePlayerPrefs = () => { try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ shuffle: player.shuffle, repeat: player.repeat, full: player.full })); } catch {} };
         const saveVol = () => { try { localStorage.setItem(VOL_KEY, String(player.vol)); } catch {} };
@@ -5455,7 +5455,7 @@ createApp({
                     onStateChange: (e) => {
                         if (player.mode !== 'yt') return;
                         ytState = e.data;
-                        if (e.data === 1) { player.playing = true; player.loading = false; player.status = ''; clearTimeout(ytStartCheck); ytWaiter?.('ok'); }
+                        if (e.data === 1) { player.playing = true; player.loading = false; player.status = ''; clearTimeout(ytStartCheck); ytWaiter?.('ok'); if (player.needTap) { player.needTap = false; if (tapVideo) { tapVideo = false; player.video = false; } } }
                         else if (e.data === 2) {
                             player.playing = false;
                             // v9.8 phones pause YouTube when the screen locks or you leave the tab: start it again (you didn't pause it)
@@ -5482,6 +5482,16 @@ createApp({
         };
         watch(() => songsOn.value && !!currentUser.value && (section.value === 'songs' || music.open || !!player.song || selectedAnime.value?.type === 'SONG'), (on) => { if (on) warmSongs(); }, { immediate: true });
         let ytState = -1, ytWaiter = null, userPausedAt = 0, bgPaused = false;
+        // v1.7.1 phones (iPhones above all) only let YouTube start with sound when you tap YouTube's own player. When it
+        // won't start by itself, its small video shows up so you can tap ▶ once (the songs after that start by themselves).
+        // Before, it asked you to press the app's play button, which phones don't count, then fell back to the preview.
+        let tapVideo = false;
+        const askVideoTap = () => {
+            player.loading = false; player.status = '';
+            if (!player.needTap) showToast('Your phone needs one tap to start full songs: press ▶ on the small video');
+            player.needTap = true;
+            if (!player.video) { player.video = true; tapVideo = true; }
+        };
         // v10 phones stop YouTube's player when the screen locks or you switch apps (YouTube keeps background play for
         // its Premium app). Coming back carries on where it stopped; the play button on the lock screen starts it too.
         const resumeAfterPhone = () => {
@@ -5712,7 +5722,8 @@ createApp({
         const startSong = async (s) => {
             const tok = ++playTok; loadStart = Date.now(); newListen();
             stopEngines();
-            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null, status: '', why: '', ytId: '' });
+            if (tapVideo) { tapVideo = false; player.video = false; }
+            Object.assign(player, { song: s, t: 0, dur: s.durationMs ? s.durationMs / 1000 : 30, loading: true, playing: false, mode: null, status: '', why: '', ytId: '', needTap: false });
             let song = s;
             if (s.pending && s.wiki) { try { const m = await songApi.matchAllTime(s.wiki); if (m) song = { ...m }; } catch {} if (tok !== playTok) return; player.song = song; }
             addHistory(song, { key: 'play', label: player.full ? 'Played' : 'Played the preview', sub: (song.artists || []).join(', ') });
@@ -5747,7 +5758,7 @@ createApp({
                         const r = await ytTry(yp, id);
                         if (tok !== playTok) return;
                         if (r === 'ok') { ytSongs[songYtKey(song)] = id; saveYtSongs(); fullDown = null; player.why = ''; player.ytId = id; prefetchNextSong(); return; }
-                        if (r === 'tap') { player.loading = false; player.status = ''; ytSongs[songYtKey(song)] = id; player.ytId = id; showToast('Tap play to start the song'); return; }
+                        if (r === 'tap') { ytSongs[songYtKey(song)] = id; player.ytId = id; askVideoTap(); return; }
                         if (ytSongs[songYtKey(song)] === id) forgetYt(song);
                         if (id === fixed && r === 'error' && canSongLink.value) showToast('The link set for this song can’t play outside YouTube (its label blocks it). Pick another upload: “Wrong song?”', 'error');
                     }
@@ -5769,8 +5780,8 @@ createApp({
             ytStartCheck = setTimeout(() => {
                 if (tok !== playTok || player.mode !== 'yt' || player.playing) return;
                 if (ytState === 3) { ytWatch(tok, song, 8000); return; }   // still buffering: give it longer
-                const tapped = ytWatch.tapped; ytWatch.tapped = false;
-                if (!tapped && (ytState === -1 || ytState === 5 || ytState === 2)) { player.loading = false; showToast('Tap play to start the song'); return; }
+                ytWatch.tapped = false;
+                if (ytState === -1 || ytState === 5 || ytState === 2) { askVideoTap(); return; }   // v1.7.1 not the preview: one tap on the video
                 forgetYt(song);   // look for another upload next time
                 startPreview(song, tok, 'YouTube didn’t start this song. Playing the 30-second preview.');
             }, ms);
@@ -7057,6 +7068,11 @@ createApp({
             if (action === 'LEAVE') { closeSheet(); leaveParty(a); return; }   // v1.0.2
             if (action === 'REMOVE') { closeSheet(); removeEverywhere(a); return; }
             if (action === 'NEXT') { closeSheet(); playNextSongs([a]); return; }   // v3.5
+            // v1.7.1 a song's own menu: play it, like it, a playlist, its page
+            if (action === 'PLAY') { closeSheet(); playPreview(a); return; }
+            if (action === 'LIKE') { toggleLikeSong(a); return; }
+            if (action === 'PLAYLIST') { closeSheet(); openPlPicker(a); return; }
+            if (action === 'OPEN') { closeSheet(); fetchAnimeDetails(a); return; }
             quickSolo(a, action);
             if (action !== 'EP') closeSheet();
         };
@@ -7666,8 +7682,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.7.0';
+        const APP_VERSION = '1.7.1';
         const WHATS_NEW = {
+            '1.7.1': [
+                { icon: 'fa-book-open', t: 'Back to your chapter', d: 'Close the reader to look around and a small round button with the cover stays on screen: tap it to jump back to the exact page.' },
+                { icon: 'fa-music', t: 'Song menu on phones', d: 'The + on a song (on phones) has song things now: Play now / Play next, Like, Add to playlist and its page.' },
+                { icon: 'fa-mobile-screen', t: 'Full songs on phones', d: 'When your phone won’t start a full song by itself, the small video shows up: tap ▶ on it once and the full songs play (no more falling back to the preview).' },
+            ],
             '1.7.0': [
                 { icon: 'fa-dumbbell', t: 'The Gym', d: 'A new Gym page (Home, or the section menu): log workouts set by set with last time’s numbers and what to aim for today (progressive overload), a rest timer, records and strength charts.' },
                 { icon: 'fa-calendar-week', t: 'Your plan', d: 'Make routines and put them in your week, or start from a ready plan: Push / Pull / Legs, Upper / Lower, Full body, 5 × 5, Bro split.' },
@@ -9708,7 +9729,11 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const seen = new Set();
             return chapterList.value.filter(c => canReadInApp(c) && !Number.isNaN(chNum(c)) && !seen.has(chNum(c)) && seen.add(chNum(c))).sort((a, b) => chNum(a) - chNum(b));
         });
-        const rdNeighbourOf = (ch, d) => { const list = rdChapters.value; const k = list.findIndex(c => chNum(c) === chNum(ch)); return k === -1 ? null : list[k + d] || null; };
+        // v1.7.1 the reader keeps its own copy of the manga's chapters: browse another title and next / previous still
+        // follow the one you're reading
+        const rdList = ref([]);
+        watch(rdChapters, (l) => { if (rd.open && l.length && rd.manga?.id === selectedAnime.value?.id) rdList.value = l; });
+        const rdNeighbourOf = (ch, d) => { const list = rdList.value.length ? rdList.value : rdChapters.value; const k = list.findIndex(c => chNum(c) === chNum(ch)); return k === -1 ? null : list[k + d] || null; };
         const rdNeighbour = (d) => rdNeighbourOf(rd.chapter, d);
         const rdMarked = new Set();   // chapters marked read in this reading session
         // v1.4 Webtoon (vertical scroll) is the default for everything; a mode you pick for a title is still kept for it
@@ -9780,11 +9805,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             rd.flash = { ch: c.ch ? `Chapter ${c.ch}` : (t || 'Next chapter'), sub: c.ch ? t : '' };
             flashT = setTimeout(() => { rd.flash = null; }, 2600);
         };
-        const openChapter = async (c, manga = selectedAnime.value, { auto = false } = {}) => {
+        const openChapter = async (c, manga = selectedAnime.value, { auto = false, list = null } = {}) => {
             if (readLocked(manga)) { showToast('Reading 18+ isn’t on for your account: you can track it, not read it', 'error'); return; }   // v1.3
             if (!canReadInApp(c)) { cantReadHere(c); return; }
             addHistory(manga, { key: 'ch' + (c.ch || c.id), label: c.ch ? `Chapter ${c.ch}` : (c.title || 'Chapter'), sub: c.group || (c.src ? '' : 'MangaDex') });
             freeBlobs();
+            rdResume.value = null;   // v1.7.1 reading again
+            if (list?.length) rdList.value = list; else if (manga?.id === selectedAnime.value?.id && rdChapters.value.length) rdList.value = rdChapters.value; else if (rd.manga?.id !== manga?.id) rdList.value = [];
             const keepMode = rd.open && rd.manga?.id === manga?.id ? rd.mode : defaultMode(manga);
             Object.assign(rd, { open: true, manga, chapter: c, pages: [], segs: [], appending: false, i: 0, mode: keepMode, loading: true, error: '', local: false, marked: false, ui: true, source: c.src || null, referer: null, proxyAll: false });
             rdMarked.clear();
@@ -9800,7 +9827,26 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             } catch (err) { if (rd.chapter?.id === c.id) rd.error = friendlyErr(err); }
             finally { if (rd.chapter?.id === c.id) rd.loading = false; }
         };
-        const closeReader = () => { rd.open = false; freeBlobs(); rd.pages = []; };
+        // v1.7.1 closing the reader in the middle of a chapter keeps your place: a small round button (the cover) brings
+        // you straight back to that page from anywhere in the app
+        const rdResume = ref(null);   // { manga, chapter, page, list }
+        let resumeTipShown = false;
+        const closeReader = () => {
+            if (rd.open && rd.chapter && rd.pages.length && !rd.local && !rd.error && rd.i < rd.pages.length) {
+                const seg = rdSegOf(rd.i), ch = seg?.ch || rd.chapter;
+                rdResume.value = { manga: rd.manga, chapter: ch, page: Math.max(0, rd.i - (seg?.start || 0)), list: rdList.value };
+                if (!resumeTipShown) { resumeTipShown = true; showToast('Your place is kept: tap the round button with the cover to jump back'); }
+            }
+            rd.open = false; freeBlobs(); rd.pages = [];
+        };
+        const backToReading = async () => {
+            const r = rdResume.value; if (!r) return;
+            await openChapter(r.chapter, r.manga, { list: r.list });
+            if (rd.chapter?.id !== r.chapter.id || !rd.pages.length) return;
+            const p = Math.min(r.page, rd.pages.length - 1);
+            if (p > 0) { if (rd.mode !== 'vertical') rd.i = p; else { rd.resume = p; scrollStripTo(p); } }
+        };
+        const dropResume = () => { rdResume.value = null; };
         // mark the chapter read (only moves your progress forward; never back)
         const markChapterRead = async (c = rd.chapter, manga = rd.manga) => {
             const n = Math.floor(chNum(c)); if (!manga || Number.isNaN(n) || n <= 0) return;
@@ -12418,7 +12464,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             mihonUi, connectMihon, mihonAdded, toggleMihonSource, mihonShown,
                         wp, openWatch, wpContinue, wpStarted, playContinue, isMovie,                         gridResults, watchGridCols, histList, histOpen, histType, openHistory, histItems, histGroups, removeHistory, clearHistory, openHistoryItem, histTime,
             siteSources, srcForm, SOURCE_TEMPLATES, installRepoItem, repoLangs, repoShown, repoState, addSource, testSource, removeSource, loadRepo, repoInstalled, readSrc, srcView, readTabs, currentSite, chapterList, loadSourceFor, chooseMatch, changeMatch, onPageError,
-            EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdSeg, rdPageKey, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, continueChapter, openLocalFiles,
+            EXTENSIONS, extOpen, extOn, toggleExt, canReadInApp, rd, rdSeg, rdPageKey, rdChapters, rdNeighbour, setReadMode, openChapter, closeReader, markChapterRead, toggleChapterRead, toggleReaderMark, rdGo, rdTap, rdChapterGo, onVerticalScroll, rdResume, backToReading, dropResume, continueChapter, openLocalFiles,
             reader, readInfo, readLangs, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, ytVol, setYtVol, ytQuality, ytNative, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,

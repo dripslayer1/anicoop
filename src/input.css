@@ -2442,3 +2442,15 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
   .gym-rx { flex-wrap: wrap; }
   .gym-rx > span:first-child { flex-basis: 100%; }
 }
+
+/* v1.7.1 back to the chapter you were reading: a round cover button (above the music one), draggable */
+.rd-peek-wrap { position: fixed; z-index: 119; left: 16px; bottom: 84px; width: 56px; height: 56px; }
+.rd-peek { position: relative; width: 56px; height: 56px; border-radius: 999px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: rgb(var(--c-surface)); border: 2px solid rgb(var(--c-lilac)); box-shadow: 0 12px 30px -10px rgb(0 0 0 / .8), 0 0 22px -8px rgb(var(--c-lilac)); transition: transform .18s var(--ease); }
+.rd-peek:hover { transform: translateY(-3px) scale(1.05); }
+.rd-peek:active { transform: scale(.94); }
+.rd-peek img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rd-peek-badge { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 2px 0 4px; background: linear-gradient(transparent, rgb(0 0 0 / .85)); color: #fff; font-size: 10px; font-weight: 800; }
+.rd-peek-badge i { font-size: 9px; color: rgb(var(--c-lilac)); }
+.rd-peek-x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 999px; background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); color: rgb(var(--c-sub)); font-size: 10px; display: flex; align-items: center; justify-content: center; }
+.rd-peek-x:hover { color: rgb(var(--c-ink)); }
+@media (max-width: 767px) { .rd-peek-wrap { left: 12px; bottom: calc(var(--mnav-h, 64px) + 70px); width: 50px; height: 50px; } .rd-peek { width: 50px; height: 50px; } }
