@@ -32,13 +32,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.7.1">
+    <link rel="stylesheet" href="app.css?v=1.7.2">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="gym.js?v=1.7.1" defer></script>
-    <script src="app.js?v=1.7.1" defer></script>
+    <script src="gym.js?v=1.7.2" defer></script>
+    <script src="app.js?v=1.7.2" defer></script>
 </head>
 <body>
 
@@ -1944,16 +1944,16 @@
                             <button v-for="g in allGenreOptions" :key="g.v" @click="toggleHiddenGenre(g.v)" class="genre-toggle hg-genre" :class="{ on: isGenreHidden(g.v) }" :aria-pressed="isGenreHidden(g.v)"><i class="fa-solid" :class="isGenreHidden(g.v) ? 'fa-eye-slash' : 'fa-eye'"></i>{{ g.l }}<span v-if="isGenreHidden(g.v)" class="hg-tag">hidden</span></button>
                         </div>
                     </div>
-                    <!-- continue watching -->
-                    <section v-if="continueWatching.length && !filters.search.trim()" class="mt-12">
+                    <!-- continue watching (v1.7.2 + a row of its own for your 18+ titles while the 18+ switch is on) -->
+                    <section v-for="row in (filters.search.trim() ? [] : contRows)" :key="row.k" class="mt-12">
                         <div class="flex items-center gap-3 mb-4">
-                            <h2 class="font-display font-semibold text-ink text-xl md:text-2xl">{{ section === 'manga' ? 'Continue reading' : section === 'games' ? 'Continue playing' : section === 'songs' ? 'On repeat' : 'Continue watching' }}</h2>
-                            <span class="px-2 py-0.5 rounded-md bg-[#3b82f6]/15 text-[#3b82f6] font-mono text-xs font-bold">{{ continueWatching.length }}</span>
-                            <span v-if="continueWatching.length > 1" class="hidden md:inline text-[11px] text-mute">drag to reorder</span>
-                            <button v-if="(PREFS.contOrder?.[section] || []).length" @click="cwReset" class="ml-auto text-[11px] font-semibold text-sub hover:text-ink" title="Back to the most recently updated first"><i class="fa-solid fa-rotate-left mr-1"></i>Reset order</button>
+                            <h2 class="font-display font-semibold text-ink text-xl md:text-2xl">{{ section === 'manga' ? 'Continue reading' : section === 'games' ? 'Continue playing' : section === 'songs' ? 'On repeat' : 'Continue watching' }}<span v-if="row.adult" class="cw-18"><i class="fa-solid fa-fire"></i> 18+</span></h2>
+                            <span class="px-2 py-0.5 rounded-md bg-[#3b82f6]/15 text-[#3b82f6] font-mono text-xs font-bold">{{ row.list.length }}</span>
+                            <span v-if="row.list.length > 1" class="hidden md:inline text-[11px] text-mute">drag to reorder</span>
+                            <button v-if="(PREFS.contOrder?.[contKey(row.adult)] || []).length" @click="cwReset(row.adult)" class="ml-auto text-[11px] font-semibold text-sub hover:text-ink" title="Back to the most recently updated first"><i class="fa-solid fa-rotate-left mr-1"></i>Reset order</button>
                         </div>
                         <div class="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1 snap-x">
-                            <div v-for="(item, idx) in continueWatching" :key="item.key" class="cw-card relative w-[320px] md:w-[380px] h-[124px] shrink-0 rounded-2xl overflow-hidden ring-1 ring-line cursor-pointer snap-start group" :class="{ 'is-dragging': cw.key === item.key }" :style="cwStyle(idx)" @click="cwClick(item)" @pointerdown="cwDown($event, idx, item)" @pointermove="cwMove" @pointerup="cwEnd()" @pointercancel="cwEnd(true)" @contextmenu="cw.key && $event.preventDefault()" :title="section === 'manga' ? 'Continue reading' : section === 'anime' || section === 'movies' ? 'Continue watching' : ''">
+                            <div v-for="(item, idx) in row.list" :key="item.key" class="cw-card relative w-[320px] md:w-[380px] h-[124px] shrink-0 rounded-2xl overflow-hidden ring-1 ring-line cursor-pointer snap-start group" :class="{ 'is-dragging': cw.key === item.key }" :style="cwStyle(idx, row.adult)" @click="cwClick(item)" @pointerdown="cwDown($event, idx, item, row.adult)" @pointermove="cwMove" @pointerup="cwEnd()" @pointercancel="cwEnd(true)" @contextmenu="cw.key && $event.preventDefault()" :title="section === 'manga' ? 'Continue reading' : section === 'anime' || section === 'movies' ? 'Continue watching' : ''">
                                 <img :src="item.anime.bannerImage || item.anime.coverImage?.large" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-expo group-hover:scale-105" loading="lazy" decoding="async" alt="">
                                 <div class="absolute inset-0 bg-gradient-to-r from-base via-base/85 to-base/30"></div>
                                 <div class="relative h-full p-4 flex flex-col">
@@ -1962,7 +1962,7 @@
                                     <p class="mt-1 font-mono text-[11px] font-bold text-[#3b82f6]"><template v-if="section === 'games'">{{ item.progress || 0 }} {{ UNIT.unit.toLowerCase() }} played</template><template v-else-if="section === 'songs'"><i class="fa-solid fa-rotate-right mr-1"></i>Played {{ item.progress || 0 }} {{ item.progress === 1 ? 'time' : 'times' }}<span v-if="(item.anime.artists || []).length" class="text-sub font-normal"> · {{ item.anime.artists.join(', ') }}</span></template><template v-else>{{ UNIT.short }} {{ item.progress || 0 }} / {{ item.anime.episodes || '?' }}<span v-if="newEps(item)" class="cw-new" :title="newEps(item) + ' episode' + (newEps(item) === 1 ? '' : 's') + ' out that you haven’t counted yet'">{{ newEps(item) }} new</span></template></p>
                                     <div v-if="section !== 'songs'" class="mt-auto h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6] transition-[width] duration-500 ease-expo" :style="{ width: progressPct(item) + '%' }"></div></div>
                                 </div>
-                                <button v-if="section === 'songs'" @click.stop="playPreview(item.anime, continueWatching.map(x => x.anime))" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-volt text-onvolt flex items-center justify-center transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]" :title="isPlaying(item.anime) ? 'Pause' : 'Play'"><i class="fa-solid text-sm" :class="player.loading && player.song?.id === item.anime.id ? 'fa-circle-notch fa-spin' : isPlaying(item.anime) ? 'fa-pause' : 'fa-play ml-0.5'"></i></button>
+                                <button v-if="section === 'songs'" @click.stop="playPreview(item.anime, row.list.map(x => x.anime))" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-volt text-onvolt flex items-center justify-center transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]" :title="isPlaying(item.anime) ? 'Pause' : 'Play'"><i class="fa-solid text-sm" :class="player.loading && player.song?.id === item.anime.id ? 'fa-circle-notch fa-spin' : isPlaying(item.anime) ? 'fa-pause' : 'fa-play ml-0.5'"></i></button>
                                 <button v-else @click.stop="bumpEpisode(item)" class="absolute top-4 right-4 px-3.5 py-2 rounded-full bg-volt text-onvolt font-mono text-[11px] font-bold transition-transform active:scale-90 hover:shadow-[0_0_0_4px_rgb(var(--c-volt)/.2)]">+1 {{ UNIT.short }}</button>
                             </div>
                         </div>

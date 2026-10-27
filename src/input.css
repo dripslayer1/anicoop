@@ -2454,3 +2454,6 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
 .rd-peek-x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 999px; background: rgb(var(--c-raised)); border: 1px solid rgb(var(--c-line2)); color: rgb(var(--c-sub)); font-size: 10px; display: flex; align-items: center; justify-content: center; }
 .rd-peek-x:hover { color: rgb(var(--c-ink)); }
 @media (max-width: 767px) { .rd-peek-wrap { left: 12px; bottom: calc(var(--mnav-h, 64px) + 70px); width: 50px; height: 50px; } .rd-peek { width: 50px; height: 50px; } }
+
+/* v1.7.2 the 18+ Continue row's tag */
+.cw-18 { margin-left: 10px; padding: 2px 8px; border-radius: 8px; background: rgb(var(--c-pink) / .15); color: rgb(var(--c-pink)); font-family: "Geist Mono", monospace; font-size: 11px; font-weight: 800; vertical-align: middle; }

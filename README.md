@@ -1605,3 +1605,10 @@ No SQL / Edge Function change.
 - **Full songs on phones:** phones (iPhones above all) only start YouTube with sound from a tap on YouTube's own player.
   When it won't start by itself, the small video shows up and asks for one tap (`askVideoTap`); before, it asked for
   the app's play button (which phones don't count) and then played the 30-second preview.
+
+## v1.7.2 — 18+ titles get their own Continue row
+
+No SQL / Edge Function, no What's new (18+). Browse → Continue watching / reading only has your normal titles, whatever
+the 18+ switch (Lists) says; while the 18+ switch is on, your 18+ titles in progress are in a second row ("18+") with
+its own drag order (`contOrder['<section>:18']`). Before, the row followed the switch, so after turning it on in Lists
+the normal Browse page showed 18+ titles.

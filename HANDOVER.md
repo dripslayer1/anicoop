@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.7.1'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.7.2'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.7.1'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.7.2'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -498,6 +498,7 @@ These are cumulative; the README has one section per version.
 - **v1.6.15**: `movieYear(a)` (module level, also in PosterCard): the year under a movie's name on cards and after it in the side panel.
 - **v1.7.0** (SQL `supabase/v1.7.0-gym.sql`): the Gym. `gym.js` = `GymSection` (props user / toast / confirm; uses app.js's `sb` + `siteFetch` at run time), template `#gym-template` (x-template at the end of index.html, outside #app), registered as `<gym-section>` in `activeTab === 'gym'` (`openGym`, `GYM_TILE`). Data: `gym_settings` / `gym_routines` / `gym_workouts` / `gym_foods` / `gym_days`, own rows only. Lifts kept in kg (`show` / `toKg`), body weight `showW`. `suggest()` = double progression; `sessionsOf` / `prs` / `chart()` (inline SVG). sw.js caches gym.js; bump its `?v=` with app.js.
 - **v1.7.1**: `rdResume` / `backToReading` / `dropResume` + `.rd-peek` (closeReader keeps your place); `rdList` (the reader's own chapter list, `openChapter(…, { list })`). Song sheet: `sheetAction` PLAY / LIKE / PLAYLIST / OPEN. Phones: `askVideoTap` shows the YouTube video for one tap (`player.needTap`) instead of "tap play" → preview.
+- **v1.7.2**: Continue rows: `contOf(adult)` (from `soloList`, not `secSolo`), `continueWatching` (never 18+) + `continueAdult` (only with `adultView`), `contRows`; drag order per row (`contKey`, `cw.adult`).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

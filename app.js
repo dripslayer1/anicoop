@@ -6424,19 +6424,26 @@ createApp({
         // Continue watching: what you're watching / rewatching (v1.6 with the friends you watch it with)
         const togetherCount = computed(() => secSolo.value.filter(i => tagsOf(i.anime.id)).length);   // (Browse → Quick stats)
         const withNames = (id) => joinNames((tagsOf(id) || []).filter(t => t.state === 'joined').map(t => personOf(t.id).username));
-        const continueWatching = computed(() => {
+        // v1.7.2 two rows: your normal titles (always, whatever the 18+ switch says) and, while the 18+ switch is on, your
+        // 18+ ones in a row of their own. (The row used to follow the Lists 18+ switch: turn it on there and the normal
+        // Browse page showed your 18+ titles instead.)
+        const contOf = (adult) => {
             const out = [];
-            secSolo.value.forEach(i => {
+            soloList.value.filter(i => typeOf(i) === mediaType.value && adultOkItem(i) && (!['ANIME', 'MANGA'].includes(mediaType.value) ? !adult : (listType(i) === 'ADULT') === adult)).forEach(i => {
                 if (i.status === 'WATCHING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo' });
                 else if (i.status === 'REPEATING') out.push({ ...i, key: 's-' + i.anime.id, withNames: withNames(i.anime.id), source: 'solo', progress: repeatNow(i), repeatNo: (i.repeats || []).length || 1, restart: isRestart(i) });   // rewatches show their own counter
             });
             // v2.1 in the order you dragged them into (titles you started since then come first)
-            const ord = PREFS.contOrder?.[section.value] || [];
+            const ord = PREFS.contOrder?.[contKey(adult)] || [];
             if (ord.length) { const pos = new Map(ord.map((id, k) => [id, k])); out.sort((a, b) => (pos.has(a.anime.id) ? pos.get(a.anime.id) : -1) - (pos.has(b.anime.id) ? pos.get(b.anime.id) : -1)); }
             return out.slice(0, 16);
-        });
+        };
+        const contKey = (adult) => section.value + (adult ? ':18' : '');   // (the 18+ row keeps its own order)
+        const continueWatching = computed(() => contOf(false));
+        const continueAdult = computed(() => (adultView.value && adultListOk.value && ['ANIME', 'MANGA'].includes(mediaType.value) ? contOf(true) : []));
+        const contRows = computed(() => [{ k: 'main', adult: false, list: continueWatching.value }, { k: '18', adult: true, list: continueAdult.value }].filter(r => r.list.length));
         // v2.1 drag the Continue cards sideways to reorder them (on a phone: hold a card for a moment, then drag)
-        const cw = reactive({ key: null, from: -1, over: -1, dx: 0, w: 0 });
+        const cw = reactive({ key: null, from: -1, over: -1, dx: 0, w: 0, adult: false });
         let cwPend = null, cwMids = [], cwTimer = null, cwDragged = false, cwRow = null;
         const cwStart = () => {
             const p = cwPend; if (!p) return;
@@ -6449,9 +6456,9 @@ createApp({
             try { p.el.setPointerCapture(p.id); } catch {}
             if (p.touch) navigator.vibrate?.(15);
         };
-        const cwDown = (e, idx, item) => {
+        const cwDown = (e, idx, item, adult = false) => {
             if ((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button, a, input')) return;
-            cwDragged = false;
+            cwDragged = false; cw.adult = adult;
             cwPend = { idx, key: item.key, x: e.clientX, y: e.clientY, id: e.pointerId, el: e.currentTarget, touch: e.pointerType !== 'mouse' };
             clearTimeout(cwTimer);
             if (cwPend.touch) cwTimer = setTimeout(cwStart, 380);
@@ -6474,12 +6481,12 @@ createApp({
             const { key, from, over } = cw;
             cwPend = null; Object.assign(cw, { key: null, from: -1, over: -1, dx: 0 });
             if (!key || cancel || over === from) return;
-            const ids = continueWatching.value.map(i => i.anime.id);
+            const ids = (cw.adult ? continueAdult : continueWatching).value.map(i => i.anime.id);
             const [moved] = ids.splice(from, 1); ids.splice(over, 0, moved);
-            PREFS.contOrder = { ...(PREFS.contOrder || {}), [section.value]: ids };
+            PREFS.contOrder = { ...(PREFS.contOrder || {}), [contKey(cw.adult)]: ids };
         };
-        const cwStyle = (idx) => {
-            if (!cw.key) return null;
+        const cwStyle = (idx, adult = false) => {
+            if (!cw.key || cw.adult !== adult) return null;
             if (idx === cw.from) return { transform: `translateX(${cw.dx}px) scale(1.03)`, zIndex: 5, boxShadow: '0 18px 40px -14px rgb(0 0 0 / .7)', transition: 'box-shadow .15s' };
             let shift = 0;
             if (cw.from < cw.over && idx > cw.from && idx <= cw.over) shift = -cw.w;
@@ -6487,7 +6494,7 @@ createApp({
             return { transform: `translateX(${shift}px)`, transition: 'transform .18s cubic-bezier(.16,1,.3,1)' };
         };
         const cwClick = (item) => { if (cwDragged) { cwDragged = false; return; } continueItem(item); };   // (the click after a drag isn't a tap)
-        const cwReset = () => { const o = { ...(PREFS.contOrder || {}) }; delete o[section.value]; PREFS.contOrder = o; };
+        const cwReset = (adult = false) => { const o = { ...(PREFS.contOrder || {}) }; delete o[contKey(adult)]; PREFS.contOrder = o; };
         // (a held card on a phone mustn't scroll the row while it's dragged)
         document.addEventListener('touchmove', (e) => { if (cw.key) e.preventDefault(); }, { passive: false });
         const progressPct = (item) => item.anime?.episodes ? Math.min(100, (item.progress || 0) / item.anime.episodes * 100) : 0;
@@ -7682,7 +7689,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.7.1';
+        const APP_VERSION = '1.7.2';
         const WHATS_NEW = {
             '1.7.1': [
                 { icon: 'fa-book-open', t: 'Back to your chapter', d: 'Close the reader to look around and a small round button with the cover stays on screen: tap it to jump back to the exact page.' },
@@ -12475,7 +12482,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             authReady, currentUser, currentProfile, isSignUp, authLoading, authForm, handleAuth, signOut,
             introMode, skipIntro, warmSection, ROLE_PERMS, ROLE_ICONS, AWARD_ICONS, ROLE_COLORS, roles, roleLinks, rolesReady, rolesOf, can, anyPower, canTouchRole, isOwnerId, roleDraft, editRole, toggleRolePerm, saveRole, deleteRole, moveRole, hasRole, toggleUserRole, adminLookup, adminFind, awardsOf, awardBox, openAwardBox, giveAward, removeAward, moderateProfile, adminMenu, heroPosters, heroPath, HERO_POINTS, heroSave, statusLabelFor, showToTop, scrollToTop,
             currentAppView, activeTab, openTracker, switchTab, canGoBack, goBack, goHome,
-            section, sectionMenu, sectionList, currentSection, openSection, sectionCounts, sectionProgress, secSolo,
+            section, sectionMenu, sectionList, currentSection, openSection, sectionCounts, sectionProgress, secSolo, continueAdult, contRows, contKey,
             filters, availableYears, availableGenres, results, visibleResults, trendingTop, isLoading, isLoadingMore, browseError, hasNextPage,
             resetFilters, anyFilter, activeFilterCount, listTitle, formatOptions, countryOptions, friendsTrending,
             soloList, toast, selectedAnime, detailLoading, detailCharacters, detailRelations,
