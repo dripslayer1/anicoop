@@ -7689,7 +7689,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.7.2';
+        const APP_VERSION = '1.7.3';
         const WHATS_NEW = {
             '1.7.1': [
                 { icon: 'fa-book-open', t: 'Back to your chapter', d: 'Close the reader to look around and a small round button with the cover stays on screen: tap it to jump back to the exact page.' },
@@ -8325,6 +8325,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // answers for them by id. So MangaDex gives the list (most titles there carry their AniList id) and AniList the details.
         const MD_STATUS_OF = { RELEASING: 'ongoing', FINISHED: 'completed', HIATUS: 'hiatus', CANCELLED: 'cancelled' };
         const MD_LANG_OF = { JP: 'ja', KR: 'ko', CN: 'zh', TW: 'zh-hk' };
+        // v1.7.3 MangaDex's list (through our server). An HTML page instead of data = MangaDex's bot check, which the server
+        // gets past only once it's updated (it asked as a browser): say that, not "Unexpected token '<'…"
+        const mdList = async (p) => {
+            const body = String((await siteFetch('https://api.mangadex.org/manga?' + p)).body || '{}');
+            if (/^\s*(<|redirecting)/i.test(body)) throw new Error('MangaDex blocked the request: deploy the updated “igdb” Edge Function in Supabase (v1.7.3, see README), then try again.');
+            return JSON.parse(body);
+        };
         const adultMangaBrowse = async (f, page, { low = false } = {}) => {
             const per = 50;   // AniList takes at most 50 ids at once
             const p = new URLSearchParams({ limit: per, offset: (page - 1) * per });
@@ -8334,7 +8341,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             if (f.year) p.set('year', f.year);
             if (MD_STATUS_OF[f.status]) p.append('status[]', MD_STATUS_OF[f.status]);
             if (MD_LANG_OF[f.country]) p.append('originalLanguage[]', MD_LANG_OF[f.country]);
-            const md = JSON.parse((await siteFetch('https://api.mangadex.org/manga?' + p)).body || '{}');
+            const md = await mdList(p);
             const ids = [...new Set((md.data || []).map(m => Number(m.attributes?.links?.al)).filter(Boolean))];
             if (!ids.length) return { items: [], hasNextPage: false };
             const data = await anilist(`query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: MANGA) { ${MEDIA_FIELDS} } } }`, { ids: ids.slice(0, 50) }, { low });
@@ -8374,7 +8381,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             const p = new URLSearchParams({ limit: 40, title: q });
             ['erotica', 'pornographic'].forEach(r => p.append('contentRating[]', r));
             p.append('order[relevance]', 'desc');
-            const md = JSON.parse((await siteFetch('https://api.mangadex.org/manga?' + p)).body || '{}');
+            const md = await mdList(p);
             const rows = new Map();   // AniList id → { i: MangaDex position, names: MangaDex's names }
             (md.data || []).forEach((m, i) => {
                 const al = Number(m.attributes?.links?.al); if (!al || rows.has(al)) return;

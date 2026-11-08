@@ -350,8 +350,11 @@ const siteFetch = async (body: Record<string, any>) => {
     const asImage = body.as === 'image';
     const key = `site\n${method}\n${u.href}`;
     if (!asImage && method === 'GET') { const hit = cache.get(key); if (hit && Date.now() - hit.at < CACHE_MS / 2) return json(hit.body); }
+    // (v1.7.3 MangaDex sends anything that calls itself a browser to a bot challenge page: "if this isn't a browser,
+    // don't send a browser UA". So MangaDex is asked as anicoop, like the MangaDex endpoint above does.)
+    const appUa = /(^|\.)mangadex\.(org|network)$/i.test(u.hostname);
     const headers: Record<string, string> = {
-        'User-Agent': BROWSER_UA, Referer: referer,
+        'User-Agent': appUa ? 'anicoop/1.0 (+https://anicoop.studio)' : BROWSER_UA, Referer: referer,
         Accept: asImage ? 'image/avif,image/webp,image/*,*/*;q=0.8' : 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
     };
