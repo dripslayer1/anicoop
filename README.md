@@ -1612,3 +1612,14 @@ No SQL / Edge Function, no What's new (18+). Browse → Continue watching / read
 the 18+ switch (Lists) says; while the 18+ switch is on, your 18+ titles in progress are in a second row ("18+") with
 its own drag order (`contOrder['<section>:18']`). Before, the row followed the switch, so after turning it on in Lists
 the normal Browse page showed 18+ titles.
+
+## v1.7.3 — 18+ manga browse works again (MangaDex's bot check)
+
+**Edge Function:** deploy the updated `igdb` function (Supabase → Edge Functions → igdb → paste
+`supabase/functions/igdb/index.ts` → Deploy). No SQL, no What's new (18+).
+
+MangaDex now sends requests that call themselves a browser to a bot challenge page ("if this isn't a browser, don't send
+a browser UA"). 18+ manga browse / search gets its list from MangaDex through the server's `fetch`, which sent a browser
+User-Agent, so the app got that HTML page: "Unexpected token '<', "<!doctype "… is not valid JSON". The server now asks
+`*.mangadex.org` / `*.mangadex.network` as `anicoop/1.0` (like its own MangaDex endpoint already did), and the app
+(`mdList`) says to update the function instead of showing a JSON error.
