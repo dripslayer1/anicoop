@@ -6771,6 +6771,39 @@ createApp({
         });
 
         // ---------- compare lists with a friend ----------
+        // v1.8.0 "In common" (the button on someone's profile): every title on both your lists, every kind at once, with
+        // both statuses and scores. Their list is only what they let you see (the same as their profile).
+        const IC_TYPES = [['ANIME', 'Anime', 'fa-dragon'], ['MANGA', 'Manga', 'fa-book-open'], ['GAME', 'Games', 'fa-gamepad'], ['TV', 'Movies & TV', 'fa-film'], ['SONG', 'Songs', 'fa-music'], ['ADULT', '18+', 'fa-fire']];
+        const ic = reactive({ open: false, type: 'ALL', show: 'all', q: '', shown: 60 });
+        const inCommon = computed(() => {
+            const theirs = viewedUser.value?.entries || [];
+            if (!viewUserId.value || viewUserId.value === uid() || !theirs.length) return { rows: [], total: 0, types: [], loved: [], genres: [] };
+            const mine = new Map(uniqueItems.value.map(i => [i.anime.id, i]));
+            const rows = [], seen = new Set();
+            theirs.forEach(t => {
+                const id = t.anime?.id, m = id && mine.get(id); if (!m || seen.has(id)) return;
+                const type = listType(m);
+                if ((type === 'ADULT' && !adultListOk.value) || (type === 'SONG' && !songsOn.value)) return;
+                seen.add(id);
+                const done = (x) => x.status === 'COMPLETED' || x.status === 'REPEATING';
+                rows.push({ anime: m.anime, me: m, them: t, type, bothDone: done(m) && done(t), bothPlan: m.status === 'PLANNING' && t.status === 'PLANNING',
+                    going: ['WATCHING', 'REPEATING'].includes(m.status) || ['WATCHING', 'REPEATING'].includes(t.status), loved: (m.score || 0) >= 8 && (t.score || 0) >= 8 });
+            });
+            rows.sort((x, y) => (y.loved - x.loved) || (y.bothDone - x.bothDone) || (((y.me.score || 0) + (y.them.score || 0)) - ((x.me.score || 0) + (x.them.score || 0))) || titleOf(x.anime).localeCompare(titleOf(y.anime)));
+            const types = IC_TYPES.map(([k, l, icon]) => ({ k, l, icon, n: rows.filter(r => r.type === k).length })).filter(x => x.n);
+            const g = {}; rows.forEach(r => (r.anime.genres || []).forEach(x => { g[x] = (g[x] || 0) + 1; }));
+            return { rows, total: rows.length, types, loved: rows.filter(r => r.loved).slice(0, 12), genres: Object.entries(g).sort((x, y) => y[1] - x[1]).slice(0, 6).map(x => x[0]) };
+        });
+        const icRows = computed(() => {
+            const q = ic.q.trim().toLowerCase();
+            return inCommon.value.rows.filter(r => (ic.type === 'ALL' || r.type === ic.type)
+                && (ic.show === 'all' || (ic.show === 'done' && r.bothDone) || (ic.show === 'plan' && r.bothPlan) || (ic.show === 'going' && r.going) || (ic.show === 'loved' && r.loved))
+                && (!q || [r.anime.title?.romaji, r.anime.title?.english, r.anime.title?.native].some(t => t && t.toLowerCase().includes(q))));
+        });
+        const openInCommon = () => Object.assign(ic, { open: true, type: 'ALL', show: 'all', q: '', shown: 60 });
+        const icOpenTitle = (r) => { ic.open = false; fetchAnimeDetails(r.anime); };
+        const icTypeOf = (k) => IC_TYPES.find(x => x[0] === k) || IC_TYPES[0];
+        watch(viewUserId, () => { ic.open = false; });
         const compareTab = ref('meDone');
         const compareType = ref('ANIME');
         const compareQ = ref('');   // v1.7 search
@@ -6986,16 +7019,19 @@ createApp({
                 try { el.focus({ preventScroll: true }); el.select?.(); } catch {}
             }, already ? 0 : 60);
         };
-        // Home tiles + section switcher always land on Browse
-        const openSection = (id) => {
+        // Home tiles land on Browse. v1.8.0 the section switcher in the header keeps you on the tab you're on (in Lists of
+        // Anime, picking Movies & TV opens Lists of Movies & TV); from a page that isn't one of those tabs, Browse.
+        const SECTION_TABS = ['browse', 'top', 'feed', 'solo', 'profile'];
+        const openSection = (id, { keepTab = false } = {}) => {
             sectionMenu.value = false;
             if (!SECTIONS[id]) return;
             if (id === 'songs' && songBlocked()) return;
+            const tab = keepTab && currentAppView.value === 'tracker' && SECTION_TABS.includes(activeTab.value) ? activeTab.value : 'browse';
             navigate(() => {
                 if (section.value !== id) clearListFilters();
                 resetSelection();
                 section.value = id; currentAppView.value = 'tracker'; selectedAnime.value = null; viewUserId.value = null; entity.value = null;
-                activeTab.value = 'browse';
+                activeTab.value = tab;
             });
         };
         const showDetails = (media) => {
@@ -7689,8 +7725,12 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.7.3';
+        const APP_VERSION = '1.8.0';
         const WHATS_NEW = {
+            '1.8.0': [
+                { icon: 'fa-arrows-left-right', t: 'Switch sections, stay put', d: 'Picking another section in the header keeps you where you are: in Lists of Anime, Movies & TV opens its Lists (same for Leaderboard, Feed and Profile).' },
+                { icon: 'fa-people-arrows', t: 'Everything in common', d: 'On a friend’s profile, the “In common” button shows every title you both have (anime, manga, games, movies & TV, songs), with both your statuses and scores: the ones you both loved first, filters for each kind, both finished, both planning, watching now.' },
+            ],
             '1.7.1': [
                 { icon: 'fa-book-open', t: 'Back to your chapter', d: 'Close the reader to look around and a small round button with the cover stays on screen: tap it to jump back to the exact page.' },
                 { icon: 'fa-music', t: 'Song menu on phones', d: 'The + on a song (on phones) has song things now: Play now / Play next, Like, Add to playlist and its page.' },
@@ -12482,7 +12522,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             reader, readInfo, readLangs, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, ytVol, setYtVol, ytQuality, ytNative, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,
-            fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback, fbComments, fbVoteOf, toggleFbComments, postFbComment, deleteFbComment, fbIsNew, fbBadge,
+            ic, inCommon, icRows, openInCommon, icOpenTitle, icTypeOf, fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback, fbComments, fbVoteOf, toggleFbComments, postFbComment, deleteFbComment, fbIsNew, fbBadge,
             gameExtra, pickSeries, seriesShown, seriesTotals, movieTotals, fmtMins, storyEdit, storySort, openGameLink, playVideo, scrollRow, shotViewer, openShot, closeShot, stepShot, fmtHours,
             FAV_SECTIONS, favTab, favsIn, favSectionOf, openFavChar, activityOpen, toggleMyActivity, openViewedActivity, setActivityHidden, activityLine, openActivity, checkGames,
             STATUS_ORDER, statusPick, MAX_REPEATS, lilBro, setFormStatus, repeatNow, STATUS_LABELS, STATUS_SHORT, STATUS_COLORS, UNIT, ACCENTS, tabs,

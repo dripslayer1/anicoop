@@ -1623,3 +1623,12 @@ a browser UA"). 18+ manga browse / search gets its list from MangaDex through th
 User-Agent, so the app got that HTML page: "Unexpected token '<', "<!doctype "… is not valid JSON". The server now asks
 `*.mangadex.org` / `*.mangadex.network` as `anicoop/1.0` (like its own MangaDex endpoint already did), and the app
 (`mdList`) says to update the function instead of showing a JSON error.
+
+## v1.8.0 — everything in common
+
+No SQL / Edge Function change. On someone's profile, **In common** (with the count) opens every title on both your
+lists, all kinds at once (anime, manga, games, movies & TV, songs; 18+ only with 18+ access): "You both loved" (8+
+from both) first, then filters by kind and by Everything / Both loved / Both finished / Both planning / In progress,
+a search, both statuses + scores on every row; a row opens the title. Their side is only what they let you see.
+Also: the section switcher in the header keeps your tab (Lists / Leaderboard / Feed / Profile → the same tab of the
+new section; `openSection(id, { keepTab: true })`); Home tiles still open Browse.

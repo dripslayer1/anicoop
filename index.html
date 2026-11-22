@@ -32,13 +32,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&family=Pixelify+Sans:wght@400;600&family=Space+Mono:wght@400;700&family=Unbounded:wght@600;700;900&display=swap"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link rel="stylesheet" href="app.css?v=1.7.3">
+    <link rel="stylesheet" href="app.css?v=1.8.0">
 
     <!-- v1.5 exact versions from one CDN: cached for good, and never changed under us by a surprise update -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
-    <script src="gym.js?v=1.7.3" defer></script>
-    <script src="app.js?v=1.7.3" defer></script>
+    <script src="gym.js?v=1.8.0" defer></script>
+    <script src="app.js?v=1.8.0" defer></script>
 </head>
 <body>
 
@@ -249,7 +249,7 @@
                             <transition name="pop">
                                 <div v-if="sectionMenu" class="qa-menu !w-64 absolute section-menu-pos z-50">
                                     <p class="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold tracking-[.16em] text-mute">SECTIONS</p>
-                                    <button v-for="s in sectionList" :key="s.id" @click="openSection(s.id)" @mouseenter="warmSection(s.id)" class="qa-row" :class="{ 'bg-overlay': section === s.id }">
+                                    <button v-for="s in sectionList" :key="s.id" @click="openSection(s.id, { keepTab: true })" @mouseenter="warmSection(s.id)" class="qa-row" :class="{ 'bg-overlay': section === s.id }">
                                         <span class="w-7 h-7 rounded-lg flex items-center justify-center text-onaccent text-[11px] shrink-0" :style="{ background: s.color }"><i :class="s.icon" class="fa-solid"></i></span>
                                         {{ s.label }}
                                         <span v-if="!s.live" class="ml-auto font-mono text-[9px] font-bold text-volt">SOON</span>
@@ -1247,6 +1247,8 @@
                                 </div>
                                 <p class="text-[11px] mt-1 flex items-center gap-1.5" :class="isOnline(viewUserId) ? 'text-[#22c55e]' : 'text-mute'"><span class="w-1.5 h-1.5 rounded-full" :class="isOnline(viewUserId) ? 'bg-[#22c55e]' : 'bg-mute'"></span>{{ viewedUser?.profile ? lastSeenText(viewedUser.profile) : '' }}</p>
                             </div>
+                            <!-- v1.8.0 everything you two have in common -->
+                            <button v-if="viewUserId && viewUserId !== currentUser?.id && !viewedUser?.loading" @click="openInCommon" class="btn-ghost !py-2 !px-4 !text-xs mb-1 ic-btn" :title="'Everything you and ' + (viewedUser?.profile?.username || 'them') + ' have in common'"><i class="fa-solid fa-people-arrows"></i> In common <span class="ic-count">{{ inCommon.total }}</span></button>
                             <!-- admin tools for this person (owner / roles with powers) -->
                             <div v-if="viewUserId && (can('manage_roles') && roles.length || can('give_awards') || can('moderate') && !isOwnerId(viewUserId))" class="relative mb-1" @click.stop>
                                 <button @click="adminMenu = !adminMenu" class="btn-ghost !py-2 !px-4 !text-xs" :class="{ '!border-volt': adminMenu }"><i class="fa-solid fa-user-shield"></i> Admin <i class="fa-solid fa-chevron-down text-[9px] transition-transform" :class="{ 'rotate-180': adminMenu }"></i></button>
@@ -5660,6 +5662,62 @@
                     </div>
                 </div>
             </transition>
+        </div>
+    </transition>
+
+    <!-- ============ v1.8.0 IN COMMON (you + someone: every title on both lists) ============ -->
+    <transition name="fade">
+        <div v-if="ic.open && viewedUser" class="modal-back !z-[76]" @click.self="ic.open = false">
+            <div class="modal-card max-w-3xl ic-card" role="dialog" aria-modal="true" :aria-label="'In common with ' + viewedUser.profile?.username">
+                <div class="ic-head">
+                    <div class="ic-avatars"><user-avatar :user="currentProfile" :size="40"></user-avatar><user-avatar :user="viewedUser.profile" :size="40"></user-avatar></div>
+                    <div class="min-w-0 flex-grow">
+                        <p class="label">You &amp; {{ viewedUser.profile?.username }}</p>
+                        <h3 class="font-display font-bold text-ink text-xl leading-tight">{{ inCommon.total }} {{ inCommon.total === 1 ? 'title' : 'titles' }} in common</h3>
+                        <p v-if="inCommon.genres.length" class="text-[11px] text-sub mt-0.5 truncate">You both like {{ inCommon.genres.slice(0, 4).join(', ') }}</p>
+                    </div>
+                    <button @click="ic.open = false" class="icon-btn !w-9 !h-9 shrink-0" aria-label="Close"><i class="fa-solid fa-xmark text-sm"></i></button>
+                </div>
+                <div class="ic-body">
+                    <p v-if="!inCommon.total" class="text-sm text-mute text-center py-12"><i class="fa-solid fa-people-arrows text-2xl block mb-3"></i>Nothing in common yet (or they keep their lists private).</p>
+                    <template v-else>
+                        <!-- the ones you both loved (8+ from both) -->
+                        <template v-if="inCommon.loved.length && ic.type === 'ALL' && ic.show === 'all' && !ic.q">
+                            <p class="label mb-2"><i class="fa-solid fa-heart text-[#ff4d8d] mr-1"></i>You both loved</p>
+                            <div class="ic-loved">
+                                <button v-for="r in inCommon.loved" :key="'l' + r.anime.id" @click="icOpenTitle(r)" class="ic-loved-item" :title="titleOf(r.anime)">
+                                    <img :src="r.anime.coverImage?.large" alt="" loading="lazy" :class="{ 'is-sq': r.type === 'SONG' }">
+                                    <span class="ic-loved-sc">{{ formatScore(r.me.score) }} · {{ formatScore(r.them.score) }}</span>
+                                    <span class="block text-[11px] text-ink font-semibold truncate mt-1">{{ titleOf(r.anime) }}</span>
+                                </button>
+                            </div>
+                        </template>
+                        <div class="flex flex-wrap gap-1.5 mt-1">
+                            <button @click="ic.type = 'ALL'; ic.shown = 60" class="ic-chip" :class="{ on: ic.type === 'ALL' }">All <b>{{ inCommon.total }}</b></button>
+                            <button v-for="t in inCommon.types" :key="t.k" @click="ic.type = t.k; ic.shown = 60" class="ic-chip" :class="{ on: ic.type === t.k }"><i class="fa-solid" :class="t.icon"></i>{{ t.l }} <b>{{ t.n }}</b></button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 mt-2.5">
+                            <div class="seg"><button v-for="s in [['all', 'Everything'], ['loved', 'Both loved'], ['done', 'Both finished'], ['plan', 'Both planning'], ['going', 'In progress']]" :key="s[0]" @click="ic.show = s[0]; ic.shown = 60" class="seg-btn !px-2.5 !text-xs" :class="{ 'is-on': ic.show === s[0] }">{{ s[1] }}</button></div>
+                            <input v-model="ic.q" type="search" placeholder="Search" class="field !py-1.5 !rounded-full !text-xs !w-40 ml-auto" aria-label="Search titles in common">
+                        </div>
+                        <div class="ic-list mt-3">
+                            <button v-for="r in icRows.slice(0, ic.shown)" :key="r.anime.id" @click="icOpenTitle(r)" class="ic-row">
+                                <img :src="r.anime.coverImage?.large" alt="" loading="lazy" :class="{ 'is-sq': r.type === 'SONG' }">
+                                <span class="min-w-0 flex-grow text-left">
+                                    <span class="block text-sm text-ink font-semibold truncate">{{ titleOf(r.anime) }}</span>
+                                    <span class="block text-[11px] text-mute truncate"><i class="fa-solid mr-1" :class="icTypeOf(r.type)[2]"></i>{{ icTypeOf(r.type)[1] }}<template v-if="movieYear(r.anime)"> · {{ movieYear(r.anime) }}</template><template v-if="r.type === 'SONG' && (r.anime.artists || []).length"> · {{ r.anime.artists.join(', ') }}</template></span>
+                                </span>
+                                <span v-for="side in ['me', 'them']" :key="side" class="ic-side">
+                                    <span class="ic-who">{{ side === 'me' ? 'You' : viewedUser.profile?.username }}</span>
+                                    <span class="ic-st"><span class="qa-dot" :style="{ '--dot': STATUS_COLORS[r[side].status] }"></span>{{ statusLabelFor(r.type === 'ADULT' ? r.anime.type : r.type, r[side].status) }}<b v-if="r[side].score" class="ml-1 font-mono">{{ formatScore(r[side].score) }}</b></span>
+                                </span>
+                            </button>
+                            <p v-if="!icRows.length" class="text-sm text-mute text-center py-8">Nothing here.</p>
+                            <button v-if="icRows.length > ic.shown" @click="ic.shown += 60" class="btn-ghost w-full !py-2.5 !text-xs mt-2">Show more ({{ icRows.length - ic.shown }})</button>
+                        </div>
+                    </template>
+                </div>
+            </div>
         </div>
     </transition>
 
