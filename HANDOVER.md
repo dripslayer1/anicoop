@@ -35,11 +35,11 @@ tags (see §3, v1.6). v1.5 was the "full deep check" release.
   Function change.** Check whether it was merged before starting the next change.
 
 **Versioning:** each release bumps three places:
-- `sw.js`: `const REL = '1.8.3'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
+- `sw.js`: `const REL = '1.8.4'` (since v1.5 VERSION is built from it and the service worker precaches `app.css?v=REL` /
   `app.js?v=REL` and serves them cache-first, so **REL must equal the `?v=` in index.html**; always use a tag never used
   before)
 - `index.html`: both `?v=` cache-busters (app.css, app.js)
-- `app.js`: `const APP_VERSION = '1.8.3'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
+- `app.js`: `const APP_VERSION = '1.8.4'` (the footer shows it: `v{{ APP_VERSION }}`) and a `WHATS_NEW['<version>']` list of
   what changed (icon, title, one plain sentence each) — the "What's new" window shows it once per version per device
 - `README.md`: a new `## v9.x — …` section at the bottom, written in plain language for the owner, with an **Update:** line saying whether SQL or an Edge Function redeploy is needed.
 
@@ -503,6 +503,7 @@ These are cumulative; the README has one section per version.
 - **v1.8.0**: In common: `inCommon` (viewedUser.entries ∩ uniqueItems, every `listType`), `ic` state, `icRows` filters, modal `.ic-card`; button `.ic-btn` in the profile header.
 - **v1.8.2** (1.8.1 skipped: an old What's new key): `inCommon` now = your `parties` with that person in them (both members, joined / invited / dropped), status now / invite / done / dropped, `icState` / `icProg`; button "Together".
 - **v1.8.3**: AniList 30/min + its 429 has no CORS header (looks like a network error): `aniBudget` (28/min), `aniBlocked` (Remaining/Reset headers, failed fetch while online = 60 s block), foreground `anilist()` waits the block out and retries; `aniHooks.busy` → one toast per 2 min.
+- **v1.8.4**: phones (hover: none) hide the poster trailer button except on songs (`.is-song`).
 
 **Next steps**
 0. **When the owner reports back on v10.0,** check: MyAnimeList connect + a change showing up on MAL (the "Last sync

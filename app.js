@@ -2466,7 +2466,7 @@ const PosterCard = {
             <span class="select-check" :class="{ on: selected }"><i class="fa-solid fa-check"></i></span>
         </template>
         <template v-else>
-            <button v-if="anime.trailer?.id || anime.type === 'SONG'" @click.stop="$emit('trailer')" :title="anime.type === 'SONG' ? 'Play preview' : 'Play trailer'" class="trailer-btn"><i class="fa-solid fa-play text-[13px] ml-0.5"></i></button>
+            <button v-if="anime.trailer?.id || anime.type === 'SONG'" @click.stop="$emit('trailer')" :title="anime.type === 'SONG' ? 'Play preview' : 'Play trailer'" class="trailer-btn" :class="{ 'is-song': anime.type === 'SONG' }"><i class="fa-solid fa-play text-[13px] ml-0.5"></i></button>
             <quick-add v-if="quick" :anime="anime" :entry="solo" :open="menuOpen" :on-list="ownList ? !!entry : !!solo" :can-play="!!(anime.trailer?.id || anime.type === 'SONG')" @action="$emit('action', $event)" @edit="$emit('edit')" @toggle="$emit('toggle')" @play="$emit('trailer')"></quick-add>
             <button v-else-if="editable" @click.stop="$emit('edit')" title="Edit" class="absolute bottom-3 right-3 z-20 w-10 h-10 rounded-full bg-base/80 border border-line2 text-ink flex items-center justify-center [@media(hover:hover)]:opacity-0 group-hover:opacity-100 hover:bg-volt hover:text-onvolt hover:border-volt transition-[opacity,background-color,color] duration-200"><i class="fa-solid fa-pen text-xs"></i></button>
         </template>
@@ -7761,7 +7761,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.8.3';
+        const APP_VERSION = '1.8.4';
         const WHATS_NEW = {
             '1.8.2': [
                 { icon: 'fa-people-arrows', t: 'Together', d: 'On a friend’s profile, “Together” shows everything you watch, read or play with them, every kind at once: where you both are, invites waiting, what you finished together and what got dropped.' },
