@@ -231,6 +231,8 @@
 .trailer-btn { @apply absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full flex items-center justify-center text-onvolt bg-volt opacity-0 scale-75; box-shadow: 0 0 0 6px rgb(var(--c-volt) / .18), 0 10px 30px -6px rgba(0,0,0,.8); transition: opacity .2s, transform .25s var(--ease); }
 @media (hover: hover) { .poster-hit:hover .trailer-btn { opacity: 1; transform: translate(-50%, -50%) scale(1); } .trailer-btn:hover { transform: translate(-50%, -50%) scale(1.1) !important; } }
 @media (hover: none) { .trailer-btn { opacity: .92; transform: translate(-50%, -50%) scale(.8); } }
+/* v1.8.4 phones: no trailer button on posters (it covered the cover; the trailer is on the title's page). Songs keep play. */
+@media (hover: none) { .trailer-btn:not(.is-song) { display: none; } }
 .trailer-card { @apply relative block w-full max-w-3xl aspect-video rounded-2xl overflow-hidden ring-1 ring-line2 bg-raised; }
 .play-circle { @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-volt text-onvolt text-2xl flex items-center justify-center; box-shadow: 0 0 0 10px rgb(var(--c-volt) / .15), 0 0 60px -6px rgb(var(--c-volt) / .6); transition: transform .3s var(--ease); }
 @media (hover: hover) { .trailer-card:hover .play-circle { transform: translate(-50%, -50%) scale(1.08); } }

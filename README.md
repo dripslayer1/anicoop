@@ -1648,3 +1648,7 @@ the app said "Could not reach AniList", never paused, and kept asking (keeping t
 paces itself (`aniBudget`: at most 28 a minute from a tab, the rest wait), follows `X-RateLimit-Remaining` /
 `X-RateLimit-Reset`, and a failed request while online counts as the block (`aniBlocked` 60 s): what you're looking
 at waits it out and tries again (one "AniList is busy…" note), background jobs give up quietly.
+
+## v1.8.4 — no trailer button on posters on phones
+
+No SQL / Edge Function, no What's new. On touch screens the play-trailer button sat over every poster (Feedback: "I just wanna see the poster clearly"). It's hidden there now (`.trailer-btn:not(.is-song)`); the trailer is on the title's page, and song cards keep their play button. Computers: unchanged (it shows on hover).
