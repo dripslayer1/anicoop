@@ -1639,3 +1639,12 @@ No SQL / Edge Function change. The profile button shows what you watch / read / 
 watch-together parties where you're both in, or one of you is invited), not titles that are just on both lists: every
 kind, the shared progress, both of your states (watching / reading / playing, invited, dropped), who else is in it,
 filters Now / Invites / Finished / Dropped and by kind, search. (From `parties`, the same data as the together tags.)
+
+## v1.8.3 — fewer "Could not reach AniList"
+
+No SQL / Edge Function, no What's new (a fix). AniList allows **30 requests a minute** right now, and its "429 Too
+Many Requests" answer has no `Access-Control-Allow-Origin` header, so in a browser it looks like a failed request:
+the app said "Could not reach AniList", never paused, and kept asking (keeping the block going). Now `anilistRaw`
+paces itself (`aniBudget`: at most 28 a minute from a tab, the rest wait), follows `X-RateLimit-Remaining` /
+`X-RateLimit-Reset`, and a failed request while online counts as the block (`aniBlocked` 60 s): what you're looking
+at waits it out and tries again (one "AniList is busy…" note), background jobs give up quietly.

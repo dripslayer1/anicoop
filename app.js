@@ -380,16 +380,43 @@ const anilistOnce = async (rawQuery, variables) => {
     return noAdult ? dropAdult(data) : data;
 };
 let aniPausedUntil = 0;
-const aniBusyError = () => { const e = new Error(`AniList rate limit (30 requests a minute) – try again in ${Math.ceil((aniPausedUntil - Date.now()) / 1000)} s.`); e.busy = true; return e; };
+const aniBusyError = () => { const e = new Error(`AniList is busy (it allows 30 requests a minute): try again in ${Math.ceil((aniPausedUntil - Date.now()) / 1000)} s.`); e.busy = true; return e; };
+// v1.8.3 AniList allows 30 requests a minute, and its "too many requests" answer has no CORS header: the browser only
+// sees a failed request, so the app said "Could not reach AniList", didn't pause, and kept asking (which keeps the block
+// going). Now: at most 28 requests a minute from this tab (the rest wait their turn), its own Remaining / Reset headers
+// are followed, and a failed request while you're online counts as that block: everything waits it out, then tries again.
+const aniHooks = { busy: null };   // the app shows a short note when AniList makes us wait
+const aniSent = [];
+const aniBlocked = (ms, why) => {
+    const until = Date.now() + ms;
+    if (until > aniPausedUntil) { aniPausedUntil = until; aniHooks.busy?.(Math.ceil(ms / 1000), why); }
+};
+const aniBudget = async () => {
+    for (;;) {
+        const now = Date.now();
+        while (aniSent.length && now - aniSent[0] > 60000) aniSent.shift();
+        if (aniPausedUntil > now) { await sleep(aniPausedUntil - now + 150); continue; }
+        if (aniSent.length < 28) { aniSent.push(now); return; }
+        await sleep(60000 - (now - aniSent[0]) + 150);
+    }
+};
 const anilistRaw = async (query, variables) => {
+    await aniBudget();
     let res;
     try { res = await fetch(ANILIST, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ query, variables }) }); }
-    catch { throw new Error('Could not reach AniList — check your connection and try again.'); }
+    catch {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Could not reach AniList: you seem to be offline.');
+        aniBlocked(60000, 'limit');   // (almost always AniList's limit: its answer just can't be read here)
+        const e = new Error('AniList is busy right now (it allows 30 requests a minute). Trying again in a minute.'); e.busy = true; e.hidden = true; throw e;
+    }
+    // its own count: nearly used up → wait for the new minute before the next request
+    const left = res.headers.get('X-RateLimit-Remaining'), resetAt = Number(res.headers.get('X-RateLimit-Reset')) * 1000;
+    if (left != null && Number(left) <= 1) aniBlocked(Math.max(3000, Math.min(65000, (resetAt || Date.now() + 60000) - Date.now())), 'soon');
     if (res.status === 429) {
         // v1.9 AniList allows 30 requests a minute right now. It says when the minute is up (X-RateLimit-Reset):
         // everything waits until then instead of asking again and again (each ask while blocked counts too)
         const reset = Number(res.headers.get('X-RateLimit-Reset')) * 1000;
-        aniPausedUntil = Math.min(Date.now() + 65000, Math.max(Date.now() + 5000, reset || 0));
+        aniBlocked(Math.min(65000, Math.max(5000, (reset || 0) - Date.now())), 'limit');
         const e = new Error(`AniList rate limit hit – try again in ${Math.ceil((aniPausedUntil - Date.now()) / 1000)} s.`); e.busy = true; throw e;
     }
     if (!res.ok) throw new Error(`AniList error (${res.status}) – try again.`);
@@ -421,11 +448,13 @@ const anilistLow = (query, variables) => anilist(query, variables, { low: true }
 const anilist = (query, variables, { low = false } = {}) => aniLane(async () => {
     for (let attempt = 0; ; attempt++) {
         // v1.9 while AniList is blocking us: a short wait is waited out, a long one says how long
+        // (v1.8.3 what you're looking at waits it out, up to about a minute; background jobs give up)
         const wait = aniPausedUntil - Date.now();
-        if (wait > 0) { if (wait > 12000) throw aniBusyError(); await sleep(wait + 200); }
+        if (wait > 0) { if (low && wait > 12000) throw aniBusyError(); await sleep(wait + 200); }
         try { return await anilistOnce(query, variables); }
         catch (err) {
-            if (attempt < 2 && /rate limit/i.test(err.message || '')) { if (!err.busy) await sleep(1500 * (attempt + 1)); continue; }
+            if (attempt < (err.hidden ? 1 : 2) && (err.busy || /rate limit/i.test(err.message || ''))) { if (!err.busy) await sleep(1500 * (attempt + 1)); continue; }
+            if (err.hidden) throw new Error('AniList isn’t answering right now (busy or down). Try again in a minute.');
             throw err;
         }
     }
@@ -2846,6 +2875,9 @@ createApp({
             clearTimeout(toastTimer);
             toastTimer = setTimeout(() => { toast.value.message = ''; toast.value.action = null; }, action ? 6500 : type === 'error' ? 4000 : 2400);
         };
+        // v1.8.3 AniList made us wait (its 30-a-minute limit): one calm note, not a red error, at most every 2 minutes
+        let aniNoteAt = 0;
+        aniHooks.busy = (s, why) => { if (why !== 'limit' || Date.now() - aniNoteAt < 120000) return; aniNoteAt = Date.now(); showToast(`AniList is busy (it allows 30 requests a minute): loading again in about ${s} s…`); };
         const runToastAction = () => { const a = toast.value.action; clearTimeout(toastTimer); toast.value.message = ''; toast.value.action = null; a?.run?.(); };
         // In-app confirm dialog (replaces the browser's confirm() pop-up). Resolves true/false.
         // `input` is null for a yes/no question, or the text of the box when it asks for a name (askText)
@@ -7729,7 +7761,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.8.2';
+        const APP_VERSION = '1.8.3';
         const WHATS_NEW = {
             '1.8.2': [
                 { icon: 'fa-people-arrows', t: 'Together', d: 'On a friend’s profile, “Together” shows everything you watch, read or play with them, every kind at once: where you both are, invites waiting, what you finished together and what got dropped.' },
