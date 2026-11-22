@@ -2489,3 +2489,13 @@ button.lyr-line:hover { color: rgb(var(--c-ink) / .7); }
   .ic-side { width: auto; flex: 1 1 40%; margin-left: 52px; }
   .ic-side + .ic-side { margin-left: 0; }
 }
+
+/* v1.8.1 Together: shared progress + each one's state */
+.ic-prog { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: rgb(var(--c-sub)); }
+.ic-bar { flex: 1 1 auto; max-width: 140px; height: 5px; border-radius: 999px; background: rgb(var(--c-overlay)); overflow: hidden; }
+.ic-bar > i { display: block; height: 100%; border-radius: 999px; background: #3b82f6; }
+.ic-done { color: #22c55e; font-weight: 700; }
+.ic-st i { font-size: 11px; }
+.ic-st.st-joined { color: #4ade80; }
+.ic-st.st-invited { color: #fbbf24; }
+.ic-st.st-dropped { color: #f87171; }

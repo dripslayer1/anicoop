@@ -1632,3 +1632,10 @@ from both) first, then filters by kind and by Everything / Both loved / Both fin
 a search, both statuses + scores on every row; a row opens the title. Their side is only what they let you see.
 Also: the section switcher in the header keeps your tab (Lists / Leaderboard / Feed / Profile → the same tab of the
 new section; `openSection(id, { keepTab: true })`); Home tiles still open Browse.
+
+## v1.8.2 — "In common" is now "Together"
+
+No SQL / Edge Function change. The profile button shows what you watch / read / play **with** that person (your
+watch-together parties where you're both in, or one of you is invited), not titles that are just on both lists: every
+kind, the shared progress, both of your states (watching / reading / playing, invited, dropped), who else is in it,
+filters Now / Invites / Finished / Dropped and by kind, search. (From `parties`, the same data as the together tags.)

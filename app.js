@@ -6771,38 +6771,42 @@ createApp({
         });
 
         // ---------- compare lists with a friend ----------
-        // v1.8.0 "In common" (the button on someone's profile): every title on both your lists, every kind at once, with
-        // both statuses and scores. Their list is only what they let you see (the same as their profile).
-        const IC_TYPES = [['ANIME', 'Anime', 'fa-dragon'], ['MANGA', 'Manga', 'fa-book-open'], ['GAME', 'Games', 'fa-gamepad'], ['TV', 'Movies & TV', 'fa-film'], ['SONG', 'Songs', 'fa-music'], ['ADULT', '18+', 'fa-fire']];
+        // v1.8.1 "Together" (the button on someone's profile): everything you watch, read or play WITH them (your watch-together
+        // parties where you're both in, or one of you is invited), every kind, with the shared progress. (v1.8.0 listed
+        // titles that were just on both lists: not what "in common" meant.)
+        const IC_TYPES = [['ANIME', 'Anime', 'fa-dragon'], ['MANGA', 'Manga', 'fa-book-open'], ['GAME', 'Games', 'fa-gamepad'], ['TV', 'Movies & TV', 'fa-film'], ['ADULT', '18+', 'fa-fire']];
+        const IC_ORDER = { now: 0, invite: 1, done: 2, dropped: 3 };
         const ic = reactive({ open: false, type: 'ALL', show: 'all', q: '', shown: 60 });
         const inCommon = computed(() => {
-            const theirs = viewedUser.value?.entries || [];
-            if (!viewUserId.value || viewUserId.value === uid() || !theirs.length) return { rows: [], total: 0, types: [], loved: [], genres: [] };
-            const mine = new Map(uniqueItems.value.map(i => [i.anime.id, i]));
-            const rows = [], seen = new Set();
-            theirs.forEach(t => {
-                const id = t.anime?.id, m = id && mine.get(id); if (!m || seen.has(id)) return;
-                const type = listType(m);
-                if ((type === 'ADULT' && !adultListOk.value) || (type === 'SONG' && !songsOn.value)) return;
-                seen.add(id);
-                const done = (x) => x.status === 'COMPLETED' || x.status === 'REPEATING';
-                rows.push({ anime: m.anime, me: m, them: t, type, bothDone: done(m) && done(t), bothPlan: m.status === 'PLANNING' && t.status === 'PLANNING',
-                    going: ['WATCHING', 'REPEATING'].includes(m.status) || ['WATCHING', 'REPEATING'].includes(t.status), loved: (m.score || 0) >= 8 && (t.score || 0) >= 8 });
+            const them = viewUserId.value, me = uid();
+            if (!them || them === me) return { rows: [], total: 0, types: [], counts: {} };
+            const ok = ['joined', 'dropped', 'invited'], rows = [];
+            parties.value.forEach(p => {
+                const mine = memberOf(p, me), theirs = memberOf(p, them);
+                if (!mine || !theirs || !ok.includes(mine.state) || !ok.includes(theirs.state)) return;
+                const an = p.anime, type = isAdultTitle(an) ? 'ADULT' : (an?.type || 'ANIME');
+                if (type === 'ADULT' && !adultListOk.value) return;
+                const total = totalOf(an) || null, prog = p.progress || 0;
+                const status = mine.state === 'invited' || theirs.state === 'invited' ? 'invite' : mine.state === 'dropped' || theirs.state === 'dropped' ? 'dropped' : total && prog >= total ? 'done' : 'now';
+                const others = p.members.filter(m => m.user_id !== me && m.user_id !== them && m.state === 'joined').map(m => m.user_id);
+                rows.push({ key: p.id, anime: an, type, prog, total, status, me: mine.state, them: theirs.state, others, at: p.updated_at || p.created_at });
             });
-            rows.sort((x, y) => (y.loved - x.loved) || (y.bothDone - x.bothDone) || (((y.me.score || 0) + (y.them.score || 0)) - ((x.me.score || 0) + (x.them.score || 0))) || titleOf(x.anime).localeCompare(titleOf(y.anime)));
+            rows.sort((x, y) => IC_ORDER[x.status] - IC_ORDER[y.status] || String(y.at).localeCompare(String(x.at)));
             const types = IC_TYPES.map(([k, l, icon]) => ({ k, l, icon, n: rows.filter(r => r.type === k).length })).filter(x => x.n);
-            const g = {}; rows.forEach(r => (r.anime.genres || []).forEach(x => { g[x] = (g[x] || 0) + 1; }));
-            return { rows, total: rows.length, types, loved: rows.filter(r => r.loved).slice(0, 12), genres: Object.entries(g).sort((x, y) => y[1] - x[1]).slice(0, 6).map(x => x[0]) };
+            const counts = {}; rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+            return { rows, total: rows.length, types, counts };
         });
         const icRows = computed(() => {
             const q = ic.q.trim().toLowerCase();
-            return inCommon.value.rows.filter(r => (ic.type === 'ALL' || r.type === ic.type)
-                && (ic.show === 'all' || (ic.show === 'done' && r.bothDone) || (ic.show === 'plan' && r.bothPlan) || (ic.show === 'going' && r.going) || (ic.show === 'loved' && r.loved))
+            return inCommon.value.rows.filter(r => (ic.type === 'ALL' || r.type === ic.type) && (ic.show === 'all' || r.status === ic.show)
                 && (!q || [r.anime.title?.romaji, r.anime.title?.english, r.anime.title?.native].some(t => t && t.toLowerCase().includes(q))));
         });
         const openInCommon = () => Object.assign(ic, { open: true, type: 'ALL', show: 'all', q: '', shown: 60 });
         const icOpenTitle = (r) => { ic.open = false; fetchAnimeDetails(r.anime); };
         const icTypeOf = (k) => IC_TYPES.find(x => x[0] === k) || IC_TYPES[0];
+        // "Watching" / "Reading" / "Playing" for someone in, else Invited / Dropped
+        const icState = (r, st) => st === 'joined' ? ({ MANGA: 'Reading', GAME: 'Playing' }[r.anime.type] || 'Watching') : st === 'invited' ? 'Invited' : 'Dropped';
+        const icProg = (r) => { const u = { MANGA: 'Ch', GAME: 'h', TV: 'Ep' }[r.anime.type] || 'Ep'; return u === 'h' ? `${r.prog} h` : `${u} ${r.prog}${r.total ? ' / ' + r.total : ''}`; };
         watch(viewUserId, () => { ic.open = false; });
         const compareTab = ref('meDone');
         const compareType = ref('ANIME');
@@ -7725,11 +7729,13 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
         // ---------- v1.5 "What's new": after an update, a small window lists what changed (once per version, on this
         // device). Someone new gets the tour instead. Settings → Account opens it again.
         // Each release: bump APP_VERSION (the footer shows it) and put its list in WHATS_NEW.
-        const APP_VERSION = '1.8.0';
+        const APP_VERSION = '1.8.2';
         const WHATS_NEW = {
+            '1.8.2': [
+                { icon: 'fa-people-arrows', t: 'Together', d: 'On a friend’s profile, “Together” shows everything you watch, read or play with them, every kind at once: where you both are, invites waiting, what you finished together and what got dropped.' },
+            ],
             '1.8.0': [
                 { icon: 'fa-arrows-left-right', t: 'Switch sections, stay put', d: 'Picking another section in the header keeps you where you are: in Lists of Anime, Movies & TV opens its Lists (same for Leaderboard, Feed and Profile).' },
-                { icon: 'fa-people-arrows', t: 'Everything in common', d: 'On a friend’s profile, the “In common” button shows every title you both have (anime, manga, games, movies & TV, songs), with both your statuses and scores: the ones you both loved first, filters for each kind, both finished, both planning, watching now.' },
             ],
             '1.7.1': [
                 { icon: 'fa-book-open', t: 'Back to your chapter', d: 'Close the reader to look around and a small round button with the cover stays on screen: tap it to jump back to the exact page.' },
@@ -12522,7 +12528,7 @@ a{display:inline-block;margin-top:14px;padding:8px 14px;border-radius:999px;back
             reader, readInfo, readLangs, loadChapters, shownChapters, showMoreChapters, chapterUrl, chapterRead, mangaStatusOf, lastChapterOf, fmtChapter,            isYouTube, yt, ytFrame, ytBox, onYtLoad, ytToggle, ytSeek, ytMute, ytFull, ytVol, setYtVol, ytQuality, ytNative, fmtClock, seriesLimit, seriesVisible,
             GAME_TAGS, GAME_SORTS, allGenreOptions, hiddenGenreOpen, isGenreHidden, toggleHiddenGenre, hiddenOf, notHidden,
             top, topItems, loadTop, showMoreTop, fmtVotes,
-            ic, inCommon, icRows, openInCommon, icOpenTitle, icTypeOf, fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback, fbComments, fbVoteOf, toggleFbComments, postFbComment, deleteFbComment, fbIsNew, fbBadge,
+            ic, inCommon, icRows, openInCommon, icOpenTitle, icTypeOf, icState, icProg, fb, FB_CATS, FB_STATUS, fbScore, fbMine, fbShown, voteFeedback, postFeedback, deleteFeedback, setFeedbackStatus, fetchFeedback, fbComments, fbVoteOf, toggleFbComments, postFbComment, deleteFbComment, fbIsNew, fbBadge,
             gameExtra, pickSeries, seriesShown, seriesTotals, movieTotals, fmtMins, storyEdit, storySort, openGameLink, playVideo, scrollRow, shotViewer, openShot, closeShot, stepShot, fmtHours,
             FAV_SECTIONS, favTab, favsIn, favSectionOf, openFavChar, activityOpen, toggleMyActivity, openViewedActivity, setActivityHidden, activityLine, openActivity, checkGames,
             STATUS_ORDER, statusPick, MAX_REPEATS, lilBro, setFormStatus, repeatNow, STATUS_LABELS, STATUS_SHORT, STATUS_COLORS, UNIT, ACCENTS, tabs,
